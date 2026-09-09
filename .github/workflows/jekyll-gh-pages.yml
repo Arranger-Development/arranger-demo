@@ -1,53 +1,73 @@
-name: Deploy Vite app to GitHub Pages
-
+name: Publish demo manually
 on:
-  push:
-    branches: ["main"]
   workflow_dispatch:
-
+    inputs:
+      source_ref:
+        description: Source branch, tag or commit to publish
+        required: true
+        default: main
+        type: string
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
 concurrency:
-  group: "pages"
+  group: publish-demo
   cancel-in-progress: false
-
 jobs:
-  build:
+  publish:
+    if: github.repository_owner == 'Arranger-Development' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout trusted release checks
         uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+        with:
+          ref: main
+          path: tooling
+          persist-credentials: false
+      - name: Checkout source version
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+          cache-dependency-path: source/package-lock.json
+      - name: Install and build
+        working-directory: source
+        env:
+          VITE_BASE_PATH: /arranger-demo/
+        run: |
+          npm ci
+          npm run build
+      - name: Check publishable files
+        run: python3 tooling/.github/scripts/check-pages-artifact.py source/dist arranger-demo
+      - name: Checkout public publishing repository
+        uses: actions/checkout@v4
         with:
-          path: ./dist
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
+          repository: Project-Arranger/arranger-demo
+          ref: main
+          path: publishing
+          ssh-key: ${{ secrets.PAGES_DEPLOY_KEY }}
+      - name: Replace site with checked output
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          target=Path('publishing/site')
+          if target.exists(): shutil.rmtree(target)
+          shutil.copytree('source/dist',target)
+          PY
+      - name: Publish site files
+        working-directory: publishing
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- site
+          if git diff --cached --quiet; then
+            echo 'This version is already published.'
+            exit 0
+          fi
+          git commit -m 'Publish demo'
+          git push origin HEAD:main
