@@ -152,12 +152,11 @@ function Clip({
     onOpenClip(clip.id);
   };
   const chordLabel = track.type === 'chord' ? clip.chordLabel : null;
-  const clipName = chordLabel ? (
-    <>
-      <span className="clip-idx">{clip.name.toUpperCase()}</span>
-      <span className="clip-chord-name">{chordLabel}</span>
-    </>
-  ) : clip.name;
+  const loopName = /^(Loop [1-5]) · (.+)$/.exec(clip.name);
+  const loopLabel = loopName?.[1];
+  const clipName = loopName?.[2] ?? clip.name;
+  const description = chordLabel ? `${clip.name} · ${chordLabel}` : clip.name;
+  const isEmpty = !chordLabel && !clip.hasContent;
 
   return (
     <button
@@ -175,6 +174,8 @@ function Clip({
       data-tutorial-anchor={`${track.id}-bar-${clip.bar}`}
       style={{ '--bar-index': clip.bar }}
       aria-label={`${track.label} clip bar ${clip.bar + 1}`}
+      aria-description={description}
+      title={description}
       type="button"
       onClick={handleClick}
       onMouseDown={(event) => {
@@ -189,10 +190,16 @@ function Clip({
         onMouseDownClip(event, clip, track.id);
       }}
     >
-      <div className="clip-name">
-        {clipName}
+      <div className="clip-copy">
+        {loopLabel || chordLabel || isEmpty ? (
+          <div className="clip-meta">
+            {loopLabel ? <span className="clip-loop-label">{loopLabel}</span> : null}
+            {chordLabel ? <span className="clip-chord-name">{chordLabel}</span> : null}
+            {isEmpty ? <span className="clip-empty-tag">empty</span> : null}
+          </div>
+        ) : null}
+        <div className="clip-name">{clipName}</div>
       </div>
-      {chordLabel || clip.hasContent ? null : <div className="clip-empty-tag">empty</div>}
     </button>
   );
 }

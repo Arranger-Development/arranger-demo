@@ -430,7 +430,7 @@ test('fourteen inch mac demo viewport gives editor chrome deterministic truncati
   assert.match(css, /@media\s*\(min-width:\s*1180px\) and \(max-width:\s*1512px\) and \(max-height:\s*760px\)\s*\{[\s\S]*\.editor-left\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(104px,\s*116px\) minmax\(0,\s*1fr\);[^}]*overflow:\s*hidden;/s);
   assert.match(css, /@media\s*\(min-width:\s*1180px\) and \(max-width:\s*1512px\) and \(max-height:\s*760px\)\s*\{[\s\S]*\.tools\s*\{[^}]*justify-content:\s*end;[^}]*max-width:\s*min\(610px,\s*52vw\);/s);
   assert.match(css, /@media\s*\(min-width:\s*1180px\) and \(max-width:\s*1512px\) and \(max-height:\s*760px\)\s*\{[\s\S]*\.editor-track-identity\s*\{[^}]*grid-template-columns:\s*32px minmax\(0,\s*1fr\);[^}]*width:\s*104px;[^}]*max-width:\s*104px;/s);
-  assert.match(css, /@media\s*\(min-width:\s*1180px\) and \(max-width:\s*1512px\) and \(max-height:\s*760px\)\s*\{[\s\S]*\.crumb,\s*\n\s*\.clip-name-meta,\s*\n\s*\.clip-name-input,\s*\n\s*\.clip-empty-tag,\s*\n\s*\.clip-idx,\s*\n\s*\.clip-chord-name\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s);
+  assert.match(css, /@media\s*\(min-width:\s*1180px\) and \(max-width:\s*1512px\) and \(max-height:\s*760px\)\s*\{[\s\S]*\.crumb,\s*\n\s*\.clip-name-meta,\s*\n\s*\.clip-name-input\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s);
 });
 
 test('timeline clips fill exactly one bar grid cell', async () => {
@@ -565,7 +565,7 @@ test('timeline clips keep their nine-slice gems inside one shared dark corner ma
   assert.match(css, /\.clip::before\s*\{[^}]*filter:\s*drop-shadow/s);
   assert.match(css, /\.clip::after\s*\{[^}]*content:\s*"";/s);
   assert.match(css, /\.clip::after\s*\{[^}]*box-shadow:\s*inset 0 0 0 1px/s);
-  assert.match(css, /\.clip-name,\s*\n\.clip-idx,\s*\n\.clip-chord-name,\s*\n\.clip-empty-tag\s*\{[^}]*z-index:\s*1;/s);
+  assert.match(css, /\.clip-copy\s*\{[^}]*position:\s*relative;[^}]*z-index:\s*1;/s);
 });
 
 test('track fill-empty clip button is compact and inherits track color', async () => {
