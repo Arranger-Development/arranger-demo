@@ -5,7 +5,7 @@ import {
   TOTAL_BARS,
 } from '../domain/musicConstants.js';
 import { getTrackTypeFromInstanceId } from '../domain/trackInstances.js';
-import { clampTrackVolume } from '../domain/trackVolume.js';
+import { getTrackOutputVolume } from '../domain/trackVolume.js';
 import {
   getMelodyTimbre,
   normalizeMelodyTimbreId,
@@ -141,10 +141,8 @@ function readVolumeSource(volumeSource) {
 
 function getVolumeForTrack(volumeSource, trackId) {
   const mix = readVolumeSource(volumeSource);
-  if (mix?.mutedTracks?.[trackId] === true) return -Infinity;
-
   const volumes = mix?.volumes ?? mix;
-  return clampTrackVolume(volumes?.[trackId]);
+  return getTrackOutputVolume(volumes?.[trackId], mix?.mutedTracks?.[trackId]);
 }
 
 function applyVolume(node, volume) {
@@ -406,6 +404,15 @@ export default class AudioEngine {
       applyVolume(nodes?.melodySampler, melodyVolume);
       applyVolume(nodes?.melodyInputSampler, melodyVolume);
       applyVolume(nodes?.melodyOneShotSampler, melodyVolume);
+      if (trackId === 'melody') {
+        this.melodyPreviewBanks.forEach((bank, bankTimbreId) => {
+          applyVolume(bank.sampler, getMelodyVolume(volume, bankTimbreId));
+        });
+      }
+      const preview = this.melodyPreviewSession;
+      if (preview?.trackId === trackId) {
+        applyVolume(preview.sampler, getMelodyVolume(volume, preview.timbreId));
+      }
       if (volume === -Infinity) this.stopMelodyVoices(this.now(), trackId);
     }
     return volume;
@@ -1050,10 +1057,11 @@ export default class AudioEngine {
 
     const sampler = this.melodyPreviewBanks.get(normalizedTimbreId)?.sampler;
     if (!sampler?.triggerAttack) return false;
-    const volume = this.getMelodyTrackVolume(trackId, normalizedTimbreId);
     const session = {
       requestId,
       sampler,
+      trackId,
+      timbreId: normalizedTimbreId,
       timerIds: new Set(),
     };
     this.melodyPreviewSession = session;
@@ -1061,7 +1069,7 @@ export default class AudioEngine {
       const timerId = this.scheduleTimeout(() => {
         session.timerIds.delete(timerId);
         if (this.melodyPreviewSession !== session) return;
-        applyVolume(sampler, volume);
+        applyVolume(sampler, this.getMelodyTrackVolume(trackId, normalizedTimbreId));
         sampler.triggerAttack(note, this.now());
       }, index * intervalSeconds * 1000);
       session.timerIds.add(timerId);

@@ -1,3 +1,4 @@
+import { getTrackOutputVolume } from '../domain/trackVolume.js';
 import { createMatrixPlaybackAdapter } from '../audio/matrixPlaybackAdapter.js';
 import { getMelodyTimbre } from '../data/melodyTimbres.js';
 import {
@@ -95,7 +96,7 @@ function getGainValue(volume) {
 }
 
 function getEventVolume(state, event) {
-  const trackVolume = state.volumes?.[event.trackId];
+  const trackVolume = getTrackOutputVolume(state.volumes?.[event.trackId], state.mutedTracks?.[event.trackId]);
   if (!['chord', 'drums'].includes(event.type) || !Number.isFinite(event.velocity)) {
     return trackVolume;
   }
@@ -119,7 +120,7 @@ function collectProjectEvents(state, options = {}) {
     for (let step = 0; step < STEPS_PER_BAR; step += 1) {
       adapter.getEventsForStep(bar, step).forEach((event) => {
         if (
-          state.mutedTracks?.[event.trackId] !== true
+          getTrackOutputVolume(state.volumes?.[event.trackId], state.mutedTracks?.[event.trackId]) !== -Infinity
           && (!allowedTrackIds || allowedTrackIds.has(event.trackId))
         ) {
           events.push(event);

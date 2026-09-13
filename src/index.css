@@ -7767,6 +7767,22 @@ body {
   display: none;
 }
 
+.volume-control .db.is-silent {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  display: block;
+  padding: 1px 3px;
+  color: #f3dcaf;
+  background: #21180f;
+  border-radius: 3px;
+  font-size: 9px;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
 .chord-variants,
 .tpl-picker,
 .gtpl-picker,

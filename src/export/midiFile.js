@@ -1,3 +1,4 @@
+import { getTrackOutputVolume } from '../domain/trackVolume.js';
 import { createMatrixPlaybackAdapter } from '../audio/matrixPlaybackAdapter.js';
 import { STEPS_PER_BAR, TOTAL_BARS } from '../domain/musicConstants.js';
 import { getTrackType } from '../domain/trackInstances.js';
@@ -160,7 +161,7 @@ function createMidiFile(state) {
   for (let bar = 0; bar < TOTAL_BARS; bar += 1) {
     for (let step = 0; step < STEPS_PER_BAR; step += 1) {
       adapter.getEventsForStep(bar, step).forEach((event) => {
-        if (state.mutedTracks?.[event.trackId] === true) return;
+        if (getTrackOutputVolume(state.volumes?.[event.trackId], state.mutedTracks?.[event.trackId]) === -Infinity) return;
         eventsByTrack[event.trackId]?.push(event);
       });
     }

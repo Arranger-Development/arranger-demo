@@ -7,6 +7,7 @@ import {
 
 function formatTrackVolumeLabel(volume) {
   const clampedVolume = clampTrackVolume(volume);
+  if (clampedVolume === MIN_TRACK_VOLUME_DB) return '静音';
   if (clampedVolume > 0) return `+${clampedVolume}dB`;
   return `${clampedVolume}dB`;
 }

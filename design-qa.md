@@ -745,3 +745,16 @@ No publication or source-data migration was performed.
 ### Clip-only commit verification
 
 The isolated commit snapshot passes 564 tests, `eslint src tests`, and the production build. The 589-test and twenty-bar browser results above describe the full development workspace, including earlier uncommitted performance/import changes. This commit includes only clip typography and its CSS assertions; previous QA history is retained.
+
+## 2026-09-13 — Track volume minimum is silent
+
+- The saved slider minimum remains finite at −24 dB; the shared audio-output mapping turns only this endpoint into zero gain. Other slider positions, defaults and the independent mute flags are unchanged.
+- Playback, active voices, note/template auditions and audio/sample loading read the same mapping. Tests cover all four track types, duplicate tracks, restoration above the minimum and multiple melody timbres.
+- WAV and MIDI exclude silent tracks while project backups retain clips, notes and finite volume settings. Automated checks cover all-silent WAV output and volume undo/redo.
+- Browser QA at 1466×856 and 390×666 confirms the warm “静音” label fits inside each track control. Pointer dragging to the minimum, undo and redo restore the expected slider values; browser error logs are empty.
+- Validation: all 615 tests passed; `npx eslint src tests`, production build and `git diff --check` passed. Existing uncommitted work was preserved; no commit, push or public deployment.
+- Screenshots: `output/playwright/volume-silent-1466x856.jpg`, `output/playwright/volume-silent-390x666.jpg`.
+
+### Volume-only submission verification
+
+The isolated submission passes all 570 tests, `npx eslint src tests`, and the production build. The full working tree still passes all 615 tests. The submission also includes live melody-preview volume refresh so minimum-volume behavior works without relying on the other uncommitted audio changes. Other pending features and user documents remain outside this submission.
