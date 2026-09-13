@@ -758,3 +758,7 @@ The isolated commit snapshot passes 564 tests, `eslint src tests`, and the produ
 ### Volume-only submission verification
 
 The isolated submission passes all 570 tests, `npx eslint src tests`, and the production build. The full working tree still passes all 615 tests. The submission also includes live melody-preview volume refresh so minimum-volume behavior works without relying on the other uncommitted audio changes. Other pending features and user documents remain outside this submission.
+
+### Development dependency checks before merge
+
+Updated vulnerable development dependencies within their existing major versions after GitHub reported ten open advisories. A clean isolated `npm ci --ignore-scripts` and audit report zero vulnerabilities; all 570 submission tests, `npx eslint src tests`, and the production build pass with the updated lockfile. No application dependencies or public publishing workflows were changed.
