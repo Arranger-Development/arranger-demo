@@ -14,6 +14,84 @@ import { STEPS_PER_BAR, TOTAL_BARS } from '../src/domain/musicConstants.js';
 import createInitialMatrix from '../src/store/createInitialMatrix.js';
 
 const SAMPLE_ASSET_VERSION = 'sample-refresh-20260608';
+
+test('playback progress samples the immediate audio clock, follows tempo ticks and wraps the configured length', async () => {
+  const tone = createFakeTone();
+  let clock = 0;
+  let ticks = 0;
+  const sampledTimes = [];
+  tone.Transport.PPQ = 192;
+  tone.Transport.getTicksAtTime = (time) => { sampledTimes.push(time); return ticks; };
+  const engine = new AudioEngine({ tone, immediate: () => clock, playerFactory: createPlayerFactory(tone.calls) });
+  assert.equal(engine.getPlaybackPosition(), null);
+  await engine.play({ matrixSource: () => ({}), totalBars: 10, bar: 0, step: 0 });
+  for (const step of [0, 15.125, 31.999, 32, 64, 96, 128, 159.999, 160, 175.25]) {
+    clock += .2;
+    ticks = step * 48;
+    assert.equal(engine.getPlaybackPosition(), step % 160);
+    assert.equal(sampledTimes.at(-1), clock);
+  }
+  engine.setTempo(180);
+  ticks += 72; // Follow transport ticks, not a wall-time/BPM estimate.
+  assert.equal(engine.getPlaybackPosition(), 16.75);
+  await engine.stop();
+  assert.equal(engine.getPlaybackPosition(), null);
+  await engine.play({ matrixSource: () => ({}), totalBars: 2, bar: 0, step: 0 });
+  ticks = 32.5 * 48;
+  assert.equal(engine.getPlaybackPosition(), .5);
+  await engine.pause();
+  assert.equal(engine.getPlaybackPosition(), null);
+});
+
+test('performance playback reaches all ten bars, then restores the eight-bar arranger default', async () => {
+  const tone = createFakeTone();
+  const engine = new AudioEngine({ tone, playerFactory: createPlayerFactory(tone.calls) });
+  const positions = [];
+  const matrix = { drums: Array.from({ length: 10 }, () => Array(16).fill(null)) };
+  await engine.play({ matrixSource: () => matrix, totalBars: 10, onPositionChange: (bar, step) => positions.push([bar, step]) });
+  for (let index = 0; index < 161; index += 1) tone.Transport.scheduledCallback(index / 8);
+  assert.deepEqual(positions[128], [8, 0]);
+  assert.deepEqual(positions[159], [9, 15]);
+  assert.deepEqual(positions[160], [0, 0]);
+  await engine.stop();
+  await engine.play({ matrixSource: () => matrix, bar: 0, step: 0 });
+  assert.equal(engine.matrixAdapter.totalBars, 8);
+  await engine.stop();
+  await engine.play({ matrixSource: () => matrix, totalBars: 2, bar: 0, step: 0 });
+  assert.equal(engine.matrixAdapter.totalSteps, 32);
+});
+
+test('cancelling audio startup prevents a delayed performance from starting the transport', async () => {
+  const tone = createFakeTone();
+  let finishStart;
+  tone.start = () => new Promise((resolve) => { finishStart = resolve; });
+  const engine = new AudioEngine({ tone, playerFactory: createPlayerFactory(tone.calls) });
+  const pending = engine.play({ matrixSource: () => ({}), totalBars: 2 });
+  await new Promise((resolve) => setImmediate(resolve));
+  await engine.stop();
+  finishStart();
+  assert.equal(await pending, false);
+  assert.ok(!tone.calls.some(([method]) => method === 'transport.start'));
+});
+
+test('performance melody cells use their preloaded timbre bank and stop releases it', async () => {
+  const tone = createFakeTone();
+  const engine = new AudioEngine({ tone, playerFactory: createPlayerFactory(tone.calls) });
+  const notes = [];
+  const releases = [];
+  engine.melodyPreviewBanks.set('blues', {
+    ready: true, sampler: {
+      triggerAttackRelease: (...args) => notes.push(args), releaseAll: (time) => releases.push(time),
+    },
+  });
+  const matrix = { melody: [[{ type: 'melody', note: 'D#4', duration: '16n', timbreId: 'blues' }], []] };
+  await engine.play({ matrixSource: () => matrix, totalBars: 2, melodyTimbreIds: ['blues'] });
+  tone.Transport.scheduledCallback(0);
+  assert.deepEqual(notes, [['D#4', '16n', 0]]);
+  await engine.stop();
+  engine.stopAllVoices(1);
+  assert.deepEqual(releases, [1]);
+});
 const SAMPLE_VERSION_QUERY = `?v=${SAMPLE_ASSET_VERSION}`;
 
 function versioned(url) {

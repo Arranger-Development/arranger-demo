@@ -236,6 +236,7 @@ export default class AudioEngine {
     this.bassSampler = null;
     this.instanceAudioNodes = new Map();
     this.matrixAdapter = null;
+    this.playbackTotalBars = TOTAL_BARS;
     this.transportEventId = null;
     this.transportFlatStep = 0;
     this.audibleTrackIds = null;
@@ -269,6 +270,21 @@ export default class AudioEngine {
 
     if (!Number.isFinite(latency) || latency <= 0) return 0;
     return Math.min(latency, MAX_LIVE_INPUT_LATENCY_SECONDS);
+  }
+
+  // Fractional steps at the actual audio clock, without scheduler lookahead or
+  // input quantization. Reading this never seeks or changes the transport.
+  getPlaybackPosition() {
+    if (!this.transportRunning) return null;
+    const transport = this.getStartedTransport();
+    const time = this.immediate();
+    if (typeof transport?.getTicksAtTime !== 'function'
+      || !Number.isFinite(transport.PPQ) || transport.PPQ <= 0
+      || !Number.isFinite(time)) return null;
+    const steps = transport.getTicksAtTime(time) / (transport.PPQ / 4);
+    if (!Number.isFinite(steps)) return null;
+    const totalSteps = this.playbackTotalBars * STEPS_PER_BAR;
+    return Math.max(0, steps) % totalSteps;
   }
 
   getLiveInputPosition(inputTimestampMs, options = {}) {
@@ -1288,7 +1304,7 @@ export default class AudioEngine {
   getMatrixAdapter(matrixSource = this.matrixSource) {
     if (!matrixSource) return null;
     if (!this.matrixAdapter) {
-      this.matrixAdapter = createMatrixPlaybackAdapter(matrixSource);
+      this.matrixAdapter = createMatrixPlaybackAdapter(matrixSource, { totalBars: this.playbackTotalBars });
     }
 
     return this.matrixAdapter;
@@ -1354,6 +1370,14 @@ export default class AudioEngine {
           );
         }
         if (event.type === 'melody') {
+          if (event.timbreId) {
+            const bank = this.melodyPreviewBanks.get(event.timbreId);
+            if (bank?.ready) {
+              applyVolume(bank.sampler, this.getMelodyTrackVolume(event.trackId ?? 'melody', event.timbreId));
+              bank.sampler.triggerAttackRelease?.(event.note, event.duration, time);
+            }
+            continue;
+          }
           const melodyVolume = this.getMelodyTrackVolume(event.trackId ?? 'melody');
           this.triggerMelodyOneShot(
             event.note,
@@ -1395,7 +1419,7 @@ export default class AudioEngine {
   seekToStep(bar, step) {
     this.currentBar = bar;
     this.currentStep = step;
-    this.transportFlatStep = (bar * STEPS_PER_BAR + step) % (TOTAL_BARS * STEPS_PER_BAR);
+    this.transportFlatStep = (bar * STEPS_PER_BAR + step) % (this.playbackTotalBars * STEPS_PER_BAR);
 
     const transport = this.getStartedTransport();
     if (transport) {
@@ -1408,6 +1432,7 @@ export default class AudioEngine {
     this.stopChordClipSequencePreview();
     const requestId = ++this.playRequestId;
     await this.startAudio();
+    if (requestId !== this.playRequestId) return false;
     if (Object.hasOwn(options, 'volumeSource')) {
       this.setVolumeSource(options.volumeSource);
     }
@@ -1430,7 +1455,14 @@ export default class AudioEngine {
         : null;
     }
     await this.prepareMatrixPlaybackSamples();
+    if (options.melodyTimbreIds?.length) {
+      const ready = await Promise.all(options.melodyTimbreIds.map((id) => this.prepareMelodyTimbre(id)));
+      if (ready.some((result) => !result)) throw new Error('旋律音色加载失败，请重试');
+    }
     if (requestId !== this.playRequestId) return false;
+    this.playbackTotalBars = Number.isInteger(options.totalBars) && options.totalBars > 0
+      ? options.totalBars : TOTAL_BARS;
+    this.matrixAdapter = null;
     this.audibleTrackIds = normalizeAudibleTrackIds(options.audibleTrackIds);
     this.maxPlaybackSteps = normalizeMaxPlaybackSteps(options.maxPlaybackSteps);
     this.playedSteps = 0;
@@ -1464,6 +1496,22 @@ export default class AudioEngine {
       transport.position = formatToneTransportPosition(this.currentBar, this.currentStep);
     }
     this.clearMatrixPlaybackSchedule();
+  }
+
+  stopAllVoices(time = this.now()) {
+    this.stopMelodyVoices(time);
+    this.melodyPreviewBanks.forEach((bank) => bank.sampler?.releaseAll?.(time));
+    this.bassSampler?.releaseAll?.(time);
+    this.chordSampler?.releaseAll?.(time);
+    this.chordSynth?.releaseAll?.(time);
+    this.fallbackSynth?.triggerRelease?.(time);
+    this.drumPlayers.forEach((player) => player.stop?.(time));
+    this.instanceAudioNodes.forEach((nodes) => {
+      nodes.bassSampler?.releaseAll?.(time);
+      nodes.chordSampler?.releaseAll?.(time);
+      nodes.chordSynth?.releaseAll?.(time);
+      nodes.drumPlayers?.forEach((player) => player.stop?.(time));
+    });
   }
 }
 

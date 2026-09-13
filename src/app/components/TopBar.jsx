@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 import {
   ClipboardPaste,
   Copy,
+  LayoutGrid,
   Redo2,
   Settings,
   SkipBack,
@@ -121,6 +122,7 @@ function TopBar({
   onPlayToggle,
   onCopyClip = () => {},
   onExport = () => {},
+  onPerformanceEnter,
   onPasteClip = () => {},
   onStop,
   onTutorialToggle,
@@ -285,6 +287,11 @@ function TopBar({
 
       <div className="right-tools">
         {hardwareInput ? createElement(HardwareInputStatus, hardwareInput) : null}
+        {onPerformanceEnter ? (
+          <button className="key-switch performance-entry" type="button" onClick={onPerformanceEnter}>
+            {renderIcon(LayoutGrid)}演奏模式
+          </button>
+        ) : null}
         {showTutorialToggle ? (
           <button
             className="key-switch tutorial-switch"

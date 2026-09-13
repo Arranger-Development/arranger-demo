@@ -200,6 +200,7 @@ function extractMelodyEvent(cell, bar, step) {
     duration: cell.duration ?? '16n',
   };
   if (Number.isInteger(cell.durationSteps)) event.durationSteps = cell.durationSteps;
+  if (cell.timbreId) event.timbreId = cell.timbreId;
   return event;
 }
 
