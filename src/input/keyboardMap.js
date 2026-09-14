@@ -1,4 +1,5 @@
-import { STEPS_PER_BAR, TOTAL_BARS } from '../domain/musicConstants.js';
+import { getTotalBars } from '../domain/projectLength.js';
+import { STEPS_PER_BAR } from '../domain/musicConstants.js';
 import { APP_COMMAND_TYPES, CHORD_OPTION_COUNT } from './appCommands.js';
 import { getTrackType } from '../domain/trackInstances.js';
 import {
@@ -14,8 +15,8 @@ function getEventKey(event) {
   return event.key;
 }
 
-function clampSeek(bar, step) {
-  const totalSteps = TOTAL_BARS * STEPS_PER_BAR;
+function clampSeek(bar, step, totalBars) {
+  const totalSteps = totalBars * STEPS_PER_BAR;
   const current = bar * STEPS_PER_BAR + step;
   const clamped = Math.max(0, Math.min(totalSteps - 1, current));
 
@@ -29,7 +30,7 @@ function mapArrowKeyToCommand(key, state) {
   const bar = state.seekBar ?? state.currentBar ?? 0;
   const step = state.seekStep ?? state.currentStep ?? 0;
   const delta = key === 'ArrowRight' ? 1 : -1;
-  const next = clampSeek(bar, step + delta);
+  const next = clampSeek(bar, step + delta, getTotalBars(state));
 
   return { type: APP_COMMAND_TYPES.TRANSPORT_SEEK, ...next };
 }

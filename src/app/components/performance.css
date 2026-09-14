@@ -92,7 +92,7 @@
   min-height: 0;
 }
 .performance-grid {
-  --pad-size: min(80px, calc((100cqw - 242px) / 5), calc((100cqh - 24px) / 4));
+  --pad-size: min(80px, calc((100cqw - 202px - var(--template-columns) * 8px) / var(--template-columns)), calc((100cqh - 24px) / 4));
   display: grid;
   gap: 8px;
   width: max-content;
@@ -102,7 +102,7 @@
   --pad-tone: var(--c-drums);
   --pad-asset: var(--asset-gem-green);
   display: grid;
-  grid-template-columns: 40px repeat(5, var(--pad-size));
+  grid-template-columns: 40px repeat(var(--template-columns), var(--pad-size));
   gap: 8px;
   align-items: center;
 }
@@ -148,7 +148,8 @@
   text-wrap: balance;
 }
 
-.performance-save-panel { display: flex; justify-content: center; min-width: 0; }
+.performance-save-panel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-width: 0; }
+.performance-import:disabled { opacity: .45; cursor: not-allowed; }
 .performance-back, .performance-save, .performance-play {
   display: flex;
   justify-content: center;
@@ -243,9 +244,10 @@
   .performance-tempo input { width: 52px; font-size: 17px; padding: 5px 2px; }
   .performance-body { padding: 10px 8px; border-width: 6px; gap: 12px; }
   .performance-eyebrow { font-size: 9px; letter-spacing: .03em; }
+  .performance-save-panel { flex-direction: row; gap: 8px; }
   .performance-workbench { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 44px; gap: 10px; }
-  .performance-grid { --pad-size: min(80px, calc((100cqw - 51px) / 5), calc((100cqh - 72px) / 4)); gap: 6px; }
-  .performance-row { grid-template-columns: 26px repeat(5, var(--pad-size)); gap: 5px; }
+  .performance-grid { --pad-size: min(80px, calc((100cqw - 26px - var(--template-columns) * 5px) / var(--template-columns)), calc((100cqh - 72px) / 4)); gap: 6px; }
+  .performance-row { grid-template-columns: 26px repeat(var(--template-columns), var(--pad-size)); gap: 5px; }
   .performance-track-label { font-size: 11px; gap: 4px; }
   .performance-track-label svg { width: 16px; height: 16px; }
   .performance-sequence { display: flex; flex-direction: column-reverse; gap: 9px; padding-top: 11px; }

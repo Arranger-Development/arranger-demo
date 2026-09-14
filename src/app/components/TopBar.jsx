@@ -20,6 +20,7 @@ import {
   SCALE,
 } from '../../domain/musicConstants.js';
 import { getTutorialControlRole } from '../../tutorial/drumsTutorialRuntime.js';
+import { MAX_PROJECT_BARS } from '../../domain/projectLength.js';
 import { formatDisplayPosition } from '../transportPosition.js';
 import { HardwareInputStatus } from './HardwareInputStatus.jsx';
 import { BpmControl } from './BpmControl.jsx';
@@ -153,7 +154,7 @@ function TopBar({
     displayBar = '—',
     displayBeat = '—',
     displayStep = '—',
-  ] = formatDisplayPosition(currentBar, currentStep).split('.');
+  ] = formatDisplayPosition(currentBar, currentStep, MAX_PROJECT_BARS).split('.');
 
   return (
     <header

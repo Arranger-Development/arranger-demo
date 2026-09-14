@@ -1,3 +1,4 @@
+import { getClipBankStart, getMatrixBars, getTimelineBars, MAX_PROJECT_BARS } from '../domain/projectLength.js';
 import { TOTAL_BARS } from '../domain/musicConstants.js';
 import {
   createLaunchpadXTrackMuteLedMessages,
@@ -39,7 +40,7 @@ function normalizeChordClipBars(chordClipBars) {
   if (!Array.isArray(chordClipBars)) return [];
 
   return [...new Set(chordClipBars.filter((bar) => (
-    Number.isInteger(bar) && bar >= 0 && bar < TOTAL_BARS
+    Number.isInteger(bar) && bar >= 0 && bar < MAX_PROJECT_BARS
   )))].sort((left, right) => left - right);
 }
 
@@ -54,10 +55,11 @@ function getLaunchpadXChordStep(note) {
   return null;
 }
 
-function getLaunchpadXChordClipBar(note) {
+function getLaunchpadXChordClipBar(note, selectedBar = 0, totalBars = TOTAL_BARS) {
   if (!Number.isInteger(note)) return null;
   const bar = note - LAUNCHPAD_X_CHORD_CLIP_NOTE_START;
-  return bar >= 0 && bar < TOTAL_BARS ? bar : null;
+  const absoluteBar = getClipBankStart(selectedBar) + bar;
+  return bar >= 0 && bar < 8 && absoluteBar < totalBars ? absoluteBar : null;
 }
 
 function getAdjacentLaunchpadXChordClipBar({
@@ -125,7 +127,7 @@ function getGridLedValue(note, {
 }) {
   if (!chordActive) return 0;
 
-  const clipBar = getLaunchpadXChordClipBar(note);
+  const clipBar = getLaunchpadXChordClipBar(note, selectedBar, getTimelineBars({ totalBars: getMatrixBars(matrix) }));
   if (clipBar !== null) {
     if (!chordClipBars.includes(clipBar)) return 0;
     return clipBar === selectedBar

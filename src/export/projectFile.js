@@ -1,3 +1,5 @@
+import { getTotalBars } from '../domain/projectLength.js';
+
 const PROJECT_FILE_SCHEMA_VERSION = 1;
 
 function cloneProjectValue(value) {
@@ -19,6 +21,7 @@ function createProjectFile(state, options = {}) {
       scale: state.scale,
     },
     arrangement: cloneProjectValue({
+      totalBars: getTotalBars(state),
       clips: state.clips,
       matrix: state.matrix,
       mutedTracks: state.mutedTracks,

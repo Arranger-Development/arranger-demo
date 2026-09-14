@@ -1,8 +1,8 @@
+import { getTimelineBars, getTotalBars } from '../domain/projectLength.js';
 import {
   CORE_TRACK_IDS,
   DRUMS_INSTRUMENT_IDS,
   STEPS_PER_BAR,
-  TOTAL_BARS,
 } from '../domain/musicConstants.js';
 import { isChordName, isChordSpan } from '../domain/chordCells.js';
 import { getTrackTypeFromInstanceId } from '../domain/trackInstances.js';
@@ -22,15 +22,15 @@ function isIntegerInRange(value, min, max) {
   return Number.isInteger(value) && value >= min && value <= max;
 }
 
-function hasValidSeekPayload(command) {
+function hasValidSeekPayload(command, totalBars) {
   return (
     hasOnlyKeys(command, ['type', 'bar', 'step']) &&
-    isIntegerInRange(command.bar, 0, TOTAL_BARS - 1) &&
+    isIntegerInRange(command.bar, 0, totalBars - 1) &&
     isIntegerInRange(command.step, 0, STEPS_PER_BAR - 1)
   );
 }
 
-function hasValidTogglePlayPayload(command) {
+function hasValidTogglePlayPayload(command, totalBars) {
   if (!hasOnlyKeys(command, ['type', 'audibleTrackIds', 'maxPlaybackSteps'])) return false;
   if (
     'audibleTrackIds' in command
@@ -46,7 +46,7 @@ function hasValidTogglePlayPayload(command) {
   }
   if (
     'maxPlaybackSteps' in command
-    && !isIntegerInRange(command.maxPlaybackSteps, 1, TOTAL_BARS * STEPS_PER_BAR)
+    && !isIntegerInRange(command.maxPlaybackSteps, 1, totalBars * STEPS_PER_BAR)
   ) {
     return false;
   }
@@ -60,10 +60,10 @@ function hasValidTrackMutePayload(command) {
   );
 }
 
-function hasValidDrumsPayload(command) {
+function hasValidDrumsPayload(command, totalBars) {
   return (
     hasOnlyKeys(command, ['type', 'bar', 'step', 'instrument', 'preview', 'trackId']) &&
-    isIntegerInRange(command.bar, 0, TOTAL_BARS - 1) &&
+    isIntegerInRange(command.bar, 0, totalBars - 1) &&
     isIntegerInRange(command.step, 0, STEPS_PER_BAR - 1) &&
     DRUMS_INSTRUMENT_IDS.includes(command.instrument) &&
     typeof command.preview === 'boolean'
@@ -90,32 +90,32 @@ function hasValidDrumsPreviewPayload(command) {
   );
 }
 
-function hasValidDrumsClipPayload(command) {
+function hasValidDrumsClipPayload(command, totalBars) {
   return (
     hasOnlyKeys(command, ['type', 'bar'])
-    && isIntegerInRange(command.bar, 0, TOTAL_BARS - 1)
+    && isIntegerInRange(command.bar, 0, totalBars - 1)
   );
 }
 
-function hasValidChordClipPayload(command) {
+function hasValidChordClipPayload(command, totalBars) {
   return (
     hasOnlyKeys(command, ['type', 'bar'])
-    && isIntegerInRange(command.bar, 0, TOTAL_BARS - 1)
+    && isIntegerInRange(command.bar, 0, totalBars - 1)
   );
 }
 
-function hasValidChordRhythmPayload(command) {
+function hasValidChordRhythmPayload(command, totalBars) {
   return (
     hasOnlyKeys(command, ['type', 'bar', 'step'])
-    && isIntegerInRange(command.bar, 0, TOTAL_BARS - 1)
+    && isIntegerInRange(command.bar, 0, totalBars - 1)
     && isIntegerInRange(command.step, 0, STEPS_PER_BAR - 1)
   );
 }
 
-function hasValidChordHarmonyOptionPayload(command) {
+function hasValidChordHarmonyOptionPayload(command, totalBars) {
   return (
     hasOnlyKeys(command, ['type', 'bar', 'step', 'mode', 'optionIndex'])
-    && isIntegerInRange(command.bar, 0, TOTAL_BARS - 1)
+    && isIntegerInRange(command.bar, 0, totalBars - 1)
     && isIntegerInRange(command.step, 0, STEPS_PER_BAR - 1)
     && ['enrich', 'passing'].includes(command.mode)
     && isIntegerInRange(command.optionIndex, 0, CHORD_OPTION_COUNT - 1)
@@ -129,19 +129,19 @@ function hasValidChordOptionPayload(command) {
   );
 }
 
-function hasValidChordSetCellPayload(command) {
+function hasValidChordSetCellPayload(command, totalBars) {
   return (
     hasOnlyKeys(command, ['type', 'bar', 'span', 'root']) &&
-    isIntegerInRange(command.bar, 0, TOTAL_BARS - 1) &&
+    isIntegerInRange(command.bar, 0, totalBars - 1) &&
     isChordSpan(command.span) &&
     isChordName(command.root)
   );
 }
 
-function hasValidChordClearCellPayload(command) {
+function hasValidChordClearCellPayload(command, totalBars) {
   return (
     hasOnlyKeys(command, ['type', 'bar', 'span']) &&
-    isIntegerInRange(command.bar, 0, TOTAL_BARS - 1) &&
+    isIntegerInRange(command.bar, 0, totalBars - 1) &&
     isChordSpan(command.span)
   );
 }
@@ -169,22 +169,23 @@ function hasValidMelodyPayload(command) {
   );
 }
 
-function hasValidMelodyClipPayload(command) {
+function hasValidMelodyClipPayload(command, totalBars) {
   return (
     hasOnlyKeys(command, ['type', 'bar'])
-    && isIntegerInRange(command.bar, 0, TOTAL_BARS - 1)
+    && isIntegerInRange(command.bar, 0, totalBars - 1)
   );
 }
 
-function hasValidMelodyStepPayload(command) {
+function hasValidMelodyStepPayload(command, totalBars) {
   return (
     hasOnlyKeys(command, ['type', 'bar', 'step'])
-    && isIntegerInRange(command.bar, 0, TOTAL_BARS - 1)
+    && isIntegerInRange(command.bar, 0, totalBars - 1)
     && isIntegerInRange(command.step, 0, STEPS_PER_BAR - 1)
   );
 }
 
-function isValidAppCommand(command) {
+function isValidAppCommand(command, state) {
+  const totalBars = getTotalBars(state);
   if (!isPlainObject(command) || typeof command.type !== 'string') return false;
 
   switch (command.type) {
@@ -202,53 +203,53 @@ function isValidAppCommand(command) {
       return hasOnlyKeys(command, ['type']);
 
     case APP_COMMAND_TYPES.TRANSPORT_TOGGLE_PLAY:
-      return hasValidTogglePlayPayload(command);
+      return hasValidTogglePlayPayload(command, totalBars);
 
     case APP_COMMAND_TYPES.TRANSPORT_SEEK:
-      return hasValidSeekPayload(command);
+      return hasValidSeekPayload(command, totalBars);
 
     case APP_COMMAND_TYPES.TRACK_TOGGLE_MUTE:
       return hasValidTrackMutePayload(command);
 
     case APP_COMMAND_TYPES.DRUMS_TOGGLE:
-      return hasValidDrumsPayload(command);
+      return hasValidDrumsPayload(command, totalBars);
 
     case APP_COMMAND_TYPES.DRUMS_PREVIEW:
       return hasValidDrumsPreviewPayload(command);
 
     case APP_COMMAND_TYPES.DRUMS_SELECT_CLIP:
-      return hasValidDrumsClipPayload(command);
+      return hasValidDrumsClipPayload(command, getTimelineBars(state));
 
     case APP_COMMAND_TYPES.CHORD_SELECT_CLIP:
-      return hasValidChordClipPayload(command);
+      return hasValidChordClipPayload(command, getTimelineBars(state));
 
     case APP_COMMAND_TYPES.CHORD_TOGGLE_RHYTHM:
     case APP_COMMAND_TYPES.CHORD_OPEN_HARMONY:
-      return hasValidChordRhythmPayload(command);
+      return hasValidChordRhythmPayload(command, totalBars);
 
     case APP_COMMAND_TYPES.CHORD_APPLY_HARMONY_OPTION:
     case APP_COMMAND_TYPES.CHORD_SELECT_HARMONY_OPTION:
     case APP_COMMAND_TYPES.CHORD_PREVIEW_HARMONY_OPTION:
-      return hasValidChordHarmonyOptionPayload(command);
+      return hasValidChordHarmonyOptionPayload(command, totalBars);
 
     case APP_COMMAND_TYPES.CHORD_SELECT_OPTION:
       return hasValidChordOptionPayload(command);
 
     case APP_COMMAND_TYPES.CHORD_SET_CELL:
-      return hasValidChordSetCellPayload(command);
+      return hasValidChordSetCellPayload(command, totalBars);
 
     case APP_COMMAND_TYPES.CHORD_CLEAR_CELL:
-      return hasValidChordClearCellPayload(command);
+      return hasValidChordClearCellPayload(command, totalBars);
 
     case APP_COMMAND_TYPES.MELODY_NOTE_ON:
     case APP_COMMAND_TYPES.MELODY_NOTE_OFF:
       return hasValidMelodyPayload(command);
 
     case APP_COMMAND_TYPES.MELODY_SELECT_CLIP:
-      return hasValidMelodyClipPayload(command);
+      return hasValidMelodyClipPayload(command, getTimelineBars(state));
 
     case APP_COMMAND_TYPES.MELODY_SELECT_STEP:
-      return hasValidMelodyStepPayload(command);
+      return hasValidMelodyStepPayload(command, totalBars);
 
     default:
       return false;

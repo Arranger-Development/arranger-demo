@@ -21,6 +21,7 @@ import {
   validateMultimodalMediaFile,
 } from './multimodalRecommendation.js';
 import { RECOMMENDED_BPM } from '../domain/bpm.js';
+import { AI_PERFORMANCE_PROFILE_ID } from '../data/aiPerformanceTemplates.js';
 import useMusicStore from '../store/useMusicStore.js';
 
 const ROOT_VIEWS = Object.freeze({
@@ -41,6 +42,7 @@ function Root() {
   const [analysisStageIndex, setAnalysisStageIndex] = useState(0);
   const [bpm, setBpm] = useState(RECOMMENDED_BPM);
   const [selections, setSelections] = useState(createInitialRecommendationSelections);
+  const [performanceProfileId, setPerformanceProfileId] = useState(null);
 
   useEffect(() => {
     if (!previewUrl) return undefined;
@@ -60,6 +62,7 @@ function Root() {
 
   const handleGenreEnter = (genreId) => {
     if (ARRANGER_GENRE_IDS.includes(genreId)) {
+      setPerformanceProfileId(null);
       setGenreId(genreId);
       setView(ROOT_VIEWS.ARRANGER);
       return;
@@ -87,6 +90,7 @@ function Root() {
   };
 
   const handleApplyRecommendation = () => {
+    setPerformanceProfileId(AI_PERFORMANCE_PROFILE_ID);
     useMusicStore.setState(createMultimodalRecommendationAppState({ bpm }));
     setGenreId(MULTIMODAL_DRUM_TEMPLATE_GENRE_ID);
     setView(ROOT_VIEWS.ARRANGER);
@@ -121,6 +125,7 @@ function Root() {
   };
 
   const handleBackToGenre = () => {
+    setPerformanceProfileId(null);
     setMediaFile(null);
     setMediaKind(null);
     setMediaError(null);
@@ -164,7 +169,10 @@ function Root() {
     });
   }
 
-  return createElement(App, { genreId });
+  return createElement(App, {
+    genreId,
+    performanceProfileId,
+  });
 }
 
 export default Root;

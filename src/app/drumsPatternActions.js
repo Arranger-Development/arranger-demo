@@ -1,4 +1,5 @@
-import { STEPS_PER_BAR, TOTAL_BARS } from '../domain/musicConstants.js';
+import { getMatrixBars, MAX_PROJECT_BARS } from '../domain/projectLength.js';
+import { STEPS_PER_BAR } from '../domain/musicConstants.js';
 import { createDrumsCell } from '../domain/drumsCells.js';
 import {
   getDrumTemplate,
@@ -106,12 +107,12 @@ function createDefaultDrumsPattern() {
   ));
 }
 
-function isValidBarIndex(barIndex) {
-  return Number.isInteger(barIndex) && barIndex >= 0 && barIndex < TOTAL_BARS;
+function isValidBarIndex(barIndex, totalBars = MAX_PROJECT_BARS) {
+  return Number.isInteger(barIndex) && barIndex >= 0 && barIndex < totalBars;
 }
 
 function replaceDrumsBar(matrix, barIndex, bar) {
-  if (!matrix?.drums || !isValidBarIndex(barIndex)) return matrix;
+  if (!matrix?.drums || !isValidBarIndex(barIndex, getMatrixBars(matrix))) return matrix;
 
   const nextDrums = [...matrix.drums];
   nextDrums[barIndex] = bar;
@@ -143,14 +144,14 @@ function getDrumsClipBarIndexes(clips) {
   return [...new Set(barIndexes)].sort((left, right) => left - right);
 }
 
-function applyBasicDrumsAllBars(matrix, barIndexes = Array.from({ length: TOTAL_BARS }, (_, index) => index)) {
+function applyBasicDrumsAllBars(matrix, barIndexes = Array.from({ length: getMatrixBars(matrix) }, (_, index) => index)) {
   if (!matrix?.drums) return matrix;
 
-  const targetBars = new Set(barIndexes.filter(isValidBarIndex));
+  const targetBars = new Set(barIndexes.filter((bar) => isValidBarIndex(bar, getMatrixBars(matrix))));
 
   return {
     ...matrix,
-    drums: Array.from({ length: TOTAL_BARS }, (_, barIndex) => (
+    drums: Array.from({ length: getMatrixBars(matrix) }, (_, barIndex) => (
       targetBars.has(barIndex) ? createBasicDrumsBar() : createEmptyDrumsBar()
     )),
   };
@@ -161,7 +162,7 @@ function applyDrumsTemplateToBars(matrix, barIndexes, templateId) {
   const template = getDrumTemplate(templateId);
   if (!template) return matrix;
 
-  const targetBars = new Set((barIndexes ?? []).filter(isValidBarIndex));
+  const targetBars = new Set((barIndexes ?? []).filter((bar) => isValidBarIndex(bar, getMatrixBars(matrix))));
   if (!targetBars.size) return matrix;
 
   return {

@@ -26,14 +26,14 @@ test('top bar and Drum Sequencer share the display position formatter', async ()
     readFile(new URL('../src/app/components/DrumSequencer.jsx', import.meta.url), 'utf8'),
   ]);
 
-  assert.match(topBarSource, /formatDisplayPosition\(currentBar, currentStep\)/);
+  assert.match(topBarSource, /formatDisplayPosition\(currentBar, currentStep, MAX_PROJECT_BARS\)/);
   assert.match(
     drumSequencerSource,
     /stepGroup\.map\(\(stepNumber, beatStepIndex\) => \([\s\S]*\{beatStepIndex \+ 1\}/,
   );
   assert.match(
     drumSequencerSource,
-    /const positionLabel = formatDisplayPosition\(selectedBar, stepIndex\)/,
+    /const positionLabel = formatDisplayPosition\(selectedBar, stepIndex, MAX_PROJECT_BARS\)/,
   );
   assert.match(
     drumSequencerSource,

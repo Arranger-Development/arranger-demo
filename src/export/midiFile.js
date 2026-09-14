@@ -1,6 +1,7 @@
+import { getTotalBars } from '../domain/projectLength.js';
 import { getTrackOutputVolume } from '../domain/trackVolume.js';
 import { createMatrixPlaybackAdapter } from '../audio/matrixPlaybackAdapter.js';
-import { STEPS_PER_BAR, TOTAL_BARS } from '../domain/musicConstants.js';
+import { STEPS_PER_BAR } from '../domain/musicConstants.js';
 import { getTrackType } from '../domain/trackInstances.js';
 
 const MIDI_TICKS_PER_BEAT = 480;
@@ -52,7 +53,7 @@ function createTrackNameEvent(name) {
   return createMetaEvent(0x03, encodeText(name));
 }
 
-function createTempoTrack(bpm) {
+function createTempoTrack(bpm, endTick) {
   const normalizedBpm = Number.isFinite(bpm) && bpm > 0 ? bpm : 120;
   const microsecondsPerBeat = Math.round(60_000_000 / normalizedBpm);
   const tempoData = [
@@ -65,7 +66,7 @@ function createTempoTrack(bpm) {
     createTrackNameEvent('Project Arranger'),
     createMetaEvent(0x51, tempoData),
     createMetaEvent(0x58, [4, 2, 24, 8]),
-  ]);
+  ], endTick);
 }
 
 function durationToTicks(event) {
@@ -105,7 +106,7 @@ function createNoteEvents({ channel, event, velocity = 100 }) {
     (event.bar * STEPS_PER_BAR + event.step + timingOffset) * MIDI_TICKS_PER_STEP,
   ));
   const duration = Math.max(1, durationToTicks(event));
-  const noteVelocity = ['chord', 'drums'].includes(event.type) && Number.isFinite(event.velocity)
+  const noteVelocity = ['chord', 'drums', 'melody', 'bass'].includes(event.type) && Number.isFinite(event.velocity)
     ? event.velocity * 127
     : velocity;
   const notes = event.type === 'drums'
@@ -120,7 +121,7 @@ function createNoteEvents({ channel, event, velocity = 100 }) {
   ]);
 }
 
-function encodeTrack(events) {
+function encodeTrack(events, endTick = 0) {
   const sorted = [...events].sort((a, b) => (
     a.tick - b.tick || (a.priority ?? 0) - (b.priority ?? 0)
   ));
@@ -130,7 +131,7 @@ function encodeTrack(events) {
     bytes.push(...encodeVariableLength(event.tick - previousTick), ...event.bytes);
     previousTick = event.tick;
   });
-  bytes.push(0x00, 0xff, 0x2f, 0x00);
+  bytes.push(...encodeVariableLength(Math.max(0, endTick - previousTick)), 0xff, 0x2f, 0x00);
   return [
     ...encodeText('MTrk'),
     ...encodeUint32(bytes.length),
@@ -156,9 +157,9 @@ function createMidiFile(state) {
     matrix: state.matrix,
     trackInstancesById: state.trackInstancesById,
     trackOrder: trackIds,
-  });
+  }, { totalBars: getTotalBars(state) });
 
-  for (let bar = 0; bar < TOTAL_BARS; bar += 1) {
+  for (let bar = 0; bar < getTotalBars(state); bar += 1) {
     for (let step = 0; step < STEPS_PER_BAR; step += 1) {
       adapter.getEventsForStep(bar, step).forEach((event) => {
         if (getTrackOutputVolume(state.volumes?.[event.trackId], state.mutedTracks?.[event.trackId]) === -Infinity) return;
@@ -167,7 +168,8 @@ function createMidiFile(state) {
     }
   }
 
-  const tracks = [createTempoTrack(state.bpm)];
+  const endTick = getTotalBars(state) * STEPS_PER_BAR * MIDI_TICKS_PER_STEP;
+  const tracks = [createTempoTrack(state.bpm, endTick)];
   trackIds.forEach((trackId, index) => {
     const trackType = getTrackType(state, trackId);
     const channel = trackType === 'drums' ? 9 : MELODIC_CHANNELS[index % MELODIC_CHANNELS.length];
@@ -178,7 +180,7 @@ function createMidiFile(state) {
     tracks.push(encodeTrack([
       createTrackNameEvent(getTrackName(state, trackId)),
       ...noteEvents,
-    ]));
+    ], endTick));
   });
 
   const header = [

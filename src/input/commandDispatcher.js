@@ -1,3 +1,4 @@
+import { getTotalBars } from '../domain/projectLength.js';
 import useMusicStore from '../store/useMusicStore.js';
 import { APP_COMMAND_TYPES } from './appCommands.js';
 import { isValidAppCommand } from './commandGuards.js';
@@ -19,23 +20,41 @@ async function maybeCallMethod(target, methodName, ...args) {
 
 function createAudioPlayOptions(store, state, audio, command = {}) {
   const positionObserver = audio?.onPositionChange;
+  const matrixSource = () => {
+    const currentState = store.getState();
+    if (!currentState.trackInstancesById || !currentState.trackOrder) return currentState.matrix;
+    return {
+      matrix: currentState.matrix,
+      trackInstancesById: currentState.trackInstancesById,
+      trackOrder: currentState.trackOrder,
+    };
+  };
+  let snapshot;
+  let previousMatrix;
+  let previousInstances;
+  let previousOrder;
+  const playbackSource = () => {
+    const current = store.getState();
+    const totalBars = getTotalBars(current);
+    if (!snapshot || current.matrix !== previousMatrix
+      || current.trackInstancesById !== previousInstances || current.trackOrder !== previousOrder
+      || totalBars !== snapshot.totalBars) {
+      previousMatrix = current.matrix;
+      previousInstances = current.trackInstancesById;
+      previousOrder = current.trackOrder;
+      snapshot = { matrix: matrixSource(), totalBars };
+    }
+    return snapshot;
+  };
   return {
     audibleTrackIds: command.audibleTrackIds,
     bpm: state.bpm,
+    totalBars: getTotalBars(state),
     bar: state.currentBar,
     maxPlaybackSteps: command.maxPlaybackSteps,
     step: state.currentStep,
-    matrixSource: () => {
-      const currentState = store.getState();
-      if (!currentState.trackInstancesById || !currentState.trackOrder) {
-        return currentState.matrix;
-      }
-      return {
-        matrix: currentState.matrix,
-        trackInstancesById: currentState.trackInstancesById,
-        trackOrder: currentState.trackOrder,
-      };
-    },
+    matrixSource,
+    playbackSource,
     melodyTimbreSource: () => store.getState().melodyTimbreId,
     onPositionChange: (bar, step) => {
       syncStoreTransportPosition(store, bar, step);
@@ -261,7 +280,7 @@ async function dispatchHandlerCommand(command, deps) {
 }
 
 async function dispatchCommand(command, deps = {}) {
-  if (!isValidAppCommand(command)) {
+  if (!isValidAppCommand(command, (deps.store ?? useMusicStore).getState())) {
     return { ok: false, reason: 'invalid-command' };
   }
 

@@ -264,7 +264,7 @@ test('app shell renders the v0.22 arranger tracks and eight-bar timeline', async
   assert.match(source, /drums/);
   assert.match(source, /DRUMS_TOGGLE/);
   assert.match(source, /createTimelineTracks/);
-  assert.match(timelineSource, /BAR_NUMBERS\.map/);
+  assert.match(timelineSource, /Array\.from\(\{ length: totalBars \}/);
   assert.match(timelineSource, /const playheadLeft/);
   assert.match(timelineSource, /className=\{playheadLineClass\}/);
   assert.match(timelineSource, /className=\{playheadGridClass\}/);
@@ -956,7 +956,7 @@ test('app exposes the melody editor and keeps melody as the internal track id', 
   assert.match(melodyEditorSource, /notes:\s*MELODY_NOTES/);
   assert.match(melodyEditorSource, /highlightedNoteIds:\s*activeScaleNoteIds/);
   assert.match(melodyEditorSource, /onCellToggle:\s*onMelodyStepToggle/);
-  assert.match(audioEngineSource, /prepareMelodyTimbre\(timbreId\)/);
+  assert.match(audioEngineSource, /prepareMelodyTimbre\(timbreId,\s*trackId,\s*playbackMode\)/);
   assert.match(audioEngineSource, /activateMelodyTimbre\(timbreId\)/);
   assert.match(audioEngineSource, /setMelodyTimbreSource\(melodyTimbreSource\)/);
   assert.doesNotMatch(melodyEditorSource, /usePitchRowHover|getMelodyScaleRailNotes|setHoveredPitchRow/);
@@ -1023,7 +1023,7 @@ test('app exposes the melody editor and keeps melody as the internal track id', 
   assert.match(melodyEditorSource, /总音符/);
   assert.match(melodyEditorSource, /小节 \$\{writeBarProgress\}/);
   assert.match(melodyEditorSource, /开始旋律写入/);
-  assert.match(melodyRecordingSource, /getMelodyWriteBarRange\(clip\.bar\)/);
+  assert.match(melodyRecordingSource, /getMelodyWriteBarRange\(clip\.bar, getTotalBars\(state\) - 1, getTotalBars\(state\)\)/);
   assert.match(melodyRecordingSource, /const scopedMatrix = \{ \.\.\.state\.matrix, melody: state\.matrix\[pendingSession\.trackId\] \}/);
   assert.match(melodyRecordingSource, /hasMelodyNotesInRange\([\s\S]*scopedMatrix,[\s\S]*pendingSession\.startBar,[\s\S]*pendingSession\.endBar/);
   assert.match(melodyRecordingSource, /ensureMelodyClipsInRange\([\s\S]*pendingSession\.startBar,[\s\S]*pendingSession\.endBar,[\s\S]*pendingSession\.trackId/);

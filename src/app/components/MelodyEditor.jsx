@@ -280,7 +280,11 @@ function MelodyEditor({
   };
 
   return (
-    <section className="editor" data-screen-label="Melody Editor" data-picker={pickerMode ?? undefined}>
+    <section
+      className="editor"
+      data-screen-label="Melody Editor"
+      data-picker={pickerMode ?? undefined}
+    >
       <header className="editor-head">
         <div className="editor-left">
           {createElement(EditorTrackIdentity, { trackId: 'melody', label: trackName })}

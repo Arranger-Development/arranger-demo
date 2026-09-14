@@ -136,7 +136,11 @@ function BassEditor({
   ].filter(Boolean).join(' ');
 
   return (
-    <section className="editor bass-editor" data-screen-label="Bass Editor" data-picker={pickerMode ?? undefined}>
+    <section
+      className="editor bass-editor"
+      data-screen-label="Bass Editor"
+      data-picker={pickerMode ?? undefined}
+    >
       <header className="editor-head">
         <div className="editor-left">
           {createElement(EditorTrackIdentity, { trackId: 'bass', label: trackName })}

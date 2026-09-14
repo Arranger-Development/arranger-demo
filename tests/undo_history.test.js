@@ -325,3 +325,12 @@ test('restoreUndoSnapshot is a no-op without a snapshot', () => {
   assert.equal(didRestore, false);
   assert.equal(called, false);
 });
+
+test('undo restores the selected timeline range independently of arrangement data', () => {
+  const selection = { startBar: 8, endBar: 19, trackIds: ['melody'] };
+  const snapshot = createUndoSnapshot({ appState: { ...createAppState(), totalBars: 20 }, editorState: { timelineSelection: selection } });
+  selection.endBar = 9;
+  let restored;
+  restoreUndoSnapshot({ snapshot, setTimelineSelection: value => { restored = value; } });
+  assert.deepEqual(restored, { startBar: 8, endBar: 19, trackIds: ['melody'] });
+});

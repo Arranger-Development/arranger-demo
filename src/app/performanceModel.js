@@ -5,6 +5,9 @@ import { BASS_GROOVE_TEMPLATES, createBassCell, createBassPreviewEvents } from '
 import { createDrumsBarFromTemplate } from './drumsPatternActions.js';
 import { createChordStylePresetBar } from './chordStylePresetActions.js';
 import { createChordCell } from '../domain/chordCells.js';
+import { createDrumsCell } from '../domain/drumsCells.js';
+import { createMelodyCellFromNotes, getMelodyCellNotes } from '../domain/melodyCells.js';
+import { AI_PERFORMANCE_PROFILE_ID, AI_PERFORMANCE_DEFAULT_BPM, AI_PERFORMANCE_TEMPLATES } from '../data/aiPerformanceTemplates.js';
 
 export const PERFORMANCE_BARS = 2;
 export const PERFORMANCE_TRACKS = ['drums', 'chord', 'bass', 'melody'];
@@ -32,7 +35,10 @@ const melodyTemplates = [
   { id: 'performance-melody-night', name: '夜色呼应', styleId: 'blues', degrees: [4, 3, 2, 3, 0, 1, 0, 1, 2, 3, 4, 3, 1, 0] },
 ];
 
-export function performanceTemplates(genreId) {
+export function performanceTemplates(genreId, profileId = null) {
+  if (profileId === AI_PERFORMANCE_PROFILE_ID) {
+    return { ...AI_PERFORMANCE_TEMPLATES, chord: getChordStyleChordTemplatesForGenre(genreId) };
+  }
   return {
     drums: getDrumTemplatesForGenre(genreId),
     chord: getChordStyleChordTemplatesForGenre(genreId),
@@ -41,17 +47,44 @@ export function performanceTemplates(genreId) {
   };
 }
 
-export function normalizeSelection(value, genreId) {
-  const templates = performanceTemplates(genreId);
+export function normalizeSelection(value, genreId, profileId = null) {
+  const templates = performanceTemplates(genreId, profileId);
   return Object.fromEntries(PERFORMANCE_TRACKS.map((id) => [id,
     templates[id].some((template) => template.id === value?.[id]) ? value[id] : null,
   ]));
 }
 
-export function createPerformanceMatrix(selection, genreId) {
-  const templates = performanceTemplates(genreId);
-  const selected = normalizeSelection(selection, genreId);
-  const matrix = Object.fromEntries(PERFORMANCE_TRACKS.map((id) => [id, [emptyBar(), emptyBar()]]));
+export function createPerformanceMatrix(selection, genreId, profileId = null) {
+  const templates = performanceTemplates(genreId, profileId);
+  const selected = normalizeSelection(selection, genreId, profileId);
+  const totalBars = Math.max(PERFORMANCE_BARS, ...PERFORMANCE_TRACKS.map((track) => (
+    templates[track].find(({ id }) => id === selected[track])?.barCount ?? 0
+  )));
+  const matrix = Object.fromEntries(PERFORMANCE_TRACKS.map((id) => [id, Array.from({ length: totalBars }, emptyBar)]));
+  if (profileId === AI_PERFORMANCE_PROFILE_ID) {
+    for (let bar = 0; bar < totalBars; bar += 1) {
+      if (selected.chord) matrix.chord[bar] = createChordStylePresetBar(selected.chord, bar % PERFORMANCE_BARS);
+      for (const track of ['drums', 'bass', 'melody']) {
+        const template = templates[track].find(({ id }) => id === selected[track]);
+        if (!template) continue;
+        const phraseBar = template.bars[bar % template.barCount];
+        if (track === 'drums') {
+          matrix.drums[bar] = matrix.drums[bar].map((_, step) => {
+            const instruments = Object.keys(phraseBar).filter((instrument) => phraseBar[instrument].includes(step));
+            return instruments.length ? createDrumsCell(instruments) : null;
+          });
+        } else {
+          phraseBar.forEach(([step, note]) => {
+            matrix[track][bar][step] = track === 'bass' ? createBassCell(note, '16n')
+              : createMelodyCellFromNotes([...getMelodyCellNotes(matrix.melody[bar][step]), note], {
+                duration: '16n', timbreId: 'piano', playbackMode: 'natural',
+              });
+          });
+        }
+      }
+    }
+    return matrix;
+  }
   const chord = templates.chord.find(({ id }) => id === selected.chord) ?? templates.chord[0];
   const bass = templates.bass.find(({ id }) => id === selected.bass);
   const melody = templates.melody.find(({ id }) => id === selected.melody);
@@ -79,35 +112,57 @@ export function createPerformanceMatrix(selection, genreId) {
   return matrix;
 }
 
-export function createPerformanceSequence(saved, genreId) {
-  const indices = saved.flatMap((selection, index) => hasSelection(selection) ? [index] : []);
-  const matrices = indices.map((index) => createPerformanceMatrix(saved[index], genreId));
+export function createPerformanceSequence(saved, genreId, profileId = null) {
+  const normalized = saved.map((selection) => normalizeSelection(selection, genreId, profileId));
+  const indices = normalized.flatMap((selection, index) => hasSelection(selection) ? [index] : []);
+  const matrices = indices.map((index) => createPerformanceMatrix(normalized[index], genreId, profileId));
+  let totalBars = 0;
+  const segments = matrices.map((matrix, index) => {
+    const segment = { loopIndex: indices[index], startStep: totalBars * 16, totalSteps: matrix.drums.length * 16 };
+    totalBars += matrix.drums.length;
+    return segment;
+  });
   return {
     indices,
-    totalBars: indices.length * PERFORMANCE_BARS,
+    segments,
+    totalBars,
     matrix: Object.fromEntries(PERFORMANCE_TRACKS.map((id) => [id, matrices.flatMap((matrix) => matrix[id])])),
   };
 }
 
-export const performanceStorageKey = (genreId) => `arranger-performance:v1:${genreId}`;
+export const performanceStorageKey = (genreId, profileId = null) => (
+  profileId === AI_PERFORMANCE_PROFILE_ID
+    ? `arranger-performance:v2:${profileId}`
+    : `arranger-performance:v1:${genreId}`
+);
 export const normalizePerformanceBpm = (bpm) => Math.max(40, Math.min(240, Math.round(Number(bpm) || 120)));
 
-export function readPerformanceSession(storage, genreId, initialBpm) {
-  const fallback = { bpm: normalizePerformanceBpm(initialBpm), saved: Array.from({ length: 5 }, emptySelection) };
+export function readPerformanceSession(storage, genreId, initialBpm, profileId = null) {
+  const defaultBpm = profileId === AI_PERFORMANCE_PROFILE_ID ? AI_PERFORMANCE_DEFAULT_BPM : initialBpm;
+  const fallback = { bpm: normalizePerformanceBpm(defaultBpm), saved: Array.from({ length: 5 }, emptySelection) };
   try {
-    const value = JSON.parse(storage?.getItem(performanceStorageKey(genreId)) ?? 'null');
+    const stored = storage?.getItem(performanceStorageKey(genreId, profileId));
+    if (stored == null && profileId === AI_PERFORMANCE_PROFILE_ID) {
+      // A new score library starts with empty Loops; preserve only its tempo.
+      const previous = JSON.parse(storage?.getItem(`arranger-performance:v1:${profileId}`) ?? 'null');
+      if (previous?.version === 1 && Number.isFinite(previous.bpm) && previous.bpm > 0) {
+        fallback.bpm = normalizePerformanceBpm(previous.bpm);
+      }
+      return fallback;
+    }
+    const value = JSON.parse(stored ?? 'null');
     if (value?.version !== 1 || !Array.isArray(value.saved)) return fallback;
     return {
-      bpm: normalizePerformanceBpm(value.bpm ?? initialBpm),
-      saved: Array.from({ length: 5 }, (_, index) => normalizeSelection(value.saved[index], genreId)),
+      bpm: normalizePerformanceBpm(value.bpm ?? defaultBpm),
+      saved: Array.from({ length: 5 }, (_, index) => normalizeSelection(value.saved[index], genreId, profileId)),
     };
   } catch { return fallback; }
 }
 
-export function writePerformanceSession(storage, genreId, session) {
+export function writePerformanceSession(storage, genreId, session, profileId = null) {
   try {
     if (!storage) return false;
-    storage.setItem(performanceStorageKey(genreId), JSON.stringify({ version: 1, ...session }));
+    storage.setItem(performanceStorageKey(genreId, profileId), JSON.stringify({ version: 1, ...session }));
     return true;
   } catch { return false; }
 }

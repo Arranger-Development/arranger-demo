@@ -1,14 +1,15 @@
+import { getTimelineBars } from '../domain/projectLength.js';
 import { TOTAL_BARS } from '../domain/musicConstants.js';
 import { getTrackType } from '../domain/trackInstances.js';
 import { hasTrackBarContent } from './trackContent.js';
 
-function createClipPasteDestination(trackId, bar) {
+function createClipPasteDestination(trackId, bar, totalBars = TOTAL_BARS) {
   if (
     typeof trackId !== 'string'
     || trackId.length === 0
     || !Number.isInteger(bar)
     || bar < 0
-    || bar >= TOTAL_BARS
+    || bar >= totalBars
   ) {
     return null;
   }
@@ -16,12 +17,12 @@ function createClipPasteDestination(trackId, bar) {
   return { bar, trackId };
 }
 
-function createRulerPasteDestination(clipClipboard, bar) {
+function createRulerPasteDestination(clipClipboard, bar, totalBars = TOTAL_BARS) {
   if (
     !clipClipboard
     || !Number.isInteger(bar)
     || bar < 0
-    || bar >= TOTAL_BARS
+    || bar >= totalBars
   ) {
     return null;
   }
@@ -51,7 +52,7 @@ function resolveClipPasteTarget({
       || clipClipboard.items.length === 0
       || !Number.isInteger(targetBar)
       || targetBar < 0
-      || targetBar + barCount > TOTAL_BARS
+      || targetBar + barCount > getTimelineBars(state)
     ) {
       return null;
     }
@@ -76,7 +77,8 @@ function resolveClipPasteTarget({
     (clipClipboard.trackType ?? getTrackType(state, clipClipboard.trackId))
       !== getTrackType(state, targetTrackId)
     || !Number.isInteger(targetBar)
-    || !Array.isArray(state.matrix[targetTrackId]?.[targetBar])
+    || targetBar < 0 || targetBar >= getTimelineBars(state)
+    || !Array.isArray(state.matrix[targetTrackId])
     || typeof state.getClipForTrackBar !== 'function'
   ) {
     return null;

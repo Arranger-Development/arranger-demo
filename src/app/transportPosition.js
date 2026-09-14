@@ -6,11 +6,11 @@ import {
 
 const STEPS_PER_BEAT = STEPS_PER_BAR / BEATS_PER_BAR;
 
-function formatDisplayPosition(bar, step) {
+function formatDisplayPosition(bar, step, totalBars = TOTAL_BARS) {
   if (
     !Number.isInteger(bar)
     || bar < 0
-    || bar >= TOTAL_BARS
+    || bar >= totalBars
     || !Number.isInteger(step)
     || step < 0
     || step >= STEPS_PER_BAR

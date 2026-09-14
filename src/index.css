@@ -8815,7 +8815,7 @@ body {
 
   .ruler,
   .grid {
-    min-width: 640px;
+    min-width: var(--timeline-min-width);
   }
 
   .editor-head {
@@ -15190,4 +15190,16 @@ body {
   .multimodal-dropzone {
     transition: none;
   }
+}
+
+/* Keep transport and tempo in separate columns even when the toolbar is crowded. */
+@media (min-width: 1101px) {
+  .topbar {
+    grid-template-columns: minmax(130px, 1fr) max-content max-content max-content max-content;
+    gap: 8px;
+    padding-inline: 12px;
+    overflow-x: auto;
+  }
+  .topbar .brand { width: 100%; }
+  .topbar-left-controls, .right-tools { gap: 8px; }
 }

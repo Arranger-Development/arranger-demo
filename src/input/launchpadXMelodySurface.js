@@ -1,3 +1,4 @@
+import { getClipBankStart, getMatrixBars, getTimelineBars, MAX_PROJECT_BARS } from '../domain/projectLength.js';
 import { STEPS_PER_BAR, TOTAL_BARS } from '../domain/musicConstants.js';
 import {
   getMelodyInputCellByLaunchpadNote,
@@ -41,7 +42,7 @@ function normalizeMelodyClipBars(melodyClipBars) {
   if (!Array.isArray(melodyClipBars)) return [];
 
   return [...new Set(melodyClipBars.filter((bar) => (
-    Number.isInteger(bar) && bar >= 0 && bar < TOTAL_BARS
+    Number.isInteger(bar) && bar >= 0 && bar < MAX_PROJECT_BARS
   )))].sort((left, right) => left - right);
 }
 
@@ -52,10 +53,11 @@ function normalizeMelodyTemplateSteps(melodyTemplateSteps) {
   )))].sort((left, right) => left - right);
 }
 
-function getLaunchpadXMelodyClipBar(note) {
+function getLaunchpadXMelodyClipBar(note, selectedBar = 0, totalBars = TOTAL_BARS) {
   if (!Number.isInteger(note)) return null;
   const bar = note - LAUNCHPAD_X_MELODY_CLIP_NOTE_START;
-  return bar >= 0 && bar < TOTAL_BARS ? bar : null;
+  const absoluteBar = getClipBankStart(selectedBar) + bar;
+  return bar >= 0 && bar < 8 && absoluteBar < totalBars ? absoluteBar : null;
 }
 
 function getLaunchpadXMelodyStep(note) {
@@ -150,7 +152,7 @@ function getStepLedValue(step, surface) {
 function getGridLedValue(note, surface) {
   if (!surface.melodyActive) return 0;
 
-  const clipBar = getLaunchpadXMelodyClipBar(note);
+  const clipBar = getLaunchpadXMelodyClipBar(note, surface.selectedBar, getTimelineBars({ totalBars: getMatrixBars(surface.matrix) }));
   if (clipBar !== null) {
     if (!surface.melodyClipBars.includes(clipBar)) return 0;
     return clipBar === surface.selectedBar

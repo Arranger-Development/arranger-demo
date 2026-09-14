@@ -1,10 +1,10 @@
-import { TOTAL_BARS } from '../domain/musicConstants.js';
+import { getTimelineBars } from '../domain/projectLength.js';
 import { getTrackType } from '../domain/trackInstances.js';
 
 const LAUNCHPAD_TRACK_IDS = Object.freeze(['drums', 'chord', 'melody']);
 
-function isValidBar(bar) {
-  return Number.isInteger(bar) && bar >= 0 && bar < TOTAL_BARS;
+function isValidBar(bar, state) {
+  return Number.isInteger(bar) && bar >= 0 && bar < getTimelineBars(state);
 }
 
 function hasActiveTrackClip(state, trackId, trackType = trackId) {
@@ -23,7 +23,7 @@ function selectLaunchpadTrackClip({
   withUndoCheckpoint = (callback) => callback(),
 } = {}) {
   if (
-    !isValidBar(bar)
+    !isValidBar(bar, store?.getState?.())
     || !LAUNCHPAD_TRACK_IDS.includes(trackId)
     || typeof store?.getState !== 'function'
   ) {

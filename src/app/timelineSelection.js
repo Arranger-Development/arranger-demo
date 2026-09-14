@@ -20,6 +20,7 @@ function getTimelineCellFromPoint({
   clientY,
   rect,
   trackIds,
+  totalBars = TOTAL_BARS,
 }) {
   if (
     !rect
@@ -35,7 +36,7 @@ function getTimelineCellFromPoint({
   const normalizedY = clamp((clientY - rect.top) / rect.height, 0, 1 - Number.EPSILON);
 
   return {
-    bar: clamp(Math.floor(normalizedX * TOTAL_BARS), 0, TOTAL_BARS - 1),
+    bar: clamp(Math.floor(normalizedX * totalBars), 0, totalBars - 1),
     trackId: trackIds[clamp(
       Math.floor(normalizedY * trackIds.length),
       0,
@@ -44,7 +45,7 @@ function getTimelineCellFromPoint({
   };
 }
 
-function createTimelineSelection(anchor, focus, trackIds) {
+function createTimelineSelection(anchor, focus, trackIds, totalBars = TOTAL_BARS) {
   if (!anchor || !focus || !Array.isArray(trackIds) || trackIds.length === 0) return null;
 
   const anchorTrackIndex = trackIds.indexOf(anchor.trackId);
@@ -62,13 +63,13 @@ function createTimelineSelection(anchor, focus, trackIds) {
   const endTrackIndex = Math.max(anchorTrackIndex, focusTrackIndex);
 
   return {
-    startBar: clamp(Math.min(anchor.bar, focus.bar), 0, TOTAL_BARS - 1),
-    endBar: clamp(Math.max(anchor.bar, focus.bar), 0, TOTAL_BARS - 1),
+    startBar: clamp(Math.min(anchor.bar, focus.bar), 0, totalBars - 1),
+    endBar: clamp(Math.max(anchor.bar, focus.bar), 0, totalBars - 1),
     trackIds: trackIds.slice(startTrackIndex, endTrackIndex + 1),
   };
 }
 
-function createRulerTimelineSelection(anchorBar, focus, trackIds) {
+function createRulerTimelineSelection(anchorBar, focus, trackIds, totalBars = TOTAL_BARS) {
   if (
     !Number.isInteger(anchorBar)
     || !focus
@@ -81,7 +82,7 @@ function createRulerTimelineSelection(anchorBar, focus, trackIds) {
   return createTimelineSelection({
     bar: anchorBar,
     trackId: trackIds[0],
-  }, focus, trackIds);
+  }, focus, trackIds, totalBars);
 }
 
 function isTimelineCellSelected(selection, trackId, bar) {
@@ -103,13 +104,13 @@ function getTimelineSelectionClipIds(clips, selection) {
   });
 }
 
-function getTimelineSelectionPlaybackOptions(selection) {
+function getTimelineSelectionPlaybackOptions(selection, totalBars = TOTAL_BARS) {
   if (
     !selection
     || !Number.isInteger(selection.startBar)
     || !Number.isInteger(selection.endBar)
     || selection.startBar < 0
-    || selection.endBar >= TOTAL_BARS
+    || selection.startBar >= totalBars
     || selection.startBar > selection.endBar
     || !Array.isArray(selection.trackIds)
     || selection.trackIds.length === 0
@@ -120,7 +121,7 @@ function getTimelineSelectionPlaybackOptions(selection) {
   return {
     audibleTrackIds: [...selection.trackIds],
     bar: selection.startBar,
-    maxPlaybackSteps: (selection.endBar - selection.startBar + 1) * STEPS_PER_BAR,
+    maxPlaybackSteps: (Math.min(selection.endBar, totalBars - 1) - selection.startBar + 1) * STEPS_PER_BAR,
     step: 0,
   };
 }

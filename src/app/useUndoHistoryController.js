@@ -22,6 +22,7 @@ function useUndoHistoryController({
   clearTutorialCountIn,
   currentTutorialStepIndex,
   dispatchAppCommand,
+  setTimelineSelection,
   setActiveTutorialId,
   setAppliedTutorialSetups,
   setCurrentTutorialStepIndex,
@@ -32,6 +33,7 @@ function useUndoHistoryController({
   setTutorialSidebarCollapsed,
   setTutorialStepCheckpoints,
   setTutorialVisible,
+  timelineSelection,
   tutorialModeActive,
   tutorialPanelState,
   tutorialProgress,
@@ -46,6 +48,7 @@ function useUndoHistoryController({
 
   const createCurrentUndoSnapshot = useCallback(() => createUndoSnapshot({
     appState: useMusicStore.getState(),
+    editorState: { timelineSelection },
     tutorialState: {
       activeTutorialId,
       appliedTutorialSetups,
@@ -62,6 +65,7 @@ function useUndoHistoryController({
     activeTutorialId,
     appliedTutorialSetups,
     currentTutorialStepIndex,
+    timelineSelection,
     tutorialModeActive,
     tutorialPanelState,
     tutorialProgress,
@@ -94,6 +98,7 @@ function useUndoHistoryController({
     void (async () => {
       await dispatchAppCommand({ type: APP_COMMAND_TYPES.TRANSPORT_STOP });
       restoreUndoSnapshot({
+        setTimelineSelection,
         setActiveTutorialId,
         setAppliedTutorialSetups,
         setCurrentTutorialStepIndex,
@@ -112,6 +117,7 @@ function useUndoHistoryController({
     clearTutorialAutoAdvanceTimer,
     clearTutorialCountIn,
     dispatchAppCommand,
+    setTimelineSelection,
     setActiveTutorialId,
     setAppliedTutorialSetups,
     setCurrentTutorialStepIndex,

@@ -18,7 +18,7 @@ import {
   getChordNotePitch,
   getChordToneRoots,
 } from '../domain/chordCells.js';
-import { isValidMelodyNote } from '../app/melodyActions.js';
+import { getMelodyCellNotes } from '../domain/melodyCells.js';
 import { getTrackTypeFromInstanceId } from '../domain/trackInstances.js';
 
 const PLAYBACK_TRACK_TYPE_ORDER = Object.freeze(['drums', 'bass', 'chord', 'melody']);
@@ -188,20 +188,29 @@ function extractChordEvent(cell, bar, step) {
   }, cell);
 }
 
-function extractMelodyEvent(cell, bar, step) {
-  if (cell?.type !== 'melody' || !isValidMelodyNote(cell.note)) return null;
-
+function createMelodyEvent(cell, note, bar, step) {
   const event = {
     type: 'melody',
     trackId: 'melody',
     bar,
     step,
-    note: cell.note,
+    note,
     duration: cell.duration ?? '16n',
   };
   if (Number.isInteger(cell.durationSteps)) event.durationSteps = cell.durationSteps;
   if (cell.timbreId) event.timbreId = cell.timbreId;
+  if (cell.playbackMode === 'natural') event.playbackMode = 'natural';
+  if (Number.isFinite(cell.velocity)) event.velocity = cell.velocity;
   return event;
+}
+
+function extractMelodyEvent(cell, bar, step) {
+  const notes = getMelodyCellNotes(cell);
+  return notes.length === 1 ? createMelodyEvent(cell, notes[0], bar, step) : null;
+}
+
+function extractMelodyEvents(cell, bar, step) {
+  return getMelodyCellNotes(cell).map((note) => createMelodyEvent(cell, note, bar, step));
 }
 
 function extractBassEvent(cell, bar, step) {
@@ -259,8 +268,7 @@ function createMatrixPlaybackAdapter(matrixSource, options = {}) {
             const event = extractChordEvent(cell, bar, step);
             if (event) events = [event];
           } else if (trackType === 'melody') {
-            const event = extractMelodyEvent(cell, bar, step);
-            if (event) events = [event];
+            events = extractMelodyEvents(cell, bar, step);
           }
 
           return events.map((event) => (instanceAware ? {
@@ -293,4 +301,5 @@ export {
   extractChordEvent,
   extractDrumsInstruments,
   extractMelodyEvent,
+  extractMelodyEvents,
 };

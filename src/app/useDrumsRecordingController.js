@@ -1,3 +1,4 @@
+import { getTotalBars } from '../domain/projectLength.js';
 import {
   useCallback,
   useEffect,
@@ -244,7 +245,7 @@ function useDrumsRecordingController({
     const clip = state.clips.byId[state.selectedClipId];
     if (activeTrackType !== 'drums' || clip?.trackId !== state.activeTrackId) return false;
 
-    const targetBars = getDrumsWriteBarRange(clip.bar);
+    const targetBars = getDrumsWriteBarRange(clip.bar, getTotalBars(state) - 1, getTotalBars(state));
     const pendingSession = {
       bpm: Number.isFinite(state.bpm) && state.bpm > 0 ? state.bpm : bpm,
       endBar: targetBars.at(-1),
@@ -328,6 +329,7 @@ function useDrumsRecordingController({
     if (!session?.targetBars.includes(bar)) return false;
 
     const patch = createDrumsLiveRecordPatch({
+      totalBars: getTotalBars(state),
       activeTrackId: 'drums',
       bar,
       currentCell: state.matrix[session.trackId]?.[bar]?.[step] ?? null,

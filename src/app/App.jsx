@@ -1,3 +1,4 @@
+import { getTimelineBars, getTotalBars } from '../domain/projectLength.js';
 import {
   createElement,
   useCallback,
@@ -147,7 +148,6 @@ import { useUndoHistoryController } from './useUndoHistoryController.js';
 import { useDrumsRecordingController } from './useDrumsRecordingController.js';
 import { useMelodyRecordingController } from './useMelodyRecordingController.js';
 import {
-  BAR_NUMBERS,
   getTrackUiByIds,
   TRACK_UI,
 } from './uiShellData.js';
@@ -204,7 +204,16 @@ function createTrackActionScope(state, trackId = state.activeTrackId) {
   };
 }
 
-export default function App({ genreId = 'pop' }) {
+// JSX components are not counted as references by the project lint parser.
+void PerformanceMode;
+
+export default function App({
+  genreId = 'pop',
+  performanceProfileId = null,
+}) {
+  const totalBars = useMusicStore((state) => getTotalBars(state));
+  const timelineBars = getTimelineBars({ totalBars });
+  const barNumbers = useMemo(() => Array.from({ length: timelineBars }, (_, index) => index + 1), [timelineBars]);
   const [performanceActive, setPerformanceActive] = useState(false);
   const [performanceVisited, setPerformanceVisited] = useState(false);
   const bpm = useMusicStore((state) => state.bpm);
@@ -355,6 +364,8 @@ export default function App({ genreId = 'pop' }) {
     handleUndo,
     withUndoCheckpoint,
   } = useUndoHistoryController({
+    timelineSelection,
+    setTimelineSelection,
     activeTutorialId,
     appliedTutorialSetups,
     clearTutorialAutoAdvanceTimer,
@@ -852,20 +863,20 @@ export default function App({ genreId = 'pop' }) {
     ...(activeTrackType ? { [activeTrackType]: mutedTracks[activeTrackId] === true } : {}),
   }), [activeTrackId, activeTrackType, mutedTracks]);
   const tracks = useMemo(() => createTimelineTracks({
-    barNumbers: BAR_NUMBERS,
+    barNumbers: barNumbers,
     clips,
     matrix,
     selectedBar,
     trackUi: visibleTrackUi,
     volumes,
-  }), [clips, matrix, selectedBar, visibleTrackUi, volumes]);
+  }), [barNumbers, clips, matrix, selectedBar, visibleTrackUi, volumes]);
   const canPageBars = useMemo(() => (
     canPageTrackClipBars(clips, activeTrackId)
     && getAdjacentTrackClipBar(clips, activeTrackId, selectedBar, 'next') !== null
   ), [activeTrackId, clips, selectedBar]);
 
   const seekTransportToBarStart = useCallback((bar) => {
-    if (!Number.isInteger(bar)) return;
+    if (!Number.isInteger(bar) || bar < 0 || bar >= getTotalBars(useMusicStore.getState())) return;
     stopDrumsRecording();
     stopMelodyRecording();
     void dispatchAppCommand({
@@ -1076,7 +1087,7 @@ export default function App({ genreId = 'pop' }) {
     }
 
     const state = useMusicStore.getState();
-    const hasEmptyClipSlot = BAR_NUMBERS.some((_, barIndex) => (
+    const hasEmptyClipSlot = barNumbers.some((_, barIndex) => (
       !state.getClipForTrackBar(trackId, barIndex)
     ));
     if (!hasEmptyClipSlot && !tutorialAction) {
@@ -1089,6 +1100,7 @@ export default function App({ genreId = 'pop' }) {
       if (tutorialAction) applyTutorialActionProgress(tutorialAction);
     }, { force: Boolean(tutorialAction) });
   }, [
+    barNumbers,
     applyTutorialActionProgress,
     currentTutorialStep,
     selectedBar,
@@ -1137,7 +1149,8 @@ export default function App({ genreId = 'pop' }) {
   const handleRemoveTrack = useCallback((trackId) => {
     stopForTrackStructureChange();
     withUndoCheckpoint(() => {
-      useMusicStore.getState().removeTrackInstance(trackId);
+      const removed = useMusicStore.getState().removeTrackInstance(trackId);
+      if (removed) audioEngine.disposeTrack?.(trackId);
     });
   }, [stopForTrackStructureChange, withUndoCheckpoint]);
 
@@ -1147,6 +1160,7 @@ export default function App({ genreId = 'pop' }) {
 
   const handleTrackVolumeChange = useCallback((trackId, volume) => {
     useMusicStore.getState().setTrackVolume(trackId, volume);
+    audioEngine.refreshTrackVolume?.(trackId);
   }, []);
 
   const handleMoveClip = useCallback((clipId, targetBar) => {
@@ -1275,13 +1289,14 @@ export default function App({ genreId = 'pop' }) {
       writeDrumsBars(
         nextMatrix,
         tutorialAction
-          ? BAR_NUMBERS.map((_, barIndex) => barIndex)
+          ? barNumbers.map((_, barIndex) => barIndex)
           : drumsClipBars,
         scope.trackId,
       );
       if (tutorialAction) applyTutorialActionProgress(tutorialAction);
     }, { force: Boolean(tutorialAction) });
   }, [
+    barNumbers,
     applyTutorialActionProgress,
     currentTutorialStep,
     selectedBar,
@@ -1355,6 +1370,7 @@ export default function App({ genreId = 'pop' }) {
     stopDrumsRecording();
     stopMelodyRecording();
     selectRulerPasteDestination(bar);
+    if (bar >= getTotalBars(useMusicStore.getState())) return;
     void dispatchAppCommand({ type: APP_COMMAND_TYPES.TRANSPORT_SEEK, bar, step });
   }, [
     clearTimelineSelectionPlayback,
@@ -1383,7 +1399,11 @@ export default function App({ genreId = 'pop' }) {
       }
     }
 
-    const selectionPlayback = getTimelineSelectionPlaybackOptions(timelineSelection);
+    const selectionPlayback = getTimelineSelectionPlaybackOptions(timelineSelection, totalBars);
+    if (timelineSelection && !selectionPlayback) {
+      if (isPlaying) handleStop();
+      return;
+    }
     if (selectionPlayback) {
       if (isPlaying) {
         handleStop();
@@ -1413,6 +1433,7 @@ export default function App({ genreId = 'pop' }) {
     stopMelodyRecording({ stopTransport: false });
     void dispatchAppCommand({ type: APP_COMMAND_TYPES.TRANSPORT_TOGGLE_PLAY });
   }, [
+    totalBars,
     applyTutorialActionProgress,
     clearTimelineSelectionPlayback,
     currentTutorialStep,
@@ -1877,6 +1898,7 @@ export default function App({ genreId = 'pop' }) {
       state.setCell(scope.trackId, selectedBar, step, nextMatrix.melody[selectedBar][step]);
       if (auditionNote) {
         void audioEngine.triggerMelodyInputOneShot(auditionNote, undefined, {
+          ...nextMatrix.melody[selectedBar][step], bpm: state.bpm,
           trackId: scope.trackId,
         });
       }
@@ -1892,7 +1914,11 @@ export default function App({ genreId = 'pop' }) {
       });
     }
 
-    return audioEngine.triggerMelodyInputOneShot(noteOrNotes, undefined, { trackId });
+    const state = useMusicStore.getState();
+    const cell = state.matrix[trackId]?.[state.selectedBar]?.find((note) => note?.timbreId);
+    return audioEngine.triggerMelodyInputOneShot(noteOrNotes, undefined, {
+      trackId, timbreId: cell?.timbreId, playbackMode: cell?.playbackMode, bpm: state.bpm,
+    });
   }, []);
 
   const handleMelodyPreviewStop = useCallback(() => {
@@ -2961,6 +2987,28 @@ export default function App({ genreId = 'pop' }) {
   const appStyle = editorHeightPx === null ? undefined : {
     '--app-editor-height': `${editorHeightPx}px`,
   };
+  const importPerformance = useCallback((snapshot) => {
+    withUndoCheckpoint(() => {
+      handleStop();
+      audioEngine.stopAllVoices();
+      clearTutorialAutoAdvanceTimer();
+      clearClipClipboardState();
+      clearTimelineSelectionPlayback();
+      setTimelineSelection(null);
+      setLaunchpadChordHarmonyTarget(null);
+      setTutorialModeActive(false);
+      setTutorialVisible(false);
+      setTutorialPanelState('closed');
+      useMusicStore.setState(snapshot);
+    });
+    setPerformanceActive(false);
+    window.requestAnimationFrame(() => {
+      const timeline = document.querySelector('.timeline-col');
+      if (timeline) timeline.scrollLeft = 0;
+      document.querySelector('.clip.selected')?.focus();
+    });
+  }, [withUndoCheckpoint, handleStop, clearClipClipboardState, clearTimelineSelectionPlayback,
+    setTutorialModeActive, setTutorialVisible, setTutorialPanelState]);
   function enterPerformance() {
     handleStop();
     audioEngine.stopAllVoices();
@@ -3176,6 +3224,7 @@ export default function App({ genreId = 'pop' }) {
             tracks,
           })}
           {createElement(Timeline, {
+            totalBars: timelineBars,
             activeTutorialTarget,
             activeTrackId,
             currentBar,
@@ -3319,16 +3368,18 @@ export default function App({ genreId = 'pop' }) {
         ) : null}
       </div>
     </div>
-    {performanceVisited ? createElement(PerformanceMode, {
-      key: genreId,
-      active: performanceActive,
-      genreId,
-      initialBpm: bpm,
-      onBack: () => {
+    {performanceVisited ? <PerformanceMode
+      key={`${genreId}:${performanceProfileId ?? 'default'}`}
+      active={performanceActive}
+      genreId={genreId}
+      profileId={performanceProfileId}
+      initialBpm={bpm}
+      onImport={importPerformance}
+      onBack={() => {
         setPerformanceActive(false);
         window.requestAnimationFrame(() => document.querySelector('.performance-entry')?.focus());
-      },
-    }) : null}
+      }}
+    /> : null}
     </>
   );
 }

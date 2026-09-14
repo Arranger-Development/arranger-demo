@@ -26,6 +26,7 @@ import { DRUMS_RECORDING_PHASES } from '../drumsLiveRecording.js';
 import {
   hasExistingDrumsClipContent,
 } from '../drumsPatternActions.js';
+import { MAX_PROJECT_BARS } from '../../domain/projectLength.js';
 import { formatDisplayPosition } from '../transportPosition.js';
 import { getTutorialControlRole } from '../../tutorial/drumsTutorialRuntime.js';
 import { useSecondaryMenuDismiss } from '../useSecondaryMenuDismiss.js';
@@ -423,7 +424,7 @@ function DrumSequencer({
     const canDrag = active && !locked;
     const dragOver = dragOverStep?.instrument === row.id
       && dragOverStep.step === stepIndex;
-    const positionLabel = formatDisplayPosition(selectedBar, stepIndex);
+    const positionLabel = formatDisplayPosition(selectedBar, stepIndex, MAX_PROJECT_BARS);
 
     return (
       <button
@@ -459,7 +460,11 @@ function DrumSequencer({
   };
 
   return (
-    <section className="editor drum-editor" data-screen-label="Drum Sequencer" data-picker={drumTemplatePickerOpen ? 'drum-template' : undefined}>
+    <section
+      className="editor drum-editor"
+      data-screen-label="Drum Sequencer"
+      data-picker={drumTemplatePickerOpen ? 'drum-template' : undefined}
+    >
       <header className="editor-head">
         <div className="editor-left">
           {createElement(EditorTrackIdentity, { trackId: 'drums', label: trackName })}

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, Drum, Guitar, Music2, Piano, Play, Save, Square } from 'lucide-react';
+import { ArrowLeft, ArrowRightToLine, Check, Drum, Guitar, Music2, Piano, Play, Save, Square } from 'lucide-react';
 import createAudioEngine from '../../audio/createAudioEngine.js';
 import { getDrumTemplateGenre } from '../../data/drumStyleTemplates.js';
+import { AI_PERFORMANCE_PROFILE_ID } from '../../data/aiPerformanceTemplates.js';
 import {
   PERFORMANCE_LABELS, PERFORMANCE_TRACKS, createPerformanceMatrix, createPerformanceSequence,
   hasSelection, normalizePerformanceBpm, performanceTemplates, readPerformanceSession,
@@ -9,9 +10,10 @@ import {
 } from '../performanceModel.js';
 import { createPerformancePlayback } from '../performancePlayback.js';
 import './performance.css';
+import { createPerformanceImport } from '../performanceImport.js';
 
 // This repository's lint parser does not count JSX component names as reads.
-void [ArrowLeft, Check, Play, Save, Square, PerformanceLoops];
+void [ArrowRightToLine, ArrowLeft, ArrowRightToLine, Check, Play, Save, Square, PerformanceLoops];
 
 const icons = { drums: Drum, chord: Piano, bass: Guitar, melody: Music2 };
 function browserStorage() {
@@ -55,19 +57,26 @@ function PerformanceLoops({ active, playback, status, sequenceIndices, selectedL
   </div>;
 }
 
-export default function PerformanceMode({ active, genreId, initialBpm, onBack }) {
-  const [session, setSession] = useState(() => readPerformanceSession(browserStorage(), genreId, initialBpm));
+export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack, onImport }) {
+  const aiTemplates = profileId === AI_PERFORMANCE_PROFILE_ID;
+  const [session, setSession] = useState(() => readPerformanceSession(browserStorage(), genreId, initialBpm, profileId));
   const [drafts, setDrafts] = useState(() => session.saved.map((selection) => ({ ...selection })));
   const [selectedLoop, setSelectedLoop] = useState(0);
   const [status, setStatus] = useState({ mode: 'stopped', loading: false, bar: 0, step: 0, error: '' });
   const [message, setMessage] = useState('');
   const [storageError, setStorageError] = useState(false);
   const [sequenceIndices, setSequenceIndices] = useState([]);
-  const [playback] = useState(() => createPerformancePlayback(createAudioEngine(), setStatus));
+  const [playback] = useState(() => createPerformancePlayback(createAudioEngine(), setStatus, {
+    melodyTimbreIds: aiTemplates ? ['piano'] : ['yangqin', 'blues'],
+    melodyPlaybackMode: aiTemplates ? 'natural' : undefined,
+  }));
+  const importingRef = useRef(false);
+  const canImport = session.saved.some(hasSelection);
   const titleRef = useRef(null);
   const saveTimer = useRef(null);
   const [saveFeedback, setSaveFeedback] = useState(false);
-  const templates = useMemo(() => performanceTemplates(genreId), [genreId]);
+  const templates = useMemo(() => performanceTemplates(genreId, profileId), [genreId, profileId]);
+  const templateColumns = Math.max(...PERFORMANCE_TRACKS.map((track) => templates[track].length));
   const draft = drafts[selectedLoop];
 
 
@@ -78,12 +87,12 @@ export default function PerformanceMode({ active, genreId, initialBpm, onBack })
 
   function persist(next) {
     setSession(next);
-    const stored = writePerformanceSession(browserStorage(), genreId, next);
+    const stored = writePerformanceSession(browserStorage(), genreId, next, profileId);
     setStorageError(!stored);
     return stored;
   }
   function preview(selection) {
-    if (hasSelection(selection)) playback.preview(createPerformanceMatrix(selection, genreId), session.bpm);
+    if (hasSelection(selection)) playback.preview(createPerformanceMatrix(selection, genreId, profileId), session.bpm);
     else playback.stop();
   }
   function resetSaveFeedback() {
@@ -116,7 +125,7 @@ export default function PerformanceMode({ active, genreId, initialBpm, onBack })
   function togglePlayback() {
     // Read the controller synchronously so rapid clicks also cancel loading.
     if (playback.isActive()) { playback.stop(); setMessage(''); return; }
-    const sequence = createPerformanceSequence(session.saved, genreId);
+    const sequence = createPerformanceSequence(session.saved, genreId, profileId);
     if (!sequence.indices.length) {
       setMessage('先保存至少一个 Loop，再播放整组。');
       return;
@@ -129,6 +138,21 @@ export default function PerformanceMode({ active, genreId, initialBpm, onBack })
     const bpm = normalizePerformanceBpm(value);
     persist({ ...session, bpm });
     playback.setTempo(bpm);
+  }
+  function importArrangement() {
+    if (importingRef.current || !active || !canImport) return;
+    importingRef.current = true;
+    try {
+      const snapshot = createPerformanceImport({ ...session, genreId, profileId });
+      playback.stop();
+      resetSaveFeedback();
+      onImport(snapshot);
+      setMessage('');
+    } catch (error) {
+      setMessage(error.message || '导入失败，原编曲已保留。');
+    } finally {
+      importingRef.current = false;
+    }
   }
   function back() { resetSaveFeedback(); playback.stop(); onBack(); }
 
@@ -149,11 +173,11 @@ export default function PerformanceMode({ active, genreId, initialBpm, onBack })
 
       <main className="performance-body">
         <div className="performance-intro">
-          <span className="performance-eyebrow">{getDrumTemplateGenre(genreId).label} · 每段 2 小节</span>
+          <span className="performance-eyebrow">{aiTemplates ? 'AI 多模态 · 每段 2–4 小节' : `${getDrumTemplateGenre(genreId).label} · 每段 2 小节`}</span>
         </div>
 
         <div className="performance-workbench">
-          <div className="performance-grid" aria-label="四轨模板">
+          <div className="performance-grid" aria-label="四轨模板" style={{ '--template-columns': templateColumns }}>
             {PERFORMANCE_TRACKS.map((trackId) => {
               const Icon = icons[trackId];
               void Icon;
@@ -176,6 +200,10 @@ export default function PerformanceMode({ active, genreId, initialBpm, onBack })
             <button type="button" className="performance-save" onClick={save} aria-live="polite">
               {saveFeedback ? <Check size={14} aria-hidden="true" /> : <Save size={14} aria-hidden="true" />}
               <span>{saveFeedback ? '已保存' : `保存到 Loop ${selectedLoop + 1}`}</span>
+            </button>
+            <button type="button" className="performance-save performance-import" onClick={importArrangement}
+              disabled={!canImport} title={canImport ? '将已保存的 Loop 导入编曲，可撤销' : '请先保存一段 Loop'}>
+              <ArrowRightToLine size={14} aria-hidden="true" /><span>导入编曲</span>
             </button>
           </div>
         </div>

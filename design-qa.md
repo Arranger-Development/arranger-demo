@@ -746,6 +746,18 @@ No publication or source-data migration was performed.
 
 The isolated commit snapshot passes 564 tests, `eslint src tests`, and the production build. The 589-test and twenty-bar browser results above describe the full development workspace, including earlier uncommitted performance/import changes. This commit includes only clip typography and its CSS assertions; previous QA history is retained.
 
+## 2026-09-13 — Minimum eight timeline positions
+
+- Timeline display uses `max(8, totalBars)`; two/four/six-bar imports keep their actual musical length and do not create clips in the trailing positions.
+- Empty positions, empty clips and clips containing notes remain distinct. Creating, moving or pasting into later positions grows every track atomically with the clip operation; undo restores both content and length.
+- Browser QA exercised eighth-bar creation, note editing, undo/redo, ruler paste targeting without creation, paste into bar eight and one-step undo. Two-bar playback started/stopped without console errors.
+- Desktop 1466×856: eight columns, approximately 146 px per clip in the tested split layout; text stays within clip bounds.
+- 716×666 and 390×666: eight columns retain 80 px per clip and horizontal timeline scrolling; the document itself has no horizontal overflow. The eighth position remains operable after scrolling.
+- Twenty-bar regression: 20 ruler labels, 80 imported clips, 80 px minimum width; the twentieth clip opens in the editor and text remains within bounds.
+- Automated checks cover exact short-project/MIDI lengths, WAV duration with the existing sound tail, continuous audio-clock growth, track instances, selection intersection, clipboard failure atomicity, hardware pad mapping and recording/editing at bar eight.
+- Validation: all 609 tests passed; `npx eslint src tests`, `git diff --check` and production build passed. No public deployment.
+- Screenshots: `output/playwright/minimum-bars-1466x856.jpg`, `output/playwright/minimum-bars-716x666.jpg`, `output/playwright/minimum-bars-390x666.jpg`, `output/playwright/minimum-bars-twenty.jpg`.
+
 ## 2026-09-13 — Track volume minimum is silent
 
 - The saved slider minimum remains finite at −24 dB; the shared audio-output mapping turns only this endpoint into zero gain. Other slider positions, defaults and the independent mute flags are unchanged.
@@ -762,3 +774,30 @@ The isolated submission passes all 570 tests, `npx eslint src tests`, and the pr
 ### Development dependency checks before merge
 
 Updated vulnerable development dependencies within their existing major versions after GitHub reported ten open advisories. A clean isolated `npm ci --ignore-scripts` and audit report zero vulnerabilities; all 570 submission tests, `npx eslint src tests`, and the production build pass with the updated lockfile. No application dependencies or public publishing workflows were changed.
+
+## 2026-09-14 — Excel AI melody templates and polyphonic cells
+
+- Replaced only the AI performance melody library with 婉约涟漪1 / 婉约涟漪2 / 婉约涟漪3 / 怦然心动. Each remains four bars; retained counts are 24 / 16 / 11 / 41. Every retained green-cell pitch and step matches the workbook audit, including simultaneous notes and separate repeated attacks. All G#2 and B2 notes are excluded without shifting other notes.
+- The original workbook SHA-256 remains `0c390a65e93e37e7ec33e6e1ebcfe4078b2ee888d581601f3d8ef6bbd0f45091`. The drum and bass libraries were compared with the pre-change backup and are identical. Existing harmony and ordinary styles are covered by regression tests.
+- Melody cells use the legacy `note` property for one pitch and `notes` for simultaneous pitches. Playback expands each pitch at the same audio-clock position; editor toggles remove only the chosen pitch. Shared duration, velocity and piano timbre survive import, copying, moving, undo/redo and project backup. Recording still overwrites a step with a single note; the editor remains C3–B5.
+- AI library storage uses a new key, leaving older records intact. Its first session has five empty Loops and inherits only the previous AI BPM, defaulting to 100. Browser checks confirmed first-use empty slots, save, a BPM change to 132 and restoration after refresh.
+- Browser QA used the real App/import fixture on isolated port 5176. Selected and saved all four new melodies, filled five Loops, started group playback, observed progress advancing between Loops, and imported during playback. The result was twenty stopped, editable bars at 132 BPM, with the expected template names and simultaneous notes. Removing B3 at the first step preserved the other three pitches; undo restored it, and adding C3 preserved the existing four. The twentieth clip opened with all seven expected notes.
+- Responsive checks at 1466×856, 716×666 and 390×666 showed square pads of 80, 63 and 49 px respectively, complete melody names, all performance controls visible and no document scrolling. Browser warning/error logs were empty.
+- Automated verification: all 622 tests, `npm run lint`, production build and `git diff --check` pass. Audio-engine/MIDI/WAV tests confirm simultaneous attacks, repeated notes, durations, all twenty bars, cancellation and independent track gain. The build retains its existing large-chunk warning.
+- Screenshots: `output/playwright/melody-1466x856.png`, `output/playwright/melody-716x666.png`, `output/playwright/melody-390x666.png`, `output/playwright/melody-editor-polyphony-1466x856.png`.
+
+Existing uncommitted work was preserved. No commit, push, merge or public deployment was performed for this update.
+
+## 2026-09-14 — Natural piano tails for AI melodies
+
+- AI melody cells now carry `playbackMode: 'natural'`. All 92 pitches and attack positions, sixteenth-grid notation, template IDs, Loop storage and BPM are unchanged. Earlier imported cells without the marker retain gated playback.
+- Natural and gated voices use separate sampler banks per track/timbre. Repeated pitches and Loop boundaries preserve natural tails; stop, removal and cancelled loading release or invalidate the relevant voices. AI performance preloads the natural piano bank even when the first selected pad is a drum.
+- Playback, note audition and imported arrangements read the marker. Existing cell editing, clip copying/moving, history and project backup retain it. WAV lets the sample end naturally and keeps the existing three-second export tail. MIDI output is byte-identical with and without the marker for the complete 92-note collection.
+- Real browser OfflineAudioContext A/B renders used the actual piano WAV samples for all four templates. At 0.6–0.9 seconds, old short-note renders have zero energy; natural renders have RMS 0.01216 / 0.00556 / 0.00556 / 0.02217. All four standalone melody renders show zero clipped samples, with peaks below 0.364. Each four-bar file is 12.6 seconds at 100 BPM, including the existing tail allowance.
+- Browser regression on isolated port 5176 restored all five saved Loops and 132 BPM, exercised group playback, rapid template changes and stop, then imported twenty bars. The first clip retained its simultaneous pitches and excluded the unsaved draft. Browser warning/error logs were empty. No UI layout or editor pitch-range changes were made.
+- Validation: all 627 tests, `npm run lint`, production build and `git diff --check` pass. Existing bundle-size warning remains. Audio comparison fixture: `output/playwright/natural-tail-qa.html`; measured results: `output/playwright/natural-tail-measurements.json`.
+- Local changes only; no commit, push, merge or public deployment.
+
+### Performance submission verification
+
+The isolated submission snapshot passes all 620 included tests, `npm run lint`, and the production build. It contains AI performance templates, polyphonic natural-tail melody playback, editable Loop import, variable project length and the minimum eight-position timeline. Dormant theory-breakdown code and styles, unrelated build tooling changes, and user documents remain outside the submission.

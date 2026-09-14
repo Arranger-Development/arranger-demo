@@ -1,5 +1,6 @@
 import {
   DEFAULT_BPM,
+  TOTAL_BARS,
   CORE_TRACK_IDS,
   ROOT_KEY,
   SCALE,
@@ -26,6 +27,7 @@ function createTransportPositionPatch(bar, step) {
 
 export default function createTransportSlice(set) {
   return {
+    totalBars: TOTAL_BARS,
     bpm: DEFAULT_BPM,
     rootKey: ROOT_KEY,
     scale: SCALE,

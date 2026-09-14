@@ -3,7 +3,7 @@ import {
   getDoowopPassingTargetChord,
   getPassingChordOptions,
 } from '../domain/chordCells.js';
-import { STEPS_PER_BAR, TOTAL_BARS } from '../domain/musicConstants.js';
+import { STEPS_PER_BAR } from '../domain/musicConstants.js';
 import { getExistingChordClipBars } from './chordActions.js';
 import {
   PASSING_CHORD_STEP_INDEX,
@@ -83,7 +83,7 @@ function createLaunchpadChordHarmonyState({
   if (
     !Number.isInteger(bar)
     || bar < 0
-    || bar >= TOTAL_BARS
+    || bar >= (matrix?.chord?.length ?? 0)
     || !Number.isInteger(step)
     || step < 0
     || step >= STEPS_PER_BAR

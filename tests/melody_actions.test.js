@@ -107,7 +107,7 @@ test('every melody piano-roll semitone can be written and out-of-range notes are
   assert.equal(createMelodyCell('C6'), null);
 });
 
-test('toggleMelodyCell writes replaces and clears one note per sixteenth step', () => {
+test('toggleMelodyCell adds and removes independent notes in a sixteenth step', () => {
   const matrix = createInitialMatrix();
 
   const withC = toggleMelodyCell(matrix, 2, 5, 'C4');
@@ -115,15 +115,16 @@ test('toggleMelodyCell writes replaces and clears one note per sixteenth step', 
   assert.equal(isMelodyCellActive(withC, 2, 5, 'C4'), true);
 
   const withD = toggleMelodyCell(withC, 2, 5, 'D4');
-  assert.deepEqual(withD.melody[2][5], { type: 'melody', note: 'D4' });
-  assert.equal(isMelodyCellActive(withD, 2, 5, 'C4'), false);
+  assert.deepEqual(withD.melody[2][5], { type: 'melody', notes: ['C4', 'D4'] });
+  assert.equal(isMelodyCellActive(withD, 2, 5, 'C4'), true);
   assert.equal(isMelodyCellActive(withD, 2, 5, 'D4'), true);
 
   const cleared = toggleMelodyCell(withD, 2, 5, 'D4');
-  assert.equal(cleared.melody[2][5], null);
+  assert.deepEqual(cleared.melody[2][5], { type: 'melody', note: 'C4' });
+  assert.equal(toggleMelodyCell(cleared, 2, 5, 'C4').melody[2][5], null);
 });
 
-test('melody cell toggle result auditions additions and replacements but not removals', () => {
+test('melody cell toggle result auditions added pitches but not removed pitches', () => {
   const matrix = createInitialMatrix();
 
   const added = getMelodyCellToggleResult(matrix, 2, 5, 'C4');
@@ -132,11 +133,11 @@ test('melody cell toggle result auditions additions and replacements but not rem
 
   const replaced = getMelodyCellToggleResult(added.nextMatrix, 2, 5, 'D4');
   assert.equal(replaced.auditionNote, 'D4');
-  assert.equal(replaced.nextMatrix.melody[2][5].note, 'D4');
+  assert.deepEqual(replaced.nextMatrix.melody[2][5].notes, ['C4', 'D4']);
 
   const removed = getMelodyCellToggleResult(replaced.nextMatrix, 2, 5, 'D4');
   assert.equal(removed.auditionNote, null);
-  assert.equal(removed.nextMatrix.melody[2][5], null);
+  assert.deepEqual(removed.nextMatrix.melody[2][5], { type: 'melody', note: 'C4' });
 });
 
 test('melody actions leave the matrix unchanged for invalid positions', () => {

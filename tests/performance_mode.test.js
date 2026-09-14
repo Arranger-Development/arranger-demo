@@ -8,6 +8,7 @@ import {
 import { createMatrixPlaybackAdapter } from '../src/audio/matrixPlaybackAdapter.js';
 import { createPerformancePlayback } from '../src/app/performancePlayback.js';
 import { createChordStylePresetBar } from '../src/app/chordStylePresetActions.js';
+import { AI_PERFORMANCE_PROFILE_ID } from '../src/data/aiPerformanceTemplates.js';
 
 const select = (genre, ...tracks) => Object.fromEntries(PERFORMANCE_TRACKS.map((id) => [
   id, tracks.includes(id) ? performanceTemplates(genre)[id][0].id : null,
@@ -109,6 +110,40 @@ function fakeAudio() {
 }
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
+test('variable-length sequence progress follows its segment table and preview uses the audible cycle', async () => {
+  const audio = fakeAudio();
+  const playback = createPerformancePlayback(audio, () => {}, { melodyTimbreIds: ['piano'], melodyPlaybackMode: 'natural' });
+  const genre = 'electronic-edm';
+  const profile = AI_PERFORMANCE_PROFILE_ID;
+  const templates = performanceTemplates(genre, profile);
+  const short = { ...emptySelection(), drums: templates.drums[0].id };
+  const long = { ...short, melody: templates.melody[2].id };
+  const sequence = createPerformanceSequence([short, emptySelection(), long, short], genre, profile);
+  playback.sequence(sequence, 100);
+  assert.deepEqual(audio.options.melodyTimbreIds, ['piano']);
+  assert.equal(audio.options.melodyPlaybackMode, 'natural');
+  audio.finish();
+  await flush();
+  for (const [position, segment, fraction] of [[0, 0, 0], [31.5, 0, 31.5 / 32], [32, 1, 0], [64, 1, .5], [96, 2, 0], [127.5, 2, 31.5 / 32], [0, 0, 0]]) {
+    audio.position = position;
+    assert.deepEqual(playback.getProgress(), { segment, fraction });
+  }
+  playback.setTempo(140);
+  audio.position = 48;
+  assert.deepEqual(playback.getProgress(), { segment: 1, fraction: .25 });
+  playback.preview(createPerformanceMatrix(short, genre, profile), 140);
+  audio.finish();
+  await flush();
+  audio.getPlaybackProgress = () => ({ position: 1, totalSteps: 32 });
+  playback.preview(createPerformanceMatrix(long, genre, profile), 140);
+  assert.equal(audio.options.playbackSource().totalBars, 4);
+  assert.deepEqual(playback.getProgress(), { segment: 0, fraction: 1 / 32 });
+  audio.getPlaybackProgress = () => ({ position: 33, totalSteps: 64 });
+  assert.deepEqual(playback.getProgress(), { segment: 0, fraction: 33 / 64 });
+  playback.stop();
+  assert.equal(playback.getProgress(), null);
+});
+
 test('progress waits for audio, tracks two-bar boundaries and clears immediately on stop', async () => {
   const audio = fakeAudio();
   const playback = createPerformancePlayback(audio);
@@ -131,7 +166,7 @@ test('progress waits for audio, tracks two-bar boundaries and clears immediately
   playback.stop();
   assert.equal(playback.getProgress(), null);
   assert.equal(playback.isActive(), false);
-  playback.preview(sequence.matrix, 120);
+  playback.preview(createPerformanceMatrix(select('pop', 'drums'), 'pop'), 120);
   assert.equal(playback.getProgress(), null);
   audio.finish();
   await flush();

@@ -1,3 +1,4 @@
+import { getTimelineBars } from '../domain/projectLength.js';
 import {
   useCallback,
   useEffect,
@@ -45,13 +46,13 @@ function useClipClipboardActions({
   const selectClipPasteDestination = useCallback((trackId, bar) => {
     setPendingClipPaste(null);
     setPasteDestination(
-      clipClipboard ? createClipPasteDestination(trackId, bar) : null,
+      clipClipboard ? createClipPasteDestination(trackId, bar, getTimelineBars(useMusicStore.getState())) : null,
     );
   }, [clipClipboard]);
 
   const selectRulerPasteDestination = useCallback((bar) => {
     setPendingClipPaste(null);
-    setPasteDestination(createRulerPasteDestination(clipClipboard, bar));
+    setPasteDestination(createRulerPasteDestination(clipClipboard, bar, getTimelineBars(useMusicStore.getState())));
   }, [clipClipboard]);
 
   const getCurrentClipPasteTarget = useCallback(() => resolveClipPasteTarget({

@@ -110,7 +110,7 @@ test('root owns the genre upload analysis results and arranger views', async () 
   assert.match(rootSource, /ARRANGER_GENRE_IDS\.includes\(genreId\)/);
   assert.match(rootSource, /setGenreId\(genreId\)/);
   assert.match(rootSource, /setGenreId\(MULTIMODAL_DRUM_TEMPLATE_GENRE_ID\)/);
-  assert.match(rootSource, /createElement\(App, \{ genreId \}\)/);
+  assert.match(rootSource, /createElement\(App, \{[\s\S]*genreId,[\s\S]*performanceProfileId,[\s\S]*\}\)/);
   assert.match(rootSource, /genreId === MULTIMODAL_GENRE_ID/);
   assert.match(rootSource, /setView\(ROOT_VIEWS\.UPLOAD\)/);
   assert.match(rootSource, /setTimeout\(\(\) => setAnalysisStageIndex\(1\), 900\)/);

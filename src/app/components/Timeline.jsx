@@ -23,7 +23,6 @@ import {
   isTimelineCellSelected,
   shouldStartTimelineMarquee,
 } from '../timelineSelection.js';
-import { BAR_NUMBERS } from '../uiShellData.js';
 import { renderIcon } from './icons.js';
 
 const DRAG_THRESHOLD_PX = 6;
@@ -38,16 +37,16 @@ function didPointerDrag(event, dragSession) {
     || Math.abs(event.clientY - dragSession.startY) > DRAG_THRESHOLD_PX;
 }
 
-function getBarFromRow(row, clientX) {
+function getBarFromRow(row, clientX, totalBars) {
   if (!row) return null;
 
   const rect = row.getBoundingClientRect();
-  const rawBar = Math.floor(((clientX - rect.left) / rect.width) * TOTAL_BARS);
-  return Math.min(TOTAL_BARS - 1, Math.max(0, rawBar));
+  const rawBar = Math.floor(((clientX - rect.left) / rect.width) * totalBars);
+  return Math.min(totalBars - 1, Math.max(0, rawBar));
 }
 
-function getBarFromTrack(trackId, clientX) {
-  return getBarFromRow(document.querySelector(`[data-track-row="${trackId}"]`), clientX);
+function getBarFromTrack(trackId, clientX, totalBars) {
+  return getBarFromRow(document.querySelector(`[data-track-row="${trackId}"]`), clientX, totalBars);
 }
 
 function findTrackBar(tracks, trackId, barIndex) {
@@ -209,6 +208,7 @@ const Timeline = forwardRef(function Timeline(
     activeTrackId,
     currentBar,
     currentStep,
+    totalBars = TOTAL_BARS,
     onAddClip,
     onMoveClip,
     onOpenClip,
@@ -245,7 +245,7 @@ const Timeline = forwardRef(function Timeline(
     trackIds,
   );
   const flatStep = currentBar * STEPS_PER_BAR + currentStep;
-  const playheadLeft = `${(flatStep / (TOTAL_BARS * STEPS_PER_BAR)) * 100}%`;
+  const playheadLeft = `${(flatStep / (totalBars * STEPS_PER_BAR)) * 100}%`;
   const tutorialPlayheadRole = tutorialTargets?.playhead?.role ?? null;
   const getPlayheadTutorialClass = (baseClass) => [
     baseClass,
@@ -317,7 +317,7 @@ const Timeline = forwardRef(function Timeline(
 
     const barIndex = target.dataset.barIndex
       ? Number(target.dataset.barIndex)
-      : getBarFromRow(event.currentTarget, event.clientX);
+      : getBarFromRow(event.currentTarget, event.clientX, totalBars);
 
     if (
       tutorialLocked
@@ -346,6 +346,7 @@ const Timeline = forwardRef(function Timeline(
       clientY: event.clientY,
       rect: gridRef.current?.getBoundingClientRect(),
       trackIds,
+      totalBars,
     });
     if (!anchor) return;
 
@@ -366,7 +367,7 @@ const Timeline = forwardRef(function Timeline(
   const handleRulerMouseDown = (event) => {
     if (event.button !== 0 || tutorialLocked) return;
 
-    const bar = getBarFromRow(event.currentTarget, event.clientX);
+    const bar = getBarFromRow(event.currentTarget, event.clientX, totalBars);
     if (bar === null) return;
 
     startMarqueeSession(event, {
@@ -379,11 +380,12 @@ const Timeline = forwardRef(function Timeline(
     const nextPosition = getTimelinePlayheadSeekPosition(
       clientX,
       rulerRef.current?.getBoundingClientRect(),
+      totalBars,
     );
     if (!nextPosition) return;
 
     onTransportSeek(nextPosition.bar, nextPosition.step);
-  }, [onTransportSeek]);
+  }, [onTransportSeek, totalBars]);
 
   const handlePlayheadMouseDown = (event) => {
     event.preventDefault();
@@ -427,7 +429,7 @@ const Timeline = forwardRef(function Timeline(
     const handleMouseMove = (event) => {
       if (!didPointerDrag(event, dragSession)) return;
 
-      const targetBar = getBarFromTrack(dragSession.trackId, event.clientX);
+      const targetBar = getBarFromTrack(dragSession.trackId, event.clientX, totalBars);
       if (targetBar === null) return;
 
       setDragOverBar({ trackId: dragSession.trackId, bar: targetBar });
@@ -439,7 +441,7 @@ const Timeline = forwardRef(function Timeline(
 
       if (!didPointerDrag(event, dragSession)) return;
 
-      const targetBar = getBarFromTrack(dragSession.trackId, event.clientX);
+      const targetBar = getBarFromTrack(dragSession.trackId, event.clientX, totalBars);
       if (targetBar === null) return;
 
       suppressClipClickAfterDrag();
@@ -460,6 +462,7 @@ const Timeline = forwardRef(function Timeline(
     showDragFeedback,
     suppressClipClickAfterDrag,
     tracks,
+    totalBars,
   ]);
 
   useEffect(() => {
@@ -467,7 +470,7 @@ const Timeline = forwardRef(function Timeline(
 
     let dragged = false;
     let latestSelection = marqueeSession.source === 'track'
-      ? createTimelineSelection(marqueeSession.anchor, marqueeSession.anchor, trackIds)
+      ? createTimelineSelection(marqueeSession.anchor, marqueeSession.anchor, trackIds, totalBars)
       : null;
 
     const getSelectionAtPoint = (clientX, clientY) => {
@@ -499,16 +502,18 @@ const Timeline = forwardRef(function Timeline(
         clientY,
         rect: gridRect,
         trackIds,
+        totalBars,
       });
       if (marqueeSession.source === 'ruler') {
         return createRulerTimelineSelection(
           marqueeSession.anchor.bar,
           focus,
           trackIds,
+          totalBars,
         );
       }
 
-      return createTimelineSelection(marqueeSession.anchor, focus, trackIds);
+      return createTimelineSelection(marqueeSession.anchor, focus, trackIds, totalBars);
     };
 
     const handleMouseMove = (event) => {
@@ -557,6 +562,7 @@ const Timeline = forwardRef(function Timeline(
     onTimelineSelectionChange,
     suppressGridClickAfterMarquee,
     trackIds,
+    totalBars,
   ]);
 
   useEffect(() => {
@@ -591,7 +597,7 @@ const Timeline = forwardRef(function Timeline(
       ].filter(Boolean).join(' ')}
       data-tutorial-target="track-area"
       ref={scrollRef}
-      style={{ '--bars': TOTAL_BARS, '--track-count': tracks.length }}
+      style={{ '--bars': totalBars, '--timeline-min-width': `${totalBars * 80}px`, '--track-count': tracks.length }}
     >
       <div className="timeline-bezel" aria-hidden="true" />
       <div
@@ -601,7 +607,7 @@ const Timeline = forwardRef(function Timeline(
         onMouseDown={handleRulerMouseDown}
         ref={rulerRef}
       >
-        {BAR_NUMBERS.map((barNumber) => (
+        {Array.from({ length: totalBars }, (_, index) => index + 1).map((barNumber) => (
           <div
             className={`bar-label${barNumber === 1 || barNumber === 5 ? ' major' : ''} mono`}
             key={barNumber}
@@ -612,7 +618,7 @@ const Timeline = forwardRef(function Timeline(
         <div className={playheadLineClass} style={{ left: playheadLeft }}>
           <div
             aria-label="Drag transport playhead"
-            aria-valuemax={TOTAL_BARS * STEPS_PER_BAR - 1}
+            aria-valuemax={totalBars * STEPS_PER_BAR - 1}
             aria-valuemin={0}
             aria-valuenow={flatStep}
             className={playheadHitClass}
@@ -754,7 +760,7 @@ const Timeline = forwardRef(function Timeline(
         <div className={playheadGridClass} style={{ left: playheadLeft }}>
           <div
             aria-label="Drag transport playhead"
-            aria-valuemax={TOTAL_BARS * STEPS_PER_BAR - 1}
+            aria-valuemax={totalBars * STEPS_PER_BAR - 1}
             aria-valuemin={0}
             aria-valuenow={flatStep}
             className={playheadHitClass}

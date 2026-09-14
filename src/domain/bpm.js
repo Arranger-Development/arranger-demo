@@ -1,5 +1,5 @@
-const BPM_MIN = 60;
-const BPM_MAX = 180;
+const BPM_MIN = 40;
+const BPM_MAX = 240;
 const BPM_STEP = 1;
 const BPM_PRESETS = Object.freeze([76, 88, 96]);
 const RECOMMENDED_BPM = 88;

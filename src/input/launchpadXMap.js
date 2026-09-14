@@ -1,4 +1,4 @@
-import { TOTAL_BARS } from '../domain/musicConstants.js';
+import { getMatrixBars, getTimelineBars } from '../domain/projectLength.js';
 import { APP_COMMAND_TYPES } from './appCommands.js';
 import {
   getAdjacentLaunchpadXChordClipBar,
@@ -30,8 +30,8 @@ import {
   MELODY_INPUT_SOURCES,
 } from './melodyInputLayout.js';
 
-function isValidSelectedBar(selectedBar) {
-  return Number.isInteger(selectedBar) && selectedBar >= 0 && selectedBar < TOTAL_BARS;
+function isValidSelectedBar(selectedBar, totalBars) {
+  return Number.isInteger(selectedBar) && selectedBar >= 0 && selectedBar < totalBars;
 }
 
 function createHarmonyOptionPayload(type, harmonyState, selectedOption) {
@@ -117,6 +117,7 @@ function mapChordMessage(message, {
   chordHarmonyState,
   matrix,
   selectedBar,
+  totalBars,
 }) {
   const pageDirection = getClipPageDirection(message);
   if (pageDirection) {
@@ -132,7 +133,7 @@ function mapChordMessage(message, {
 
   if (message.kind !== 'note') return null;
 
-  const clipBar = getLaunchpadXChordClipBar(message.number);
+  const clipBar = getLaunchpadXChordClipBar(message.number, selectedBar, totalBars);
   if (clipBar !== null) {
     return createSelectClipCommand(APP_COMMAND_TYPES.CHORD_SELECT_CLIP, clipBar);
   }
@@ -182,7 +183,7 @@ function mapChordMessage(message, {
   };
 }
 
-function mapDrumsMessage(message, { drumsClipBars, selectedBar }) {
+function mapDrumsMessage(message, { drumsClipBars, selectedBar, totalBars }) {
   const pageDirection = getClipPageDirection(message);
   if (pageDirection) {
     return createSelectClipCommand(
@@ -197,7 +198,7 @@ function mapDrumsMessage(message, { drumsClipBars, selectedBar }) {
 
   if (message.kind !== 'note') return null;
 
-  const clipBar = getLaunchpadXDrumsClipBar(message.number);
+  const clipBar = getLaunchpadXDrumsClipBar(message.number, selectedBar, totalBars);
   if (clipBar !== null) {
     return createSelectClipCommand(APP_COMMAND_TYPES.DRUMS_SELECT_CLIP, clipBar);
   }
@@ -229,6 +230,7 @@ function mapMelodyMessage(message, {
   melodyScaleId,
   melodyTemplateSteps,
   selectedBar,
+  totalBars,
 }) {
   const pageDirection = getClipPageDirection(message);
   if (pageDirection) {
@@ -244,7 +246,7 @@ function mapMelodyMessage(message, {
 
   if (message.kind !== 'note') return null;
 
-  const clipBar = getLaunchpadXMelodyClipBar(message.number);
+  const clipBar = getLaunchpadXMelodyClipBar(message.number, selectedBar, totalBars);
   if (clipBar !== null) {
     return message.pressed
       ? createSelectClipCommand(APP_COMMAND_TYPES.MELODY_SELECT_CLIP, clipBar)
@@ -305,12 +307,13 @@ function mapLaunchpadXMessageToCommand(data, {
   matrix = null,
   selectedBar = 0,
 } = {}) {
+  const totalBars = getTimelineBars({ totalBars: getMatrixBars(matrix) });
   const message = parseLaunchpadXMessage(data);
   if (message?.channel !== 1) return null;
 
   const activeHarmonyState = (
     chordActive
-    && isValidSelectedBar(selectedBar)
+    && isValidSelectedBar(selectedBar, totalBars)
     && chordHarmonyState?.bar === selectedBar
   ) ? chordHarmonyState : null;
   const trackMuteCommand = mapTrackMuteMessage(message);
@@ -318,7 +321,7 @@ function mapLaunchpadXMessageToCommand(data, {
   const transportCommand = mapTransportMessage(message, activeHarmonyState);
   if (transportCommand) return transportCommand;
 
-  if (!isValidSelectedBar(selectedBar)) return null;
+  if (!isValidSelectedBar(selectedBar, totalBars)) return null;
   if (melodyActive) {
     return mapMelodyMessage(message, {
       activeMelodyNotes,
@@ -327,6 +330,7 @@ function mapLaunchpadXMessageToCommand(data, {
       melodyScaleId,
       melodyTemplateSteps,
       selectedBar,
+      totalBars,
     });
   }
   if (!message.pressed) return null;
@@ -336,9 +340,10 @@ function mapLaunchpadXMessageToCommand(data, {
       chordHarmonyState,
       matrix,
       selectedBar,
+      totalBars,
     });
   }
-  if (drumsActive) return mapDrumsMessage(message, { drumsClipBars, selectedBar });
+  if (drumsActive) return mapDrumsMessage(message, { drumsClipBars, selectedBar, totalBars });
   return null;
 }
 

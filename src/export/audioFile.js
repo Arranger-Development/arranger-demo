@@ -1,3 +1,4 @@
+import { getTotalBars } from '../domain/projectLength.js';
 import { getTrackOutputVolume } from '../domain/trackVolume.js';
 import { createMatrixPlaybackAdapter } from '../audio/matrixPlaybackAdapter.js';
 import { getMelodyTimbre } from '../data/melodyTimbres.js';
@@ -5,7 +6,6 @@ import {
   BEATS_PER_BAR,
   DEFAULT_BPM,
   STEPS_PER_BAR,
-  TOTAL_BARS,
 } from '../domain/musicConstants.js';
 
 const SAMPLE_RATE = 44_100;
@@ -96,8 +96,11 @@ function getGainValue(volume) {
 }
 
 function getEventVolume(state, event) {
-  const trackVolume = getTrackOutputVolume(state.volumes?.[event.trackId], state.mutedTracks?.[event.trackId]);
-  if (!['chord', 'drums'].includes(event.type) || !Number.isFinite(event.velocity)) {
+  const rawVolume = getTrackOutputVolume(state.volumes?.[event.trackId], state.mutedTracks?.[event.trackId]);
+  if (rawVolume === -Infinity) return -Infinity;
+  const trackVolume = event.type === 'melody' && event.timbreId
+    ? (rawVolume ?? 0) + getMelodyTimbre(event.timbreId).gainDb : rawVolume;
+  if (!['chord', 'drums', 'melody', 'bass'].includes(event.type) || !Number.isFinite(event.velocity)) {
     return trackVolume;
   }
   if (trackVolume === -Infinity) return -Infinity;
@@ -114,9 +117,9 @@ function collectProjectEvents(state, options = {}) {
     matrix: state.matrix,
     trackInstancesById: state.trackInstancesById,
     trackOrder,
-  });
+  }, { totalBars: getTotalBars(state) });
   const events = [];
-  for (let bar = 0; bar < TOTAL_BARS; bar += 1) {
+  for (let bar = 0; bar < getTotalBars(state); bar += 1) {
     for (let step = 0; step < STEPS_PER_BAR; step += 1) {
       adapter.getEventsForStep(bar, step).forEach((event) => {
         if (
@@ -145,7 +148,7 @@ function getSampleSelections(event, melodyTimbreId) {
     ? BASS_SAMPLE_FILES
     : event.type === 'chord'
       ? CHORD_SAMPLE_FILES
-      : getMelodyTimbre(melodyTimbreId).sampleFiles;
+      : getMelodyTimbre(event.timbreId ?? melodyTimbreId).sampleFiles;
   const notes = event.type === 'chord' ? event.notes : [event.note];
 
   return notes.map((note) => {
@@ -193,7 +196,7 @@ function scheduleSample(context, destination, buffer, selection, event, state, b
   const gain = context.createGain();
   const duration = event.type === 'chord'
     ? 2
-    : event.type === 'melody'
+    : event.type === 'melody' && !event.timbreId
       ? buffer.duration
       : getDurationSeconds(event, bpm);
   source.buffer = buffer;
@@ -203,7 +206,12 @@ function scheduleSample(context, destination, buffer, selection, event, state, b
   gain.gain.value = getGainValue(getEventVolume(state, event));
   source.connect(gain).connect(destination);
   source.start(time);
-  if (event.type !== 'drums' && event.type !== 'melody') {
+  if (event.type === 'melody' && event.timbreId && event.playbackMode !== 'natural') {
+    const level = gain.gain.value;
+    gain.gain.setValueAtTime(level, time + duration);
+    gain.gain.linearRampToValueAtTime(0, time + duration + 0.1);
+    source.stop(time + duration + 0.1);
+  } else if (event.type !== 'drums' && event.type !== 'melody') {
     source.stop(time + Math.max(0.01, duration));
   }
 }
@@ -258,7 +266,7 @@ async function renderProjectToWav(state, options = {}) {
   }
 
   const bpm = Number.isFinite(state.bpm) && state.bpm > 0 ? state.bpm : DEFAULT_BPM;
-  const projectDuration = TOTAL_BARS * BEATS_PER_BAR * 60 / bpm;
+  const projectDuration = getTotalBars(state) * BEATS_PER_BAR * 60 / bpm;
   const context = new OfflineContext(2, Math.ceil((projectDuration + TAIL_SECONDS) * SAMPLE_RATE), SAMPLE_RATE);
   const master = context.createGain();
   master.gain.value = MASTER_GAIN;

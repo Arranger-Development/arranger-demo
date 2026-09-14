@@ -29,12 +29,12 @@ import {
 } from '../src/tutorial/chillTutorialScore.js';
 
 test('BPM controls normalize integer values into the supported project range', () => {
-  assert.equal(BPM_MIN, 60);
-  assert.equal(BPM_MAX, 180);
+  assert.equal(BPM_MIN, 40);
+  assert.equal(BPM_MAX, 240);
   assert.deepEqual(BPM_PRESETS, [76, 88, 96]);
   assert.equal(RECOMMENDED_BPM, 88);
-  assert.equal(normalizeBpm(59), 60);
-  assert.equal(normalizeBpm(180.6), 180);
+  assert.equal(normalizeBpm(39), 40);
+  assert.equal(normalizeBpm(240.6), 240);
   assert.equal(normalizeBpm(103.7), 104);
   assert.equal(normalizeBpm('96'), 96);
   assert.equal(normalizeBpm('not-a-number', 77), 77);

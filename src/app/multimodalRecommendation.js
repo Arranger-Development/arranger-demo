@@ -233,6 +233,7 @@ function createMultimodalRecommendationAppState({ bpm = RECOMMENDED_BPM } = {}) 
   const matrix = createInitialMatrix();
   return {
     ...createDefaultTrackState(),
+    totalBars: TOTAL_BARS,
     activeTrackId: 'drums',
     bpm: normalizeBpm(bpm),
     clips: createMultimodalClips(),

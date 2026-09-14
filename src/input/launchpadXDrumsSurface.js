@@ -1,3 +1,4 @@
+import { getClipBankStart, getMatrixBars, getTimelineBars, MAX_PROJECT_BARS } from '../domain/projectLength.js';
 import { getDrumsCellInstruments } from '../domain/drumsCells.js';
 import { TOTAL_BARS } from '../domain/musicConstants.js';
 
@@ -64,7 +65,7 @@ function normalizeDrumsClipBars(drumsClipBars) {
   if (!Array.isArray(drumsClipBars)) return [];
 
   return [...new Set(drumsClipBars.filter((bar) => (
-    Number.isInteger(bar) && bar >= 0 && bar < TOTAL_BARS
+    Number.isInteger(bar) && bar >= 0 && bar < MAX_PROJECT_BARS
   )))].sort((left, right) => left - right);
 }
 
@@ -88,10 +89,11 @@ function getLaunchpadXDrumPreviewInstrument(note) {
   return LAUNCHPAD_X_DRUM_PREVIEW_NOTES[note] ?? null;
 }
 
-function getLaunchpadXDrumsClipBar(note) {
+function getLaunchpadXDrumsClipBar(note, selectedBar = 0, totalBars = TOTAL_BARS) {
   if (!Number.isInteger(note)) return null;
   const bar = note - LAUNCHPAD_X_DRUM_CLIP_NOTE_START;
-  return bar >= 0 && bar < TOTAL_BARS ? bar : null;
+  const absoluteBar = getClipBankStart(selectedBar) + bar;
+  return bar >= 0 && bar < 8 && absoluteBar < totalBars ? absoluteBar : null;
 }
 
 function getAdjacentLaunchpadXDrumsClipBar({
@@ -120,7 +122,7 @@ function getGridLedValue(note, {
   const previewInstrument = getLaunchpadXDrumPreviewInstrument(note);
   if (previewInstrument) return LAUNCHPAD_X_LED_COLORS[previewInstrument].active;
 
-  const clipBar = getLaunchpadXDrumsClipBar(note);
+  const clipBar = getLaunchpadXDrumsClipBar(note, selectedBar, getTimelineBars({ totalBars: getMatrixBars(matrix) }));
   if (clipBar !== null) {
     if (!drumsClipBars.includes(clipBar)) return 0;
     return clipBar === selectedBar

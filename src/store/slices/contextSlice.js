@@ -1,3 +1,4 @@
+import { getTotalBars } from '../../domain/projectLength.js';
 import {
   CORE_TRACK_IDS,
   TRACK_IDS,
@@ -21,6 +22,20 @@ function removeObjectKey(object, key) {
   const nextObject = { ...object };
   delete nextObject[key];
   return nextObject;
+}
+
+function createMelodyTimbrePatch(state, value) {
+  const melodyTimbreId = normalizeMelodyTimbreId(value);
+  let matrix = state.matrix;
+  for (const trackId of getTrackInstanceIdsByType(state, 'melody')) {
+    const bars = state.matrix[trackId];
+    if (!bars?.some((bar) => bar.some((cell) => cell?.timbreId))) continue;
+    if (matrix === state.matrix) matrix = { ...state.matrix };
+    matrix[trackId] = bars.map((bar) => bar.map((cell) => (
+      cell?.timbreId ? { ...cell, timbreId: melodyTimbreId } : cell
+    )));
+  }
+  return { melodyTimbreId, matrix };
 }
 
 export default function createContextSlice(set, get) {
@@ -51,7 +66,7 @@ export default function createContextSlice(set, get) {
         activeTrackId: track.id,
         matrix: {
           ...state.matrix,
-          [track.id]: createEmptyTrackMatrix(),
+          [track.id]: createEmptyTrackMatrix(getTotalBars(state)),
         },
         mutedTracks: {
           ...state.mutedTracks,
@@ -168,20 +183,16 @@ export default function createContextSlice(set, get) {
     setMelodyScaleId: (melodyScaleId) => set({
       melodyScaleId: normalizeMelodyScaleId(melodyScaleId),
     }),
-    setMelodyTimbreId: (melodyTimbreId) => set({
-      melodyTimbreId: normalizeMelodyTimbreId(melodyTimbreId),
-    }),
+    setMelodyTimbreId: (melodyTimbreId) => set((state) => createMelodyTimbrePatch(state, melodyTimbreId)),
     setMelodyStyleTemplate: (templateId, timbreId) => {
       const normalizedTemplateId = normalizeMelodyStyleTemplateId(templateId);
       if (!normalizedTemplateId) return false;
       const template = getMelodyStyleTemplate(normalizedTemplateId);
-      set({
+      set((state) => ({
+        ...createMelodyTimbrePatch(state, timbreId ?? template?.recommendedTimbreId),
         melodyRhythmTemplateId: normalizedTemplateId,
         melodyScaleId: normalizedTemplateId,
-        melodyTimbreId: normalizeMelodyTimbreId(
-          timbreId ?? template?.recommendedTimbreId,
-        ),
-      });
+      }));
       return true;
     },
     setSelectedBar: (selectedBar) => set({ selectedBar }),

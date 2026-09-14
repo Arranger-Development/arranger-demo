@@ -1,5 +1,6 @@
 import { getDrumsCellInstruments } from '../domain/drumsCells.js';
 import { getTrackTypeFromInstanceId } from '../domain/trackInstances.js';
+import { getMelodyCellNotes } from '../domain/melodyCells.js';
 
 function hasPlayableChordCell(cell) {
   if (!cell || cell.type === 'chord-source') return false;
@@ -32,8 +33,9 @@ function hasTrackBarContent(matrix, trackId, barIndex, trackType = null) {
     case 'chord':
       return bar.some(hasPlayableChordCell);
     case 'bass':
-    case 'melody':
       return bar.some((cell) => Boolean(cell?.note));
+    case 'melody':
+      return bar.some((cell) => getMelodyCellNotes(cell).length > 0);
     default:
       return bar.some((cell) => cell !== null);
   }

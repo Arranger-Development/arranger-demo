@@ -1,3 +1,4 @@
+import { getTotalBars } from '../domain/projectLength.js';
 import { normalizeMelodyProjectState } from '../data/melodyStyleTemplates.js';
 
 const UNDO_HISTORY_LIMIT = 50;
@@ -5,6 +6,7 @@ const UNDO_HISTORY_LIMIT = 50;
 const UNDO_APP_STATE_KEYS = Object.freeze([
   'activeTrackId',
   'bpm',
+  'totalBars',
   'clips',
   'currentBar',
   'currentStep',
@@ -77,9 +79,11 @@ function normalizeValue(value) {
 function createUndoSnapshot({
   appState,
   tutorialState,
+  editorState = {},
 } = {}) {
   return {
     appState: pickStateKeys(appState, UNDO_APP_STATE_KEYS),
+    editorState: cloneValue(editorState),
     tutorialState: pickStateKeys(tutorialState, UNDO_TUTORIAL_STATE_KEYS),
   };
 }
@@ -152,6 +156,7 @@ function createRedoTransition({
 }
 
 function restoreUndoSnapshot({
+  setTimelineSelection,
   setActiveTutorialId,
   setAppliedTutorialSetups,
   setCurrentTutorialStepIndex,
@@ -167,7 +172,8 @@ function restoreUndoSnapshot({
 } = {}) {
   if (!snapshot) return false;
 
-  store?.setState?.(normalizeMelodyProjectState(cloneValue(snapshot.appState)));
+  store?.setState?.(normalizeMelodyProjectState({ ...cloneValue(snapshot.appState), totalBars: getTotalBars(snapshot.appState) }));
+  setTimelineSelection?.(cloneValue(snapshot.editorState?.timelineSelection ?? null));
   setActiveTutorialId?.(cloneValue(snapshot.tutorialState.activeTutorialId));
   setCurrentTutorialStepIndex?.(cloneValue(snapshot.tutorialState.currentTutorialStepIndex));
   setTutorialProgress?.(cloneValue(snapshot.tutorialState.tutorialProgress));

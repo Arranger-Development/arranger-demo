@@ -1,3 +1,4 @@
+import { getMatrixBars, getTotalBars } from '../domain/projectLength.js';
 import {
   useCallback,
   useEffect,
@@ -59,12 +60,12 @@ function hasMelodyBarNotes(matrix, bar) {
   return matrix?.melody?.[bar]?.some((cell) => cell?.type === 'melody') ?? false;
 }
 
-function getMelodyWriteBarRange(startBar, endBar = TOTAL_BARS - 1) {
+function getMelodyWriteBarRange(startBar, endBar = TOTAL_BARS - 1, totalBars = TOTAL_BARS) {
   if (
     !Number.isInteger(startBar)
     || !Number.isInteger(endBar)
     || startBar < 0
-    || endBar >= TOTAL_BARS
+    || endBar >= totalBars
     || startBar > endBar
   ) {
     return [];
@@ -73,8 +74,8 @@ function getMelodyWriteBarRange(startBar, endBar = TOTAL_BARS - 1) {
   return Array.from({ length: endBar - startBar + 1 }, (_, offset) => startBar + offset);
 }
 
-function hasMelodyNotesInRange(matrix, startBar, endBar = TOTAL_BARS - 1) {
-  return getMelodyWriteBarRange(startBar, endBar)
+function hasMelodyNotesInRange(matrix, startBar, endBar = getMatrixBars(matrix) - 1) {
+  return getMelodyWriteBarRange(startBar, endBar, getMatrixBars(matrix))
     .some((bar) => hasMelodyBarNotes(matrix, bar));
 }
 
@@ -115,13 +116,14 @@ function getMelodyRecordingRestState({
   activeTrackType,
   melodyRhythmTemplateId,
   selectedClip,
+  totalBars = TOTAL_BARS,
 } = {}) {
   const melodyActive = activeTrackType === 'melody' || activeTrackId === 'melody';
   const templateId = melodyActive && selectedClip?.trackId === activeTrackId
     ? melodyRhythmTemplateId
     : null;
   const startBar = selectedClip?.bar;
-  const targetBars = getMelodyWriteBarRange(startBar);
+  const targetBars = getMelodyWriteBarRange(startBar, totalBars - 1, totalBars);
   return getMelodyRhythmTemplate(templateId)
     ? createTemplateRecordingState(templateId, MELODY_RECORDING_PHASES.OVERVIEW, {
       currentBar: startBar,
@@ -359,6 +361,7 @@ function useMelodyRecordingController({
   const getCurrentRestState = useCallback(() => {
     const state = useMusicStore.getState();
     return getMelodyRecordingRestState({
+      totalBars: getTotalBars(state),
       activeTrackId: state.activeTrackId,
       activeTrackType,
       melodyRhythmTemplateId,
@@ -622,7 +625,8 @@ function useMelodyRecordingController({
     const startBar = session?.startBar ?? currentRecordingState.startBar ?? clip?.bar;
     const targetBars = getMelodyWriteBarRange(
       startBar,
-      session?.endBar ?? currentRecordingState.endBar ?? TOTAL_BARS - 1,
+      session?.endBar ?? currentRecordingState.endBar ?? getTotalBars(state) - 1,
+      getTotalBars(state),
     );
 
     generationRef.current += 1;
@@ -681,7 +685,7 @@ function useMelodyRecordingController({
     const clip = state.clips.byId[state.selectedClipId];
     if (activeTrackType !== 'melody' || clip?.trackId !== state.activeTrackId) return;
     const templateId = state.melodyRhythmTemplateId ?? null;
-    const targetBars = getMelodyWriteBarRange(clip.bar);
+    const targetBars = getMelodyWriteBarRange(clip.bar, getTotalBars(state) - 1, getTotalBars(state));
     const pendingSession = {
       bpm: Number.isFinite(state.bpm) && state.bpm > 0 ? state.bpm : bpm,
       endBar: targetBars.at(-1),

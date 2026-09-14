@@ -1,3 +1,4 @@
+import { getMatrixBars } from '../domain/projectLength.js';
 import {
   areSameDrumsInstruments,
   getDrumsCellInstruments,
@@ -52,12 +53,12 @@ function getDrumsRecordingContextTrackId({
   return null;
 }
 
-function getDrumsWriteBarRange(startBar, endBar = TOTAL_BARS - 1) {
+function getDrumsWriteBarRange(startBar, endBar = TOTAL_BARS - 1, totalBars = TOTAL_BARS) {
   if (
     !Number.isInteger(startBar)
     || !Number.isInteger(endBar)
     || startBar < 0
-    || endBar >= TOTAL_BARS
+    || endBar >= totalBars
     || startBar > endBar
   ) {
     return [];
@@ -70,14 +71,14 @@ function getDrumsWriteBarRange(startBar, endBar = TOTAL_BARS - 1) {
 }
 
 function hasDrumsBarHits(matrix, bar) {
-  if (!Number.isInteger(bar) || bar < 0 || bar >= TOTAL_BARS) return false;
+  if (!Number.isInteger(bar) || bar < 0 || bar >= getMatrixBars(matrix)) return false;
   return (matrix?.drums?.[bar] ?? []).some(
     (cell) => getDrumsCellInstruments(cell).length > 0,
   );
 }
 
 function hasDrumsHitsInRange(matrix, startBar, endBar) {
-  return getDrumsWriteBarRange(startBar, endBar).some(
+  return getDrumsWriteBarRange(startBar, endBar ?? getMatrixBars(matrix) - 1, getMatrixBars(matrix)).some(
     (bar) => hasDrumsBarHits(matrix, bar),
   );
 }
@@ -91,6 +92,7 @@ function createDrumsLiveRecordPatch({
   isPlaying,
   phase,
   step,
+  totalBars = TOTAL_BARS,
 } = {}) {
   if (
     phase !== DRUMS_RECORDING_PHASES.RECORDING
@@ -98,7 +100,7 @@ function createDrumsLiveRecordPatch({
     || activeTrackId !== 'drums'
     || !Number.isInteger(bar)
     || bar < 0
-    || bar >= TOTAL_BARS
+    || bar >= totalBars
     || !Number.isInteger(step)
     || step < 0
     || step >= STEPS_PER_BAR
