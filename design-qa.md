@@ -656,3 +656,109 @@ final result: passed
 - Focused comparison evidence shows the overlap resolved with no remaining P0/P1/P2 findings.
 
 final result: passed
+
+---
+
+# 演奏模式验收 · 2026-09-09
+
+final result: passed
+
+## 本轮变化
+
+按用户确认的方案精简演奏界面：删除等待演奏区域与右侧信息面板，仅保留保存按钮；播放、停止及试听停止合并为一个图标按钮。Loop 圆钮外沿使用功能性 SVG 进度环，十二点起顺时针推进，内部固定小灯标记编辑位置。保留现有金属、木纹、黄铜与四色按键素材。
+
+模板内容收进按键中央，左右留出 19%、上下留出 20% 的材质边缘。名称使用随按键大小调整的字体并自然换行，没有截断、省略或隐藏文字。音乐模板、保存组合和存储格式没有变化。音频引擎仅增加读取实际音频时钟下分数步位置的能力。
+
+## 布局与文字
+
+实时页面测量：
+
+- 1466 × 856：20 个模板均为 80 × 80px；面板、网格和页面的横纵滚动溢出均为 0。
+- 716 × 666：20 个模板均约 72.85 × 72.85px；名称在按键内边距区域内，一到两行；所有控件一屏可见，无滚动溢出。
+- 390 × 666：20 个模板均约 59.80 × 59.80px；保存按钮移到网格下方；名称一到两行，无文字或页面溢出。
+- 额外查看 City Pop 最长名称「午夜 2-5-1-6」：390px 窗口内完整两行显示，文字 scrollWidth 与 clientWidth 相等。
+- 对照已有主界面截图和修改前演奏界面，保留材质、字体、颜色与按钮语言；名称和勾选标记不再压到按键外沿。
+
+截图位于 `/private/tmp/arranger-performance-qa/`：`ring-mobile.png`、`ring-compact.png`。浏览器截图工具在宽于宿主面板时会裁切或拼接错位，因此 `ring-desktop.png` 不作为完整桌面视觉证据；桌面布局以实时 DOM 尺寸、控件边界和无滚动测量验收。临时视口已恢复默认。
+
+## 交互与进度
+
+- 单图标按钮：停止显示三角形，播放或试听显示方形；加载期间第二次点击可取消，停止后五个进度环立即清零。
+- 120 BPM 的整组播放实测：约每 0.51 秒推进 12.7%，每两小节约 4 秒一圈；Loop 1、2 顺序切换，3–5 空位被跳过，回到 Loop 1。
+- 点击 Loop 2 转为编辑试听，进度只在 Loop 2 循环。调整为 240 BPM 后约每 0.41 秒推进 20.4%，每圈约 2 秒；恢复为 120 BPM。
+- 保存原有 Loop 1 后按钮短暂显示「已保存」，随后恢复「保存到 Loop 1」。
+- City Pop 空保存组点击播放显示必要提示，不启动播放。
+- 返回编曲后播放和停止控件可用；刷新后原有 Loop 1「鼓＋和弦」、Loop 2「鼓＋旋律」和 BPM 120 恢复。预览最终停在 Loop 1。
+- 浏览器控制台没有错误或警告。没有连接实体 Launchpad；本轮未改动硬件处理。
+
+## 自动检查
+
+- 570 项完整测试全部通过，其中音频引擎与演奏模式的 80 项针对性测试通过。
+- 新增测试覆盖即时音频时钟读取、分数进度、两小节与十小节边界、变速后的时钟跟随、加载期间无进度、连续点击取消与重启、停止清零。
+- 修改的代码和测试文件通过 ESLint；生产构建通过，仍有项目已有的大脚本包体积提示。
+- 保留当前工作区其他修改。没有提交、推送或更新公开演示。
+
+## 提交检查 · 2026-09-13
+
+仅包含演奏模式改动的独立副本通过 564 项测试、相关文件 ESLint 和生产构建。上述 570 项记录包含工作区另一个尚未提交功能的 6 项测试，本次不纳入提交。保留之前的历史验收记录。
+
+---
+
+# Clip typography QA
+
+final result: passed
+
+## Target and evidence
+
+- User-approved change: emphasize template names, with a small Loop label and secondary chord symbol; preserve gem assets, colors, clip geometry and editing behavior.
+- Source: `/var/folders/22/2k2swhcn1zl1rf0pqjp4yt7w0000gn/T/codex-clipboard-4590e06a-54fa-44b5-8442-d4c8af9258e2.png` (2142 × 554 crop; original CSS viewport and density unknown).
+- Full implementation: `output/playwright/clip-layout-1466x856.jpg` (1466 × 856 pixels, matching the CSS viewport at 1:1).
+- Focused implementation: `output/playwright/clip-layout-detail.jpg` (1168 × 378, cropped from the full screenshot using measured timeline bounds).
+- Responsive implementation: `output/playwright/clip-layout-twenty-716x666.jpg` and `output/playwright/clip-layout-twenty-390x666.jpg`, both at 1:1 CSS-to-image dimensions.
+- Source and implementation were opened together for full and focused comparisons. The reference fixture reproduces the same twelve-bar Loop selections. Responsive track heights differ from the supplied crop; visual assessment compares hierarchy, content and assets rather than claiming pixel-identical geometry against an unknown source viewport.
+
+## Findings and iteration
+
+- Initial narrow-clip review: `Am/G` was truncated at 80px clip width. Reduced metadata gap from 4px to 2px and weight from 600 to 500. Final measurement confirms the complete symbol fits at 9px, without reducing the 12px main title or its inner padding.
+- Browser viewport changes initially produced screenshots before the browser surface had finished resizing. Recaptured the cited responsive images after the viewport settled and checked their pixel dimensions. Used a crop of the full screenshot for the focused comparison.
+- Final review: no actionable P0/P1/P2 findings. Four-character template names fit on one line; longer names wrap to two lines in taller clips and use an ellipsis in short clips. Full original names and chord symbols remain in the hover title and accessible description.
+
+## Required surfaces
+
+- Typography: existing font stack; 12–14px main titles, weight 750; 9–10px metadata, weight 500. Removed forced uppercase and expanded tracking from the old chord label hierarchy.
+- Spacing: left-aligned text is vertically centered. Actual clip size controls font size, padding and one/two-line behavior. Measured title inset is at least 11px, with no metadata/title overlap.
+- Colors: original track ink and gem colors retained.
+- Assets: original nine-slice gem images, masks, highlights and shadows retained; no replacement imagery.
+- Content: display-only parsing of `Loop N · name`. Original clip names, stored records and chord labels are unchanged. Ordinary names do not gain invented Loop labels; empty indicators remain visible.
+
+## Validation
+
+- 1466 × 856, 716 × 666, 390 × 666 and 1466 × 700: all measured clip text boxes remain inside their controls, including eighty clips in a twenty-bar arrangement. Narrowest tested clip is 80px; shortest tested clip is 47px.
+- Eight-bar ordinary arrangement: default name and empty state display correctly, with no Loop label.
+- Verified opening bar 20, long custom renaming, title preservation, copying and overwrite paste, drag/swap, and undo of those changes through the UI.
+- Browser error/warning logs: none in the completed fixtures.
+- 589 tests pass; `eslint src tests`, production build and `git diff --check` pass. Existing bundle-size warning remains.
+- Measurement details: `output/playwright/clip-layout-validation.json`. The preview fixture uses the real App and import generator and does not modify saved performance Loops.
+
+No publication or source-data migration was performed.
+
+### Clip-only commit verification
+
+The isolated commit snapshot passes 564 tests, `eslint src tests`, and the production build. The 589-test and twenty-bar browser results above describe the full development workspace, including earlier uncommitted performance/import changes. This commit includes only clip typography and its CSS assertions; previous QA history is retained.
+
+## 2026-09-13 — Track volume minimum is silent
+
+- The saved slider minimum remains finite at −24 dB; the shared audio-output mapping turns only this endpoint into zero gain. Other slider positions, defaults and the independent mute flags are unchanged.
+- Playback, active voices, note/template auditions and audio/sample loading read the same mapping. Tests cover all four track types, duplicate tracks, restoration above the minimum and multiple melody timbres.
+- WAV and MIDI exclude silent tracks while project backups retain clips, notes and finite volume settings. Automated checks cover all-silent WAV output and volume undo/redo.
+- Browser QA at 1466×856 and 390×666 confirms the warm “静音” label fits inside each track control. Pointer dragging to the minimum, undo and redo restore the expected slider values; browser error logs are empty.
+- Validation: all 615 tests passed; `npx eslint src tests`, production build and `git diff --check` passed. Existing uncommitted work was preserved; no commit, push or public deployment.
+- Screenshots: `output/playwright/volume-silent-1466x856.jpg`, `output/playwright/volume-silent-390x666.jpg`.
+
+### Volume-only submission verification
+
+The isolated submission passes all 570 tests, `npx eslint src tests`, and the production build. The full working tree still passes all 615 tests. The submission also includes live melody-preview volume refresh so minimum-volume behavior works without relying on the other uncommitted audio changes. Other pending features and user documents remain outside this submission.
+
+### Development dependency checks before merge
+
+Updated vulnerable development dependencies within their existing major versions after GitHub reported ten open advisories. A clean isolated `npm ci --ignore-scripts` and audit report zero vulnerabilities; all 570 submission tests, `npx eslint src tests`, and the production build pass with the updated lockfile. No application dependencies or public publishing workflows were changed.

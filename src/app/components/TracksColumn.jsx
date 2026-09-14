@@ -176,11 +176,14 @@ function TrackRow({
             step="1"
             value={track.volume.value}
             aria-label={`${track.label} volume`}
+            aria-valuetext={track.volume.label}
             onChange={handleVolumeChange}
             onKeyDown={handleVolumeKeyDown}
           />
+          <span className={`db mono${track.volume.value === MIN_TRACK_VOLUME_DB ? ' is-silent' : ''}`} aria-hidden="true">
+            {track.volume.label}
+          </span>
         </span>
-        <span className="db mono">{track.volume.label}</span>
       </label>
     </div>
   );

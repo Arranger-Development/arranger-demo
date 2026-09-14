@@ -14,6 +14,84 @@ import { STEPS_PER_BAR, TOTAL_BARS } from '../src/domain/musicConstants.js';
 import createInitialMatrix from '../src/store/createInitialMatrix.js';
 
 const SAMPLE_ASSET_VERSION = 'sample-refresh-20260608';
+
+test('playback progress samples the immediate audio clock, follows tempo ticks and wraps the configured length', async () => {
+  const tone = createFakeTone();
+  let clock = 0;
+  let ticks = 0;
+  const sampledTimes = [];
+  tone.Transport.PPQ = 192;
+  tone.Transport.getTicksAtTime = (time) => { sampledTimes.push(time); return ticks; };
+  const engine = new AudioEngine({ tone, immediate: () => clock, playerFactory: createPlayerFactory(tone.calls) });
+  assert.equal(engine.getPlaybackPosition(), null);
+  await engine.play({ matrixSource: () => ({}), totalBars: 10, bar: 0, step: 0 });
+  for (const step of [0, 15.125, 31.999, 32, 64, 96, 128, 159.999, 160, 175.25]) {
+    clock += .2;
+    ticks = step * 48;
+    assert.equal(engine.getPlaybackPosition(), step % 160);
+    assert.equal(sampledTimes.at(-1), clock);
+  }
+  engine.setTempo(180);
+  ticks += 72; // Follow transport ticks, not a wall-time/BPM estimate.
+  assert.equal(engine.getPlaybackPosition(), 16.75);
+  await engine.stop();
+  assert.equal(engine.getPlaybackPosition(), null);
+  await engine.play({ matrixSource: () => ({}), totalBars: 2, bar: 0, step: 0 });
+  ticks = 32.5 * 48;
+  assert.equal(engine.getPlaybackPosition(), .5);
+  await engine.pause();
+  assert.equal(engine.getPlaybackPosition(), null);
+});
+
+test('performance playback reaches all ten bars, then restores the eight-bar arranger default', async () => {
+  const tone = createFakeTone();
+  const engine = new AudioEngine({ tone, playerFactory: createPlayerFactory(tone.calls) });
+  const positions = [];
+  const matrix = { drums: Array.from({ length: 10 }, () => Array(16).fill(null)) };
+  await engine.play({ matrixSource: () => matrix, totalBars: 10, onPositionChange: (bar, step) => positions.push([bar, step]) });
+  for (let index = 0; index < 161; index += 1) tone.Transport.scheduledCallback(index / 8);
+  assert.deepEqual(positions[128], [8, 0]);
+  assert.deepEqual(positions[159], [9, 15]);
+  assert.deepEqual(positions[160], [0, 0]);
+  await engine.stop();
+  await engine.play({ matrixSource: () => matrix, bar: 0, step: 0 });
+  assert.equal(engine.matrixAdapter.totalBars, 8);
+  await engine.stop();
+  await engine.play({ matrixSource: () => matrix, totalBars: 2, bar: 0, step: 0 });
+  assert.equal(engine.matrixAdapter.totalSteps, 32);
+});
+
+test('cancelling audio startup prevents a delayed performance from starting the transport', async () => {
+  const tone = createFakeTone();
+  let finishStart;
+  tone.start = () => new Promise((resolve) => { finishStart = resolve; });
+  const engine = new AudioEngine({ tone, playerFactory: createPlayerFactory(tone.calls) });
+  const pending = engine.play({ matrixSource: () => ({}), totalBars: 2 });
+  await new Promise((resolve) => setImmediate(resolve));
+  await engine.stop();
+  finishStart();
+  assert.equal(await pending, false);
+  assert.ok(!tone.calls.some(([method]) => method === 'transport.start'));
+});
+
+test('performance melody cells use their preloaded timbre bank and stop releases it', async () => {
+  const tone = createFakeTone();
+  const engine = new AudioEngine({ tone, playerFactory: createPlayerFactory(tone.calls) });
+  const notes = [];
+  const releases = [];
+  engine.melodyPreviewBanks.set('blues', {
+    ready: true, sampler: {
+      triggerAttackRelease: (...args) => notes.push(args), releaseAll: (time) => releases.push(time),
+    },
+  });
+  const matrix = { melody: [[{ type: 'melody', note: 'D#4', duration: '16n', timbreId: 'blues' }], []] };
+  await engine.play({ matrixSource: () => matrix, totalBars: 2, melodyTimbreIds: ['blues'] });
+  tone.Transport.scheduledCallback(0);
+  assert.deepEqual(notes, [['D#4', '16n', 0]]);
+  await engine.stop();
+  engine.stopAllVoices(1);
+  assert.deepEqual(releases, [1]);
+});
 const SAMPLE_VERSION_QUERY = `?v=${SAMPLE_ASSET_VERSION}`;
 
 function versioned(url) {
@@ -2027,4 +2105,126 @@ test('createAudioEngine does not statically import Tone on module load', async (
   const source = await readFile(new URL('../src/audio/createAudioEngine.js', import.meta.url), 'utf8');
 
   assert.doesNotMatch(source, /import\s+\*\s+as\s+Tone\s+from ['"]tone['"]/);
+});
+
+
+test('minimum slider level silences all four track types immediately without changing independent mute state', async () => {
+  for (const type of ['drums', 'chord', 'bass', 'melody']) {
+    const tone = createFakeTone();
+    const duplicate = `${type}-2`;
+    const mix = { volumes: { [type]: 0, [duplicate]: -6 }, mutedTracks: {} };
+    const attacks = [];
+    const factory = () => ({
+      volume: { value: 0 },
+      start() { attacks.push(this.volume.value); },
+      triggerAttack() { this.start(); },
+      triggerAttackRelease() { this.start(); },
+      releaseAll() {},
+      stop() {},
+      toDestination() { return this; },
+    });
+    const engine = new AudioEngine({
+      tone, volumeSource: () => mix,
+      playerFactory: factory, chordSamplerFactory: factory,
+      chordSynthFactory: factory, samplerFactory: factory,
+    });
+    const matrix = createInitialMatrix(2);
+    matrix[duplicate] = createInitialMatrix(2)[type];
+    const cells = {
+      drums: { instruments: ['kick'] }, chord: { type: 'notes', notes: ['C4', 'E4', 'G4'] },
+      bass: { type: 'bass', note: 'C1' }, melody: { type: 'melody', note: 'C4' },
+    };
+    for (const id of [type, duplicate]) {
+      matrix[id][0][0] = cells[type];
+      matrix[id][0][1] = cells[type];
+    }
+    await engine.play({ matrixSource: () => ({ matrix, trackOrder: [type, duplicate] }), totalBars: 2 });
+    tone.Transport.scheduledCallback(0);
+    assert.deepEqual(attacks, [0, -6]);
+    mix.volumes[type] = -24;
+    assert.equal(engine.refreshTrackVolume(type), -Infinity);
+    const nodeKeys = {
+      drums: ['fallbackSynth'], chord: ['chordSampler', 'chordSynth'],
+      bass: ['bassSampler'], melody: ['melodySampler', 'melodyInputSampler', 'melodyOneShotSampler'],
+    };
+    const nodes = engine.getInstanceAudioNodes(type, type, { create: false });
+    const activeNodes = nodeKeys[type].map(key => nodes[key]).filter(Boolean);
+    if (type === 'drums') activeNodes.push(...nodes.drumPlayers.values());
+    assert.ok(activeNodes.length > 0);
+    assert.ok(activeNodes.every(node => node.volume.value === -Infinity), type);
+    tone.Transport.scheduledCallback(.125);
+    assert.deepEqual(attacks.slice(-2), [-Infinity, -6], type);
+    mix.volumes[type] = -23;
+    assert.equal(engine.refreshTrackVolume(type), -23);
+    assert.ok(activeNodes.every(node => node.volume.value === -23));
+    mix.mutedTracks[type] = true;
+    mix.volumes[type] = 0;
+    assert.equal(engine.refreshTrackVolume(type), -Infinity);
+    mix.mutedTracks[type] = false;
+    assert.equal(engine.refreshTrackVolume(type), 0);
+    assert.equal(engine.getTrackVolume(duplicate), -6);
+    assert.equal(mix.volumes[duplicate], -6);
+    await engine.stop();
+  }
+});
+
+test('audio startup and melody sample loading use the latest slider value before auditioning', async () => {
+  const tone = createFakeTone();
+  let finishStart;
+  const startGate = new Promise(resolve => { finishStart = resolve; });
+  tone.start = () => startGate;
+  const volumes = { drums: 0, chord: 0, bass: 0, melody: 0 };
+  const engine = new AudioEngine({
+    tone, volumeSource: () => volumes,
+    playerFactory: createVolumeAwarePlayerFactory(tone.calls),
+    chordSamplerFactory: createVolumeAwareChordSamplerFactory(tone.calls),
+    samplerFactory: createVolumeAwareSamplerFactory(tone.calls),
+  });
+  const pending = Promise.all([
+    engine.triggerDrumsStep('kick'), engine.previewChordSequence([['C4']]),
+    engine.triggerBassNote('C1'), engine.triggerMelodyInputNote('C4'),
+  ]);
+  await new Promise(resolve => setImmediate(resolve));
+  for (const type of Object.keys(volumes)) volumes[type] = -24;
+  finishStart();
+  await pending;
+  const calls = tone.calls.filter(([name]) => ['player.start', 'chordSampler.triggerAttackRelease', 'sampler.triggerAttackRelease', 'sampler.triggerAttack'].includes(name));
+  assert.equal(calls.length, 4);
+  for (const call of calls) assert.equal(call[call[0] === 'sampler.triggerAttack' ? 3 : 4], -Infinity);
+
+  for (const timbreId of ['piano', 'blues', 'yangqin']) {
+    const melodyTone = createFakeTone();
+    const timers = createManualTimers();
+    const mix = { melody: 0 };
+    const melody = new AudioEngine({
+      tone: melodyTone, volumeSource: () => mix,
+      playerFactory: createPlayerFactory(melodyTone.calls),
+      samplerFactory: createVolumeAwareSamplerFactory(melodyTone.calls),
+      scheduleTimeout: timers.scheduleTimeout, cancelTimeout: timers.cancelTimeout,
+    });
+    let finishSamples;
+    melodyTone.loaded = () => new Promise(resolve => { finishSamples = resolve; });
+    const audition = melody.previewMelodySequence(['C4', 'D4', 'E4', 'F4'], { timbreId, intervalSeconds: .2 });
+    await new Promise(resolve => setImmediate(resolve));
+    mix.melody = -24;
+    melody.refreshTrackVolume('melody');
+    finishSamples();
+    await audition;
+    timers.runThrough(0);
+    const sampler = melody.melodyPreviewBanks.get(timbreId).sampler;
+    assert.equal(sampler.volume.value, -Infinity);
+    mix.melody = -6;
+    melody.refreshTrackVolume('melody');
+    timers.runThrough(200);
+    assert.ok(Number.isFinite(sampler.volume.value), 'raising the slider restores the current timbre');
+    mix.melody = -24;
+    melody.refreshTrackVolume('melody');
+    assert.equal(sampler.volume.value, -Infinity, 'a sounding preview silences immediately');
+    timers.runThrough(400);
+    assert.equal(sampler.volume.value, -Infinity, 'later preview notes read the latest slider value');
+    await melody.stop();
+    timers.runThrough(1000);
+    assert.equal(melodyTone.calls.filter(([name]) => name === 'sampler.triggerAttack').length, 3);
+  }
+  await engine.stop();
 });

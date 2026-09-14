@@ -13,6 +13,7 @@ import { createMidiFileBlob } from '../export/midiFile.js';
 import { createProjectFileBlob } from '../export/projectFile.js';
 import { APP_COMMAND_TYPES } from '../input/appCommands.js';
 import useKeyboardCommands from '../input/useKeyboardCommands.js';
+import PerformanceMode from './components/PerformanceMode.jsx';
 import useLaunchpadXCommands from '../input/useLaunchpadXCommands.js';
 import useMusicStore from '../store/useMusicStore.js';
 import {
@@ -204,6 +205,8 @@ function createTrackActionScope(state, trackId = state.activeTrackId) {
 }
 
 export default function App({ genreId = 'pop' }) {
+  const [performanceActive, setPerformanceActive] = useState(false);
+  const [performanceVisited, setPerformanceVisited] = useState(false);
   const bpm = useMusicStore((state) => state.bpm);
   const rootKey = useMusicStore((state) => state.rootKey);
   const scale = useMusicStore((state) => state.scale);
@@ -1491,7 +1494,7 @@ export default function App({ genreId = 'pop' }) {
 
   useEffect(() => {
     const playback = currentTutorialStep?.playback;
-    if (!playback?.autoStart || !playback.bars?.length) return undefined;
+    if (performanceActive || !playback?.autoStart || !playback.bars?.length) return undefined;
 
     const firstBar = playback.bars[0];
     void dispatchAppCommand({ type: APP_COMMAND_TYPES.TRANSPORT_SEEK, bar: firstBar, step: 0 });
@@ -1508,7 +1511,7 @@ export default function App({ genreId = 'pop' }) {
     return () => {
       window.clearTimeout(playbackTimer);
     };
-  }, [bpm, currentTutorialStep, dispatchAppCommand]);
+  }, [bpm, currentTutorialStep, dispatchAppCommand, performanceActive]);
 
   const handleDrumsWriteToggle = useCallback(() => {
     clearTimelineSelectionPlayback();
@@ -2404,7 +2407,7 @@ export default function App({ genreId = 'pop' }) {
   useKeyboardCommands({
     canPasteClip,
     dispatch: dispatchInputCommand,
-    enabled: !pendingClearAction
+    enabled: !pendingClearAction && !performanceActive
       && drumsRecording.recordingState.phase !== 'confirm',
     hasTimelineSelection: Boolean(timelineSelection),
   });
@@ -2412,6 +2415,7 @@ export default function App({ genreId = 'pop' }) {
     connect: connectLaunchpad,
     ...launchpadInput
   } = useLaunchpadXCommands({
+    enabled: !performanceActive,
     activeInputNotes: melodyRecording.activeInputNotes,
     chordActive,
     chordClipBars,
@@ -2957,9 +2961,21 @@ export default function App({ genreId = 'pop' }) {
   const appStyle = editorHeightPx === null ? undefined : {
     '--app-editor-height': `${editorHeightPx}px`,
   };
+  function enterPerformance() {
+    handleStop();
+    audioEngine.stopAllVoices();
+    clearTutorialAutoAdvanceTimer();
+    if (chillTutorialActive) handleChillTutorialPause();
+    setTutorialPanelState('closed');
+    setPerformanceVisited(true);
+    setPerformanceActive(true);
+  }
+
   return (
+    <>
     <div
-      className={appClassName}
+      className={`${appClassName}${performanceActive ? ' performance-arranger-hidden' : ''}`}
+      inert={performanceActive ? true : undefined}
       data-screen-label="Main"
       aria-label="Project Arranger workspace"
       style={appStyle}
@@ -2986,6 +3002,7 @@ export default function App({ genreId = 'pop' }) {
           onBpmChange: handleBpmChange,
           onCopyClip: handleCopySelectedClip,
           onExport: openExportDialog,
+          onPerformanceEnter: enterPerformance,
           onNewSong: requestNewSong,
           onPasteClip: handlePasteClipRequestWithMelodyStop,
           onPlayToggle: handlePlayToggle,
@@ -3302,5 +3319,16 @@ export default function App({ genreId = 'pop' }) {
         ) : null}
       </div>
     </div>
+    {performanceVisited ? createElement(PerformanceMode, {
+      key: genreId,
+      active: performanceActive,
+      genreId,
+      initialBpm: bpm,
+      onBack: () => {
+        setPerformanceActive(false);
+        window.requestAnimationFrame(() => document.querySelector('.performance-entry')?.focus());
+      },
+    }) : null}
+    </>
   );
 }
