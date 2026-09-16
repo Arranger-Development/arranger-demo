@@ -44,7 +44,7 @@ test('saved loops import as six editable bars with names, repeated voices, exact
   assert.equal(imported.currentBar, 0);
   assert.equal(imported.isPlaying, false);
   assert.equal(imported.clips.ids.length, 12);
-  assert.match(imported.clips.byId['melody-bar-5'].name, /Loop 2.*婉约涟漪3/);
+  assert.match(imported.clips.byId['melody-bar-5'].name, /Loop 2.*游离旋律/);
   assert.equal(imported.clips.byId['bass-bar-0'], undefined);
   assert.equal(imported.clips.byId['chord-bar-2'], undefined);
   assert.ok(imported.matrix.melody.flat().filter(Boolean).every(cell => cell.timbreId === 'piano'));
@@ -206,7 +206,7 @@ test('WAV rendering preserves gated duration for previously imported melody with
   assert.ok(files.some(file => /Melody\/Melody_/.test(file)));
   assert.ok(!files.some(file => /Yangqin|Blues/.test(file)));
   assert.ok(ramps.length > 0);
-  assert.ok(stops.some(time => Math.abs(time - .25) < 1e-8)); // First note: step 0 + 0.15s duration + 0.1s release.
+  assert.ok(stops.some(time => Math.abs(time - .55) < 1e-8)); // First note: step 2 (0.3s) + 0.15s duration + 0.1s release.
   for (const [loops, bars] of [[[short], 2], [[long], 4], [[short, long], 6]]) {
     const state = build([...loops, ...Array.from({ length: 5 - loops.length }, emptySelection)]);
     const wav = await renderProjectToWav(state);

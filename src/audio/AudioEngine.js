@@ -422,9 +422,7 @@ export default class AudioEngine {
       applyVolume(nodes?.melodySampler, melodyVolume);
       applyVolume(nodes?.melodyInputSampler, melodyVolume);
       applyVolume(nodes?.melodyOneShotSampler, melodyVolume);
-      this.melodyTrackBanks.get(trackId)?.forEach((bank, bankTimbreId) => {
-        applyVolume(bank.sampler, getMelodyVolume(volume, bank.timbreId ?? bankTimbreId));
-      });
+
       if (trackId === 'melody') {
         this.melodyPreviewBanks.forEach((bank, bankTimbreId) => {
           applyVolume(bank.sampler, getMelodyVolume(volume, bank.timbreId ?? bankTimbreId));
@@ -436,6 +434,11 @@ export default class AudioEngine {
       }
       if (volume === -Infinity) this.stopMelodyVoices(this.now(), trackId);
     }
+    // Fixed-pitch chord clips use the same banks, on their own track channel.
+    this.melodyTrackBanks.get(trackId)?.forEach((bank, bankTimbreId) => {
+      applyVolume(bank.sampler, getMelodyVolume(volume, bank.timbreId ?? bankTimbreId));
+    });
+    if (volume === -Infinity) this.releaseMelodyBanks(this.now(), trackId);
     return volume;
   }
 
@@ -602,7 +605,7 @@ export default class AudioEngine {
     // The editor changes the global timbre, so prepare every existing Melody
     // channel before it commits that change. Playback can prepare one channel.
     if (trackId === undefined) {
-      const ready = await Promise.all([...this.melodyTrackBanks.keys()].map((id) => (
+      const ready = await Promise.all([...this.melodyTrackBanks.keys()].filter((id) => getTrackTypeFromInstanceId(id) === 'melody').map((id) => (
         this.prepareMelodyTimbre(timbreId, id, playbackMode)
       )));
       return ready.every(Boolean);
@@ -653,7 +656,9 @@ export default class AudioEngine {
 
   activateMelodyTimbre(timbreId) {
     const normalizedTimbreId = this.getMelodyTimbreId(timbreId);
-    this.stopMelodyVoices(this.now());
+    for (const trackId of new Set(['melody', ...this.instanceAudioNodes.keys(), ...this.melodyTrackBanks.keys()])) {
+      if (getTrackTypeFromInstanceId(trackId) === 'melody') this.stopMelodyVoices(this.now(), trackId);
+    }
     this.ensureGlobalMelodySampler('playback', normalizedTimbreId);
     this.ensureGlobalMelodySampler('input', normalizedTimbreId);
     this.ensureGlobalMelodySampler('oneShot', normalizedTimbreId);
@@ -1098,6 +1103,8 @@ export default class AudioEngine {
       return true;
     }
     if (trackId === 'chord') {
+      this.melodyTrackRequestIds.set(trackId, (this.melodyTrackRequestIds.get(trackId) ?? 0) + 1);
+      this.releaseMelodyBanks(time, trackId);
       this.stopChordClipSequencePreview();
       this.chordSampler?.releaseAll?.(time);
       this.chordSynth?.releaseAll?.(time);
@@ -1375,6 +1382,16 @@ export default class AudioEngine {
 
   triggerChordEvent(event, time = this.now()) {
     const trackId = event.trackId ?? 'chord';
+    if (event.timbreId) {
+      const bank = this.getMelodyBank(event.timbreId, trackId, event.playbackMode);
+      if (!bank?.ready) {
+        void this.prepareMelodyTimbre(event.timbreId, trackId, event.playbackMode);
+        return false;
+      }
+      return event.notes.map((note) => this.triggerMelodyBankEvent(
+        { ...event, trackId, note }, time, this.getStartedTransport()?.bpm?.value ?? DEFAULT_BPM,
+      )).every(Boolean);
+    }
     return this.triggerChordNotes(
       event.notes,
       event.duration,
@@ -1632,10 +1649,13 @@ export default class AudioEngine {
       `${trackId}:${this.getMelodyBankKey(timbreId, playbackMode)}`, [trackId, timbreId, playbackMode],
     );
     for (const timbreId of options.melodyTimbreIds ?? []) addTimbre('melody', timbreId, options.melodyPlaybackMode);
+    for (const { trackId, timbreId, playbackMode } of options.additionalTimbres ?? []) {
+      addTimbre(trackId, timbreId, playbackMode);
+    }
     for (const [trackId, bars] of Object.entries(matrix ?? {})) {
       if (!Array.isArray(bars)) continue;
       for (const cell of bars.flat()) {
-        if (cell?.type === 'melody' && cell.timbreId) {
+        if (['melody', 'note', 'notes'].includes(cell?.type) && cell.timbreId) {
           addTimbre(trackId, cell.timbreId, cell.playbackMode);
         }
       }

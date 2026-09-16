@@ -1,3 +1,4 @@
+import { getChordCellNotes, toggleChordNoteCell } from '../domain/chordCells.js';
 import { getTimelineBars, getTotalBars } from '../domain/projectLength.js';
 import {
   createElement,
@@ -215,6 +216,7 @@ export default function App({
   const timelineBars = getTimelineBars({ totalBars });
   const barNumbers = useMemo(() => Array.from({ length: timelineBars }, (_, index) => index + 1), [timelineBars]);
   const [performanceActive, setPerformanceActive] = useState(false);
+  const performanceControlsRef = useRef(null);
   const [performanceVisited, setPerformanceVisited] = useState(false);
   const bpm = useMusicStore((state) => state.bpm);
   const rootKey = useMusicStore((state) => state.rootKey);
@@ -1693,6 +1695,27 @@ export default function App({
     });
   }, [bpm, dispatchAppCommand]);
 
+  const handleChordNotePreview = useCallback((note) => {
+    const state = useMusicStore.getState();
+    void audioEngine.triggerMelodyInputOneShot(note, undefined, {
+      trackId: state.activeTrackId, bpm: state.bpm,
+      timbreId: 'piano', playbackMode: 'natural', duration: '16n',
+    });
+  }, []);
+
+  const handleChordNoteToggle = useCallback((step, note) => {
+    withUndoCheckpoint(() => {
+      const state = useMusicStore.getState();
+      if (state.clips.byId[state.selectedClipId]?.editorMode !== 'notes') return;
+      const cell = state.matrix[state.activeTrackId]?.[state.selectedBar]?.[step];
+      const next = toggleChordNoteCell(cell ?? {
+        timbreId: 'piano', playbackMode: 'natural', duration: '16n',
+      }, note);
+      state.setCell(state.activeTrackId, state.selectedBar, step, next);
+      if (getChordCellNotes(next).includes(note)) handleChordNotePreview(note);
+    });
+  }, [handleChordNotePreview, withUndoCheckpoint]);
+
   const handleChordRhythmStepToggle = useCallback((
     stepIndex,
     bar = useMusicStore.getState().selectedBar,
@@ -1702,7 +1725,7 @@ export default function App({
       const state = useMusicStore.getState();
       if (state.selectedBar !== bar) return;
       const scope = createTrackActionScope(state);
-      if (scope.trackType !== 'chord') return;
+      if (scope.trackType !== 'chord' || state.clips.byId[state.selectedClipId]?.editorMode === 'notes') return;
       const nextMatrix = toggleChordRhythmStep(scope.matrix, bar, stepIndex);
       if (nextMatrix === scope.matrix) return;
       state.setTrackMatrix(scope.trackId, nextMatrix.chord);
@@ -1717,7 +1740,7 @@ export default function App({
   } = {}) => {
     const state = useMusicStore.getState();
     const scope = createTrackActionScope(state);
-    if (scope.trackType !== 'chord') return false;
+    if (scope.trackType !== 'chord' || state.clips.byId[state.selectedClipId]?.editorMode === 'notes') return false;
     const targetBar = bar ?? state.selectedBar;
     if (targetBar !== state.selectedBar) return false;
     const nextMatrix = mode === 'passing'
@@ -2441,7 +2464,8 @@ export default function App({
     connect: connectLaunchpad,
     ...launchpadInput
   } = useLaunchpadXCommands({
-    enabled: !performanceActive,
+    performanceActive,
+    performanceControlsRef,
     activeInputNotes: melodyRecording.activeInputNotes,
     chordActive,
     chordClipBars,
@@ -3303,6 +3327,8 @@ export default function App({
           melodyRecordingState: melodyRecording.recordingState,
           melodyRhythmTemplateId,
           selectedClipName: selectedClip?.name ?? '',
+          onChordNoteToggle: handleChordNoteToggle,
+          onChordNotePreview: handleChordNotePreview,
           onChordRhythmStepToggle: handleChordRhythmStepToggle,
           launchpadHarmonyTarget: launchpadChordHarmonyTarget,
           launchpadHarmonySelection: chordHarmonyState?.selectedOption ?? null,
@@ -3371,6 +3397,8 @@ export default function App({
     {performanceVisited ? <PerformanceMode
       key={`${genreId}:${performanceProfileId ?? 'default'}`}
       active={performanceActive}
+      controlsRef={performanceControlsRef}
+      hardwareInput={{ ...launchpadInput, onConnect: connectLaunchpad }}
       genreId={genreId}
       profileId={performanceProfileId}
       initialBpm={bpm}

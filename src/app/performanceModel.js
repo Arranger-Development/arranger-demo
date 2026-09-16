@@ -4,7 +4,7 @@ import { getMelodyStyleTemplate } from '../data/melodyStyleTemplates.js';
 import { BASS_GROOVE_TEMPLATES, createBassCell, createBassPreviewEvents } from './bassActions.js';
 import { createDrumsBarFromTemplate } from './drumsPatternActions.js';
 import { createChordStylePresetBar } from './chordStylePresetActions.js';
-import { createChordCell } from '../domain/chordCells.js';
+import { createChordCell, createChordNotesCell, getChordCellNotes } from '../domain/chordCells.js';
 import { createDrumsCell } from '../domain/drumsCells.js';
 import { createMelodyCellFromNotes, getMelodyCellNotes } from '../domain/melodyCells.js';
 import { AI_PERFORMANCE_PROFILE_ID, AI_PERFORMANCE_DEFAULT_BPM, AI_PERFORMANCE_TEMPLATES } from '../data/aiPerformanceTemplates.js';
@@ -37,7 +37,7 @@ const melodyTemplates = [
 
 export function performanceTemplates(genreId, profileId = null) {
   if (profileId === AI_PERFORMANCE_PROFILE_ID) {
-    return { ...AI_PERFORMANCE_TEMPLATES, chord: getChordStyleChordTemplatesForGenre(genreId) };
+    return AI_PERFORMANCE_TEMPLATES;
   }
   return {
     drums: getDrumTemplatesForGenre(genreId),
@@ -63,8 +63,7 @@ export function createPerformanceMatrix(selection, genreId, profileId = null) {
   const matrix = Object.fromEntries(PERFORMANCE_TRACKS.map((id) => [id, Array.from({ length: totalBars }, emptyBar)]));
   if (profileId === AI_PERFORMANCE_PROFILE_ID) {
     for (let bar = 0; bar < totalBars; bar += 1) {
-      if (selected.chord) matrix.chord[bar] = createChordStylePresetBar(selected.chord, bar % PERFORMANCE_BARS);
-      for (const track of ['drums', 'bass', 'melody']) {
+      for (const track of PERFORMANCE_TRACKS) {
         const template = templates[track].find(({ id }) => id === selected[track]);
         if (!template) continue;
         const phraseBar = template.bars[bar % template.barCount];
@@ -76,6 +75,9 @@ export function createPerformanceMatrix(selection, genreId, profileId = null) {
         } else {
           phraseBar.forEach(([step, note]) => {
             matrix[track][bar][step] = track === 'bass' ? createBassCell(note, '16n')
+              : track === 'chord' ? createChordNotesCell([...getChordCellNotes(matrix.chord[bar][step]), note], {
+                duration: '16n', timbreId: 'piano', playbackMode: 'natural',
+              })
               : createMelodyCellFromNotes([...getMelodyCellNotes(matrix.melody[bar][step]), note], {
                 duration: '16n', timbreId: 'piano', playbackMode: 'natural',
               });
@@ -132,7 +134,7 @@ export function createPerformanceSequence(saved, genreId, profileId = null) {
 
 export const performanceStorageKey = (genreId, profileId = null) => (
   profileId === AI_PERFORMANCE_PROFILE_ID
-    ? `arranger-performance:v2:${profileId}`
+    ? `arranger-performance:v3:${profileId}`
     : `arranger-performance:v1:${genreId}`
 );
 export const normalizePerformanceBpm = (bpm) => Math.max(40, Math.min(240, Math.round(Number(bpm) || 120)));
@@ -142,13 +144,12 @@ export function readPerformanceSession(storage, genreId, initialBpm, profileId =
   const fallback = { bpm: normalizePerformanceBpm(defaultBpm), saved: Array.from({ length: 5 }, emptySelection) };
   try {
     const stored = storage?.getItem(performanceStorageKey(genreId, profileId));
-    if (stored == null && profileId === AI_PERFORMANCE_PROFILE_ID) {
-      // A new score library starts with empty Loops; preserve only its tempo.
-      const previous = JSON.parse(storage?.getItem(`arranger-performance:v1:${profileId}`) ?? 'null');
-      if (previous?.version === 1 && Number.isFinite(previous.bpm) && previous.bpm > 0) {
-        fallback.bpm = normalizePerformanceBpm(previous.bpm);
+    if (profileId === AI_PERFORMANCE_PROFILE_ID) {
+      // Retire only the old AI libraries; never remap their track selections.
+      for (const version of [1, 2]) {
+        const legacyKey = `arranger-performance:v${version}:${profileId}`;
+        if (storage?.getItem(legacyKey) != null) storage?.removeItem?.(legacyKey);
       }
-      return fallback;
     }
     const value = JSON.parse(stored ?? 'null');
     if (value?.version !== 1 || !Array.isArray(value.saved)) return fallback;

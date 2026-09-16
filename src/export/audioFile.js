@@ -98,7 +98,7 @@ function getGainValue(volume) {
 function getEventVolume(state, event) {
   const rawVolume = getTrackOutputVolume(state.volumes?.[event.trackId], state.mutedTracks?.[event.trackId]);
   if (rawVolume === -Infinity) return -Infinity;
-  const trackVolume = event.type === 'melody' && event.timbreId
+  const trackVolume = ['melody', 'chord'].includes(event.type) && event.timbreId
     ? (rawVolume ?? 0) + getMelodyTimbre(event.timbreId).gainDb : rawVolume;
   if (!['chord', 'drums', 'melody', 'bass'].includes(event.type) || !Number.isFinite(event.velocity)) {
     return trackVolume;
@@ -146,7 +146,7 @@ function getSampleSelections(event, melodyTimbreId) {
 
   const sampleFiles = event.type === 'bass'
     ? BASS_SAMPLE_FILES
-    : event.type === 'chord'
+    : event.type === 'chord' && !event.timbreId
       ? CHORD_SAMPLE_FILES
       : getMelodyTimbre(event.timbreId ?? melodyTimbreId).sampleFiles;
   const notes = event.type === 'chord' ? event.notes : [event.note];
@@ -194,7 +194,7 @@ function scheduleSample(context, destination, buffer, selection, event, state, b
   const time = getEventTime(event, bpm);
   const source = context.createBufferSource();
   const gain = context.createGain();
-  const duration = event.type === 'chord'
+  const duration = event.type === 'chord' && !event.timbreId
     ? 2
     : event.type === 'melody' && !event.timbreId
       ? buffer.duration
@@ -206,12 +206,12 @@ function scheduleSample(context, destination, buffer, selection, event, state, b
   gain.gain.value = getGainValue(getEventVolume(state, event));
   source.connect(gain).connect(destination);
   source.start(time);
-  if (event.type === 'melody' && event.timbreId && event.playbackMode !== 'natural') {
+  if (['melody', 'chord'].includes(event.type) && event.timbreId && event.playbackMode !== 'natural') {
     const level = gain.gain.value;
     gain.gain.setValueAtTime(level, time + duration);
     gain.gain.linearRampToValueAtTime(0, time + duration + 0.1);
     source.stop(time + duration + 0.1);
-  } else if (event.type !== 'drums' && event.type !== 'melody') {
+  } else if (event.type !== 'drums' && event.type !== 'melody' && event.playbackMode !== 'natural') {
     source.stop(time + Math.max(0.01, duration));
   }
 }

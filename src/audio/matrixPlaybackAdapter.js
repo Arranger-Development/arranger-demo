@@ -116,7 +116,10 @@ function extractChordEvent(cell, bar, step) {
       quality: 'notes',
       label: cell.label ?? noteRoots.join('/'),
       notes,
-      duration: '16n',
+      duration: cell.duration ?? '16n',
+      ...(Number.isInteger(cell.durationSteps) ? { durationSteps: cell.durationSteps } : {}),
+      ...(cell.timbreId ? { timbreId: cell.timbreId } : {}),
+      ...(cell.playbackMode === 'natural' ? { playbackMode: 'natural' } : {}),
     }, cell);
   }
 

@@ -66,7 +66,10 @@ function findClipForTrackBar(clips, trackId, bar) {
 }
 
 function createPastedClipRecord(state, snapshot, targetTrackId, targetBar) {
-  const clip = createClipRecord(targetTrackId, targetBar);
+  const clip = {
+    ...createClipRecord(targetTrackId, targetBar),
+    ...(snapshot.editorMode === 'notes' ? { editorMode: 'notes' } : {}),
+  };
   if (snapshot?.customName === true) {
     return {
       ...clip,
@@ -89,6 +92,7 @@ function createClipClipboardData(state, clip) {
     sourceBar: clip.bar,
     name: clip.name,
     customName: clip.customName === true,
+    ...(clip.editorMode === 'notes' ? { editorMode: 'notes' } : {}),
     barData: cloneBarData(barData),
   };
 }

@@ -1,5 +1,6 @@
 import { createElement } from 'react';
 import { BassEditor } from './BassEditor.jsx';
+import { ChordNotesEditor } from './ChordNotesEditor.jsx';
 import { ChordEditor } from './ChordEditor.jsx';
 import { DrumSequencer } from './DrumSequencer.jsx';
 import { MelodyEditor } from './MelodyEditor.jsx';
@@ -26,6 +27,8 @@ function BottomEditor({
   melodyActiveInputNotes,
   melodyRecordingState,
   melodyRhythmTemplateId,
+  onChordNoteToggle,
+  onChordNotePreview,
   onChordRhythmStepToggle,
   onChordStepHarmonyApply,
   onChordStepHarmonyPreview,
@@ -137,6 +140,14 @@ function BottomEditor({
       trackName: activeTrackName,
       tutorialLocked,
       tutorialTargets,
+    });
+  } else if (activeTrackType === 'chord' && clips.byId[selectedClipId]?.editorMode === 'notes') {
+    editor = createElement(ChordNotesEditor, {
+      matrix, selectedBar, clipName: selectedClipName, trackName: activeTrackName,
+      onNoteToggle: onChordNoteToggle, onNotePreview: onChordNotePreview,
+      onRenameClip, onClose: onCloseEditor, onClearBar: onClearChordBar,
+      onClearTrack: onClearChord, canPageBars, onNextBar, onPreviousBar,
+      disabled: tutorialLocked,
     });
   } else if (activeTrackType === 'chord' && selectedClipId) {
     editor = createElement(ChordEditor, {

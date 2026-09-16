@@ -406,7 +406,7 @@ function normalizeChordNotes(notes) {
   }, []);
 }
 
-function createChordNotesCell(notes) {
+function createChordNotesCell(notes, options = {}) {
   const normalizedNotes = normalizeChordNotes(notes);
   if (!normalizedNotes.length) return null;
 
@@ -414,6 +414,11 @@ function createChordNotesCell(notes) {
     type: 'notes',
     notes: normalizedNotes,
     label: normalizedNotes.join('/'),
+    ...(options.duration ? { duration: options.duration } : {}),
+    ...(Number.isInteger(options.durationSteps) ? { durationSteps: options.durationSteps } : {}),
+    ...(Number.isFinite(options.velocity) ? { velocity: options.velocity } : {}),
+    ...(options.timbreId ? { timbreId: options.timbreId } : {}),
+    ...(options.playbackMode === 'natural' ? { playbackMode: 'natural' } : {}),
   };
 }
 
@@ -473,7 +478,7 @@ function toggleChordNoteCell(cell, note) {
     : [...currentNotes, note];
 
   if (cell?.type === 'chord') return withChordManualNotes(cell, nextNotes, getChordRemovedTonePitches(cell));
-  return createChordNotesCell(nextNotes);
+  return createChordNotesCell(nextNotes, cell ?? {});
 }
 
 function getChordToneRoots(root) {

@@ -120,15 +120,32 @@ test('adding a melody after a drum-only preview uses the preloaded natural piano
   await engine.stop();
 });
 
-test('all 92 AI melody attacks retain identical MIDI bytes with natural tails', () => {
+test('all 92 Excel chord attacks retain identical MIDI bytes with natural tails', () => {
   const genreId = 'electronic-edm', profileId = 'ai-demo-1';
   const templates = performanceTemplates(genreId, profileId);
-  const saved = [...templates.melody.map(({ id }) => ({ ...emptySelection(), melody: id })), emptySelection()];
+  const saved = [...templates.chord.slice(1).map(({ id }) => ({ ...emptySelection(), chord: id })), emptySelection()];
   const project = createPerformanceImport({ saved, genreId, profileId, bpm: 100 });
   const events = collectProjectEvents(project);
-  assert.equal(events.length, 92);
+  assert.equal(events.flatMap(event => event.notes).length, 92);
   assert.ok(events.every(event => event.playbackMode === 'natural' && event.duration === '16n'));
   const previous = structuredClone(project);
-  previous.matrix.melody.flat().filter(Boolean).forEach(cell => { delete cell.playbackMode; });
+  previous.matrix.chord.flat().filter(Boolean).forEach(cell => { delete cell.playbackMode; });
   assert.deepEqual(createMidiFile(project), createMidiFile(previous));
+});
+
+
+test('adding chord polyphony to a running preview uses its preloaded bank without restarting the clock', async () => {
+  const { engine, tone, calls } = setup();
+  let snapshot = { totalBars: 2, matrix: { chord: [Array(16).fill(null), Array(16).fill(null)] } };
+  await engine.play({ matrixSource: () => snapshot.matrix, playbackSource: () => snapshot,
+    totalBars: 2, additionalTimbres: [{ trackId: 'chord', timbreId: 'piano', playbackMode: 'natural' }] });
+  const sampler = engine.getMelodyBank('piano', 'chord', 'natural').sampler;
+  tone.Transport.tick(0);
+  snapshot = { totalBars: 4, matrix: { chord: [[null, {
+    type: 'notes', notes: ['E3', 'C#3'], duration: '16n', timbreId: 'piano', playbackMode: 'natural',
+  }], [], [], []] } };
+  tone.Transport.tick(.15);
+  assert.deepEqual(sampler.hits.map(hit => [hit.note, hit.time]), [['E3', .15], ['C#3', .15]]);
+  assert.deepEqual(calls, ['start']);
+  await engine.stop();
 });

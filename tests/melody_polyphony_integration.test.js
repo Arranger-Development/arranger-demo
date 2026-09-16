@@ -15,8 +15,20 @@ import { createUndoSnapshot, restoreUndoSnapshot } from '../src/app/undoHistory.
 import useMusicStore from '../src/store/useMusicStore.js';
 
 const genreId = 'electronic-edm';
-const selection = { ...emptySelection(), melody: performanceTemplates(genreId, profileId).melody[0].id };
-const build = () => createPerformanceImport({ saved: Array.from({ length: 5 }, () => ({ ...selection })), genreId, profileId, bpm: 100 });
+const selection = { ...emptySelection(), chord: performanceTemplates(genreId, profileId).chord[1].id };
+// Legacy imported melody projects must stay playable after the library changes.
+const build = () => {
+  const project = createPerformanceImport({ saved: Array.from({ length: 5 }, () => ({ ...selection })), genreId, profileId, bpm: 100 });
+  project.matrix.melody = project.matrix.chord.map(bar => bar.map(cell => cell
+    ? createMelodyCellFromNotes(cell.notes, cell) : null));
+  project.matrix.chord = project.matrix.chord.map(() => Array(16).fill(null));
+  project.clips.byId = Object.fromEntries(Object.values(project.clips.byId).map(clip => {
+    const id = clip.id.replace('chord', 'melody');
+    return [id, { ...clip, id, trackId: 'melody' }];
+  }));
+  project.clips.ids = Object.keys(project.clips.byId);
+  return project;
+};
 const firstPitches = ['B3', 'F#3', 'E3', 'C#3'];
 
 test('polyphonic cells normalize legacy notes and edit each pitch without losing metadata', () => {
