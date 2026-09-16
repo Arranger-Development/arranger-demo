@@ -10,6 +10,7 @@ import {
 } from '../src/audio/matrixPlaybackAdapter.js';
 import { createPassingChordCell } from '../src/domain/chordCells.js';
 import { STEPS_PER_BAR, TOTAL_BARS } from '../src/domain/musicConstants.js';
+import { MELODY_NOTE_IDS } from '../src/data/melodyScales.js';
 import createInitialMatrix from '../src/store/createInitialMatrix.js';
 
 test('extractDrumsInstruments reads drums cells', () => {
@@ -35,6 +36,37 @@ test('matrix playback adapter returns drums events for a matrix step', () => {
     { type: 'drums', trackId: 'drums', bar: 1, step: 4, instrument: 'snare' },
   ]);
   assert.deepEqual(adapter.getEventsForStep(0, 1), []);
+});
+
+test('matrix playback adapter carries drum dynamics and microtiming into events', () => {
+  const matrix = createInitialMatrix();
+  matrix.drums[0][3] = {
+    instruments: ['snare', 'hihat'],
+    timingOffsets: { hihat: 0.12, snare: 0.16 },
+    velocities: { hihat: 0.32, snare: 0.72 },
+  };
+
+  const adapter = createMatrixPlaybackAdapter(matrix);
+  assert.deepEqual(adapter.getEventsForStep(0, 3), [
+    {
+      type: 'drums',
+      trackId: 'drums',
+      bar: 0,
+      step: 3,
+      instrument: 'snare',
+      timingOffset: 0.16,
+      velocity: 0.72,
+    },
+    {
+      type: 'drums',
+      trackId: 'drums',
+      bar: 0,
+      step: 3,
+      instrument: 'hihat',
+      timingOffset: 0.12,
+      velocity: 0.32,
+    },
+  ]);
 });
 
 test('extractBassEvent reads bass cells into playable bass events', () => {
@@ -69,6 +101,34 @@ test('extractMelodyEvent reads melody cells into playable melody events', () => 
     duration: '16n',
   });
   assert.equal(extractMelodyEvent({ type: 'melody', note: 'H4' }, 3, 8), null);
+  assert.deepEqual(
+    extractMelodyEvent({ type: 'melody', note: 'D4', durationSteps: 3 }, 1, 6),
+    {
+      type: 'melody',
+      trackId: 'melody',
+      bar: 1,
+      step: 6,
+      note: 'D4',
+      duration: '16n',
+      durationSteps: 3,
+    },
+  );
+});
+
+test('extractMelodyEvent plays every semitone in the scrollable melody roll', () => {
+  MELODY_NOTE_IDS.forEach((note) => {
+    assert.deepEqual(extractMelodyEvent({ type: 'melody', note }, 0, 0), {
+      type: 'melody',
+      trackId: 'melody',
+      bar: 0,
+      step: 0,
+      note,
+      duration: '16n',
+    });
+  });
+
+  assert.equal(extractMelodyEvent({ type: 'melody', note: 'B2' }, 0, 0), null);
+  assert.equal(extractMelodyEvent({ type: 'melody', note: 'C6' }, 0, 0), null);
 });
 
 test('createChordNotes maps major chord roots to playable triads', () => {
@@ -89,6 +149,15 @@ test('createChordNotes maps major chord roots to playable triads', () => {
 
 test('extractChordEvent reads chord cells into playable chord events', () => {
   assert.equal(extractChordEvent(null, 0, 0), null);
+  assert.equal(
+    extractChordEvent({
+      type: 'chord-source',
+      sourceChordLabel: 'C',
+      progressionTemplateId: 'doo-wop',
+      selectedGrooveTemplateId: 'block-basic',
+    }, 0, 0),
+    null,
+  );
   assert.deepEqual(extractChordEvent({ type: 'note', note: 'C', label: 'C' }, 2, 6), {
     type: 'chord',
     trackId: 'chord',
@@ -182,6 +251,28 @@ test('extractChordEvent reads chord cells into playable chord events', () => {
   assert.deepEqual(
     extractChordEvent({ type: 'chord', root: 'C', chordRoot: 'C', quality: 'maj', label: 'C', toneRoots: ['C', 'E', 'G'], tonePitches: ['C3', 'E3', 'G3'], removedTonePitches: ['C3'], addedNotes: ['C5', 'D'] }, 2, 4)?.notes,
     ['E3', 'G3', 'D4', 'C5'],
+  );
+  assert.deepEqual(
+    extractChordEvent({
+      type: 'notes',
+      notes: ['C3'],
+      label: 'C3',
+      timingOffset: 0.28,
+      velocity: 0.56,
+    }, 1, 7),
+    {
+      type: 'chord',
+      trackId: 'chord',
+      bar: 1,
+      step: 7,
+      root: null,
+      quality: 'notes',
+      label: 'C3',
+      notes: ['C3'],
+      duration: '16n',
+      timingOffset: 0.28,
+      velocity: 0.56,
+    },
   );
 });
 

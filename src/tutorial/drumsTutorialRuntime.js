@@ -1,5 +1,6 @@
 import { getDrumsCellInstruments } from '../domain/drumsCells.js';
 import { createDrumsStepMovePatch } from '../domain/drumsStepMove.js';
+import { CHORD_TEMPLATES } from '../domain/chordCells.js';
 import { BASS_GROOVE_TEMPLATES } from '../app/bassActions.js';
 import { CHORD_GROOVE_TEMPLATES } from '../app/chordGrooveActions.js';
 import {
@@ -23,10 +24,7 @@ const STEP_COMPLETION_FIELDS = Object.freeze({
   [TUTORIAL_STEP_IDS.DRUMS_DRAG_KICK]: 'kickDragComplete',
   [TUTORIAL_STEP_IDS.CHORD_FILL_TRACK_CLIPS]: 'chordTrackClipsFilled',
   [TUTORIAL_STEP_IDS.CHORD_SELECT_PROGRESSION_TEMPLATE]: 'chordTemplateSelected',
-  [TUTORIAL_STEP_IDS.CHORD_SELECT_GROOVE_TEMPLATE]: 'chordGrooveSelected',
   [TUTORIAL_STEP_IDS.CHORD_LISTEN_LOOP]: 'chordLoopPlaybackComplete',
-  [TUTORIAL_STEP_IDS.CHORD_ENRICH_HARMONY]: 'chordEnriched',
-  [TUTORIAL_STEP_IDS.CHORD_ADD_PASSING]: 'chordPassingAdded',
   [TUTORIAL_STEP_IDS.BASS_FILL_TRACK_CLIPS]: 'bassTrackClipsFilled',
   [TUTORIAL_STEP_IDS.BASS_SELECT_GROOVE_TEMPLATE]: 'bassGrooveSelected',
   [TUTORIAL_STEP_IDS.BASS_LISTEN_LOOP]: 'bassLoopPlaybackComplete',
@@ -43,7 +41,6 @@ const LOCKED_STEP_IDS = new Set([
   TUTORIAL_STEP_IDS.DRUMS_GENERATE_ALL_BARS,
   TUTORIAL_STEP_IDS.CHORD_FILL_TRACK_CLIPS,
   TUTORIAL_STEP_IDS.CHORD_SELECT_PROGRESSION_TEMPLATE,
-  TUTORIAL_STEP_IDS.CHORD_SELECT_GROOVE_TEMPLATE,
   TUTORIAL_STEP_IDS.CHORD_LISTEN_LOOP,
   TUTORIAL_STEP_IDS.BASS_FILL_TRACK_CLIPS,
   TUTORIAL_STEP_IDS.BASS_SELECT_GROOVE_TEMPLATE,
@@ -52,14 +49,12 @@ const LOCKED_STEP_IDS = new Set([
   TUTORIAL_STEP_IDS.MELODY_SELECT_SCALE,
 ]);
 
-const CHORD_ENRICH_SPANS = Object.freeze([0, 1, 2, 3]);
-
 const MELODY_EXAMPLE_STEP_CONTROLS = Object.freeze({
-  [TUTORIAL_STEP_IDS.MELODY_EXAMPLE_INTRO_1]: `${TUTORIAL_CONTROL_TARGETS.MELODY_EXAMPLE_KEYS_PREFIX}:4477887`,
-  [TUTORIAL_STEP_IDS.MELODY_PLAY_EXAMPLE_1]: `${TUTORIAL_CONTROL_TARGETS.MELODY_EXAMPLE_KEYS_PREFIX}:4477887`,
-  [TUTORIAL_STEP_IDS.MELODY_EXAMPLE_INTRO_2]: `${TUTORIAL_CONTROL_TARGETS.MELODY_EXAMPLE_KEYS_PREFIX}:890--098-098`,
-  [TUTORIAL_STEP_IDS.MELODY_PLAY_EXAMPLE_2]: `${TUTORIAL_CONTROL_TARGETS.MELODY_EXAMPLE_KEYS_PREFIX}:890--098-098`,
-  [TUTORIAL_STEP_IDS.MELODY_PLAY_EXAMPLE_3]: `${TUTORIAL_CONTROL_TARGETS.MELODY_EXAMPLE_KEYS_PREFIX}:236235234343454`,
+  [TUTORIAL_STEP_IDS.MELODY_EXAMPLE_INTRO_1]: `${TUTORIAL_CONTROL_TARGETS.MELODY_EXAMPLE_KEYS_PREFIX}:AAFFGGF`,
+  [TUTORIAL_STEP_IDS.MELODY_PLAY_EXAMPLE_1]: `${TUTORIAL_CONTROL_TARGETS.MELODY_EXAMPLE_KEYS_PREFIX}:AAFFGGF`,
+  [TUTORIAL_STEP_IDS.MELODY_EXAMPLE_INTRO_2]: `${TUTORIAL_CONTROL_TARGETS.MELODY_EXAMPLE_KEYS_PREFIX}:GASDDSAGDSAG`,
+  [TUTORIAL_STEP_IDS.MELODY_PLAY_EXAMPLE_2]: `${TUTORIAL_CONTROL_TARGETS.MELODY_EXAMPLE_KEYS_PREFIX}:GASDDSAGDSAG`,
+  [TUTORIAL_STEP_IDS.MELODY_PLAY_EXAMPLE_3]: `${TUTORIAL_CONTROL_TARGETS.MELODY_EXAMPLE_KEYS_PREFIX}:FGDFGSFGAGAGASA`,
 });
 
 const MELODY_PRIMARY_STEP_IDS = new Set([
@@ -96,12 +91,9 @@ function createTutorialState() {
     kickDragComplete: false,
     chordTrackClipsFilled: false,
     chordTemplateSelected: false,
-    chordGrooveSelected: false,
     chordLoopPlaybackStarted: false,
     chordLoopVisitedBars: [],
     chordLoopPlaybackComplete: false,
-    chordEnriched: false,
-    chordPassingAdded: false,
     bassTrackClipsFilled: false,
     bassGrooveSelected: false,
     bassLoopPlaybackStarted: false,
@@ -199,22 +191,6 @@ function getPrimaryState(step, progress) {
   if (step?.id === TUTORIAL_STEP_IDS.CHORD_LISTEN_LOOP) {
     return {
       primaryDisabled: !progress.chordLoopPlaybackComplete,
-      primaryLabel: step.primaryLabel,
-      showCompleteButton: true,
-    };
-  }
-
-  if (step?.id === TUTORIAL_STEP_IDS.CHORD_ENRICH_HARMONY) {
-    return {
-      primaryDisabled: !progress.chordEnriched,
-      primaryLabel: step.primaryLabel,
-      showCompleteButton: true,
-    };
-  }
-
-  if (step?.id === TUTORIAL_STEP_IDS.CHORD_ADD_PASSING) {
-    return {
-      primaryDisabled: !progress.chordPassingAdded,
       primaryLabel: step.primaryLabel,
       showCompleteButton: true,
     };
@@ -350,41 +326,30 @@ function getTutorialViewModel({
 
   if (step.id === TUTORIAL_STEP_IDS.CHORD_SELECT_PROGRESSION_TEMPLATE) {
     targets.controls = [
-      { name: TUTORIAL_CONTROL_TARGETS.CHORD_TEMPLATE_BUTTON, role: 'target' },
+      { name: TUTORIAL_CONTROL_TARGETS.CHORD_TEMPLATE_WORKSPACE_BUTTON, role: 'target' },
       { name: `${TUTORIAL_CONTROL_TARGETS.CHORD_TEMPLATE_CARD_PREFIX}:doowop`, role: 'target' },
-    ];
-  }
-
-  if (step.id === TUTORIAL_STEP_IDS.CHORD_SELECT_GROOVE_TEMPLATE) {
-    targets.controls = [
-      { name: TUTORIAL_CONTROL_TARGETS.CHORD_GROOVE_BUTTON, role: 'target' },
-      ...step.completion.controls.map((name) => ({ name, role: 'target' })),
+      ...CHORD_GROOVE_TEMPLATES.map((template) => ({
+        name: `${TUTORIAL_CONTROL_TARGETS.CHORD_GROOVE_CARD_PREFIX}:${template.id}`,
+        role: 'target',
+      })),
+      { name: TUTORIAL_CONTROL_TARGETS.CHORD_TEMPLATE_APPLY, role: 'target' },
     ];
   }
 
   if (step.id === TUTORIAL_STEP_IDS.CHORD_LISTEN_LOOP) {
     targets.controls = [
       { name: TUTORIAL_CONTROL_TARGETS.TRANSPORT_PLAY, role: 'target' },
-      { name: TUTORIAL_CONTROL_TARGETS.CHORD_GROOVE_BUTTON, role: 'target' },
+      { name: TUTORIAL_CONTROL_TARGETS.CHORD_TEMPLATE_WORKSPACE_BUTTON, role: 'allowed' },
+      ...Object.values(CHORD_TEMPLATES).map((template) => ({
+        name: `${TUTORIAL_CONTROL_TARGETS.CHORD_TEMPLATE_CARD_PREFIX}:${template.id}`,
+        role: 'allowed',
+      })),
       ...CHORD_GROOVE_TEMPLATES.map((template) => ({
         name: `${TUTORIAL_CONTROL_TARGETS.CHORD_GROOVE_CARD_PREFIX}:${template.id}`,
-        role: 'target',
+        role: 'allowed',
       })),
+      { name: TUTORIAL_CONTROL_TARGETS.CHORD_TEMPLATE_APPLY, role: 'allowed' },
     ];
-  }
-
-  if (step.id === TUTORIAL_STEP_IDS.CHORD_ENRICH_HARMONY && !progress.chordEnriched) {
-    targets.controls = CHORD_ENRICH_SPANS.map((spanIndex) => ({
-      name: `${TUTORIAL_CONTROL_TARGETS.CHORD_ENRICH_BUTTON_PREFIX}:${spanIndex}`,
-      role: 'target',
-    }));
-  }
-
-  if (step.id === TUTORIAL_STEP_IDS.CHORD_ADD_PASSING && !progress.chordPassingAdded) {
-    targets.controls = [{
-      name: TUTORIAL_CONTROL_TARGETS.CHORD_PASSING_BUTTON,
-      role: 'target',
-    }];
   }
 
   if (step.id === TUTORIAL_STEP_IDS.BASS_FILL_TRACK_CLIPS) {
@@ -407,10 +372,10 @@ function getTutorialViewModel({
   if (step.id === TUTORIAL_STEP_IDS.BASS_LISTEN_LOOP) {
     targets.controls = [
       { name: TUTORIAL_CONTROL_TARGETS.TRANSPORT_PLAY, role: 'target' },
-      { name: TUTORIAL_CONTROL_TARGETS.BASS_GROOVE_BUTTON, role: 'target' },
+      { name: TUTORIAL_CONTROL_TARGETS.BASS_GROOVE_BUTTON, role: 'allowed' },
       ...BASS_GROOVE_TEMPLATES.map((template) => ({
         name: `${TUTORIAL_CONTROL_TARGETS.BASS_GROOVE_CARD_PREFIX}:${template.id}`,
-        role: 'target',
+        role: 'allowed',
       })),
     ];
   }
@@ -424,8 +389,9 @@ function getTutorialViewModel({
 
   if (step.id === TUTORIAL_STEP_IDS.MELODY_SELECT_SCALE) {
     targets.controls = [
-      { name: TUTORIAL_CONTROL_TARGETS.MELODY_SCALE_BUTTON, role: 'target' },
-      { name: `${TUTORIAL_CONTROL_TARGETS.MELODY_SCALE_CARD_PREFIX}:pentatonic`, role: 'target' },
+      { name: TUTORIAL_CONTROL_TARGETS.MELODY_STYLE_BUTTON, role: 'target' },
+      { name: `${TUTORIAL_CONTROL_TARGETS.MELODY_STYLE_CARD_PREFIX}:chinese`, role: 'target' },
+      { name: TUTORIAL_CONTROL_TARGETS.MELODY_STYLE_APPLY_GLOBAL, role: 'target' },
     ];
   }
 
@@ -473,6 +439,7 @@ function handleTutorialControlAction({
   progress = createTutorialState(),
   selectedBar = DRUMS_TUTORIAL_FIRST_BAR,
   step,
+  templateId,
 } = {}) {
   const allowedControls = [
     step?.completion?.control,
@@ -480,25 +447,6 @@ function handleTutorialControlAction({
   ].filter(Boolean);
 
   if (!allowedControls.length) {
-    if (step?.id === TUTORIAL_STEP_IDS.CHORD_ENRICH_HARMONY) {
-      if (control === TUTORIAL_CONTROL_TARGETS.TRANSPORT_PLAY) return createAllowedAction(progress);
-      const validPrefix = `${TUTORIAL_CONTROL_TARGETS.CHORD_ENRICH_BUTTON_PREFIX}:`;
-      if (!control?.startsWith(validPrefix)) return createRejectedAction(progress);
-      return createAllowedAction({
-        ...progress,
-        chordEnriched: true,
-      });
-    }
-
-    if (step?.id === TUTORIAL_STEP_IDS.CHORD_ADD_PASSING) {
-      if (control === TUTORIAL_CONTROL_TARGETS.TRANSPORT_PLAY) return createAllowedAction(progress);
-      if (control !== TUTORIAL_CONTROL_TARGETS.CHORD_PASSING_BUTTON) return createRejectedAction(progress);
-      return createAllowedAction({
-        ...progress,
-        chordPassingAdded: true,
-      });
-    }
-
     return LOCKED_STEP_IDS.has(step?.id) ? createRejectedAction(progress) : createAllowedAction(progress);
   }
 
@@ -560,13 +508,6 @@ function handleTutorialControlAction({
     }, true);
   }
 
-  if (step.id === TUTORIAL_STEP_IDS.CHORD_SELECT_GROOVE_TEMPLATE) {
-    return createAllowedAction({
-      ...progress,
-      chordGrooveSelected: true,
-    }, true);
-  }
-
   if (step.id === TUTORIAL_STEP_IDS.BASS_SELECT_GROOVE_TEMPLATE) {
     return createAllowedAction({
       ...progress,
@@ -575,6 +516,7 @@ function handleTutorialControlAction({
   }
 
   if (step.id === TUTORIAL_STEP_IDS.MELODY_SELECT_SCALE) {
+    if (templateId !== step.completion.templateId) return createRejectedAction(progress);
     return createAllowedAction({
       ...progress,
       melodyScaleSelected: true,
@@ -763,16 +705,6 @@ function completeTutorialPrimaryAction({
 
   if (step?.id === TUTORIAL_STEP_IDS.CHORD_LISTEN_LOOP) {
     if (!progress.chordLoopPlaybackComplete) return createRejectedAction(progress);
-    return createAllowedAction(progress, true);
-  }
-
-  if (step?.id === TUTORIAL_STEP_IDS.CHORD_ENRICH_HARMONY) {
-    if (!progress.chordEnriched) return createRejectedAction(progress);
-    return createAllowedAction(progress, true);
-  }
-
-  if (step?.id === TUTORIAL_STEP_IDS.CHORD_ADD_PASSING) {
-    if (!progress.chordPassingAdded) return createRejectedAction(progress);
     return createAllowedAction(progress, true);
   }
 

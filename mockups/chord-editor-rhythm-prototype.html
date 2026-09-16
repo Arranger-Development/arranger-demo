@@ -1,0 +1,1331 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chord Editor · Rhythm Prototype</title>
+  <script>
+    if (new URLSearchParams(window.location.search).has("capture")) {
+      document.documentElement.classList.add("capture");
+    }
+  </script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #1e120b;
+      --cream: #f2d9af;
+      --cream-soft: #caae83;
+      --amber: #e9b160;
+      --amber-bright: #ffd99a;
+      --amber-deep: #7d481f;
+      --control: #21150e;
+      --control-2: #342014;
+      --line: rgb(255 221 160 / 0.28);
+      --line-strong: rgb(255 222 158 / 0.58);
+      --shadow: rgb(0 0 0 / 0.62);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { min-height: 100%; }
+
+    body {
+      margin: 0;
+      min-width: 1060px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--cream);
+      background: #2a211a url("../assets/skeuo/wall-texture.png") center / cover fixed;
+    }
+
+    button { font: inherit; }
+
+    .stage {
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+      padding: 28px;
+      background: rgb(12 8 5 / 0.22);
+    }
+
+    .editor {
+      position: relative;
+      width: min(1280px, calc(100vw - 56px));
+      min-height: 610px;
+      overflow: hidden;
+      background: #765235 url("../assets/skeuo/wood-panel.png") center / cover;
+      border: 1px solid rgb(255 226 166 / 0.26);
+      border-radius: 15px;
+      box-shadow:
+        inset 0 1px 0 rgb(255 247 218 / 0.2),
+        inset 0 -18px 38px rgb(39 18 7 / 0.42),
+        0 0 0 2px rgb(20 10 5 / 0.78),
+        0 24px 60px rgb(0 0 0 / 0.54);
+    }
+
+    .editor::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: rgb(40 18 8 / 0.08);
+      mix-blend-mode: multiply;
+    }
+
+    .editor-head {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 78px;
+      gap: 24px;
+      padding: 12px 18px;
+      background:
+        linear-gradient(180deg, rgb(255 235 194 / 0.13), rgb(46 25 13 / 0.22)),
+        url("../assets/skeuo/brushed-gunmetal-panel.png") center / cover,
+        #241a13;
+      border-bottom: 1px solid rgb(255 222 160 / 0.25);
+      box-shadow:
+        inset 0 1px 0 rgb(255 245 214 / 0.18),
+        inset 0 -8px 14px rgb(0 0 0 / 0.24),
+        0 5px 16px rgb(0 0 0 / 0.3);
+    }
+
+    .identity {
+      display: grid;
+      grid-template-columns: 38px auto;
+      align-items: center;
+      column-gap: 11px;
+      flex: 0 0 auto;
+    }
+
+    .identity-icon {
+      grid-row: 1 / span 3;
+      width: 38px;
+      height: 38px;
+      object-fit: contain;
+      filter: drop-shadow(0 3px 3px rgb(0 0 0 / 0.55));
+    }
+
+    .track-label {
+      color: var(--amber-bright);
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1;
+      text-shadow: 0 2px 3px rgb(0 0 0 / 0.7);
+    }
+
+    .clip-name {
+      margin-top: 3px;
+      color: #ffe8c2;
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1;
+      text-shadow: 0 2px 3px rgb(0 0 0 / 0.7);
+    }
+
+    .editor-meta {
+      margin-top: 4px;
+      color: #a9855e;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+    }
+
+    .tools {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .hardware-button {
+      min-height: 36px;
+      padding: 0 14px;
+      color: #e7c79b;
+      background:
+        linear-gradient(180deg, rgb(255 225 174 / 0.17), rgb(13 8 5 / 0.4)),
+        #2d1c12;
+      border: 1px solid rgb(255 221 160 / 0.32);
+      border-radius: 9px;
+      box-shadow:
+        inset 0 1px 0 rgb(255 247 217 / 0.18),
+        inset 0 -5px 9px rgb(0 0 0 / 0.3),
+        0 2px 6px rgb(0 0 0 / 0.26);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 850;
+      white-space: nowrap;
+      text-shadow: 0 1px 2px rgb(0 0 0 / 0.8);
+      transition: transform 120ms ease, border-color 120ms ease, color 120ms ease;
+    }
+
+    .hardware-button:hover,
+    .hardware-button:focus-visible {
+      color: #ffe5b3;
+      border-color: rgb(255 221 160 / 0.58);
+      outline: none;
+      transform: translateY(-1px);
+    }
+
+    .hardware-button.primary {
+      color: #2a170c;
+      background: linear-gradient(180deg, #ffe2a9, #9f6630);
+      border-color: rgb(255 236 196 / 0.7);
+      text-shadow: 0 1px 0 rgb(255 245 220 / 0.44);
+    }
+
+    .hardware-button.danger {
+      color: #d8bea0;
+      background:
+        linear-gradient(180deg, rgb(255 223 174 / 0.1), rgb(9 6 4 / 0.48)),
+        #21150e;
+    }
+
+    .close-button {
+      width: 46px;
+      height: 36px;
+      flex: 0 0 auto;
+      padding: 0 8px;
+      color: #d7b88b;
+      background:
+        linear-gradient(180deg, rgb(255 223 174 / 0.12), rgb(9 6 4 / 0.5)),
+        #21150e;
+      border: 1px solid rgb(255 221 160 / 0.28);
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow:
+        inset 0 1px 0 rgb(255 247 217 / 0.14),
+        0 2px 5px rgb(0 0 0 / 0.32);
+      font-size: 10px;
+      font-weight: 900;
+      text-shadow: 0 1px 2px rgb(0 0 0 / 0.78);
+    }
+
+    .editor-body {
+      position: relative;
+      z-index: 1;
+      padding: 22px 68px 26px;
+    }
+
+    .clip-page-button {
+      position: absolute;
+      top: 50%;
+      z-index: 4;
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 76px;
+      padding: 0 6px;
+      color: #d7b88b;
+      background:
+        linear-gradient(180deg, rgb(255 225 174 / 0.14), rgb(9 6 4 / 0.5)),
+        #21150e;
+      border: 1px solid rgb(255 221 160 / 0.3);
+      border-radius: 10px;
+      box-shadow:
+        inset 0 1px 0 rgb(255 247 217 / 0.14),
+        inset 0 -7px 12px rgb(0 0 0 / 0.26),
+        0 4px 10px rgb(0 0 0 / 0.34);
+      cursor: pointer;
+      font-size: 9px;
+      font-weight: 900;
+      line-height: 1.25;
+      text-align: center;
+      text-shadow: 0 1px 2px rgb(0 0 0 / 0.78);
+      transform: translateY(-50%);
+    }
+
+    .clip-page-button.previous { left: 15px; }
+    .clip-page-button.next { right: 15px; }
+
+    .clip-page-button:hover:not(:disabled),
+    .clip-page-button:focus-visible:not(:disabled) {
+      color: #2a170c;
+      background: linear-gradient(180deg, #ffe2a8, #a46730);
+      border-color: rgb(255 237 198 / 0.72);
+      outline: none;
+      text-shadow: 0 1px 0 rgb(255 244 214 / 0.46);
+    }
+
+    .clip-page-button:disabled {
+      cursor: default;
+      opacity: 0.34;
+      box-shadow: none;
+    }
+
+    .rhythm-panel {
+      position: relative;
+      min-height: 482px;
+      padding: 20px;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgb(255 225 174 / 0.05), rgb(0 0 0 / 0.18)),
+        url("../assets/skeuo/dark-grid-panel.png") center / cover,
+        #1b130e;
+      border: 1px solid rgb(255 220 155 / 0.26);
+      border-radius: 12px;
+      box-shadow:
+        inset 0 1px 0 rgb(255 244 212 / 0.12),
+        inset 0 -14px 28px rgb(0 0 0 / 0.32),
+        0 4px 12px rgb(0 0 0 / 0.3);
+    }
+
+    .rhythm-panel::after {
+      content: "";
+      position: absolute;
+      inset: 8px;
+      pointer-events: none;
+      border: 1px solid rgb(255 228 178 / 0.07);
+      border-radius: 8px;
+    }
+
+    .summary-row {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 28px;
+    }
+
+    .summary-left {
+      display: grid;
+      gap: 12px;
+      width: min(220px, 32%);
+      min-width: 180px;
+    }
+
+    .progression-info {
+      display: grid;
+      align-content: center;
+      gap: 2px;
+      min-width: 0;
+      padding: 3px 0 3px 2px;
+    }
+
+    .eyebrow {
+      display: block;
+      color: #a9855f;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .progression-name {
+      display: block;
+      color: #ffe0a4;
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-size: 17px;
+      font-weight: 800;
+      line-height: 1.1;
+      text-shadow: 0 2px 3px rgb(0 0 0 / 0.7);
+    }
+
+    .progression-chords {
+      display: block;
+      overflow: hidden;
+      color: #c9a87d;
+      font-size: 11px;
+      font-weight: 800;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .chord-readout {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+      padding: 0;
+    }
+
+    .next-chord-readout {
+      flex-direction: row-reverse;
+      text-align: right;
+    }
+
+    .readout-copy { min-width: 0; }
+
+    .readout-label {
+      display: block;
+      color: #a88964;
+      font-size: 9px;
+      font-weight: 850;
+      letter-spacing: 0.06em;
+    }
+
+    .readout-sub {
+      display: block;
+      margin-top: 2px;
+      color: #80664d;
+      font-size: 8px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .chord-badge {
+      display: grid;
+      place-items: center;
+      min-width: 44px;
+      height: 38px;
+      padding: 0 9px;
+      color: #2b170b;
+      background: linear-gradient(180deg, #ffe6b7, #b97937);
+      border: 1px solid rgb(255 241 207 / 0.72);
+      border-radius: 7px;
+      box-shadow:
+        inset 0 1px 0 rgb(255 252 232 / 0.7),
+        inset 0 -6px 10px rgb(77 39 14 / 0.18),
+        0 4px 10px rgb(0 0 0 / 0.32);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 18px;
+      font-weight: 900;
+      text-shadow: 0 1px 0 rgb(255 241 212 / 0.54);
+    }
+
+    .sequencer-head {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+      margin: 22px 2px 12px;
+    }
+
+    .sequencer-title {
+      margin: 0;
+      color: #e3c69c;
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-size: 17px;
+      font-weight: 800;
+      text-shadow: 0 2px 3px rgb(0 0 0 / 0.68);
+    }
+
+    .sequencer-help {
+      margin: 3px 0 0;
+      color: #8f7457;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .groove-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #9e805d;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+    }
+
+    .status-lamp {
+      width: 9px;
+      height: 9px;
+      background: #e3a352;
+      border: 1px solid #ffe0a0;
+      border-radius: 50%;
+      box-shadow: 0 0 10px rgb(236 164 75 / 0.62);
+    }
+
+    .step-grid {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(16, minmax(38px, 1fr));
+      gap: 7px;
+      padding: 13px 14px 15px;
+      background: rgb(11 7 4 / 0.44);
+      border: 1px solid rgb(255 219 155 / 0.2);
+      border-radius: 10px;
+      box-shadow:
+        inset 0 8px 20px rgb(0 0 0 / 0.36),
+        inset 0 1px 0 rgb(255 237 202 / 0.08);
+    }
+
+    .step-wrap {
+      display: grid;
+      grid-template-rows: 20px 1fr;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .step-number {
+      color: #8c7153;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .step {
+      position: relative;
+      height: 146px;
+      min-width: 0;
+      padding: 0;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgb(255 232 193 / 0.12), rgb(0 0 0 / 0.38)),
+        #2a1a11;
+      border: 1px solid rgb(255 219 157 / 0.25);
+      border-radius: 999px;
+      box-shadow:
+        inset 0 3px 8px rgb(255 237 205 / 0.07),
+        inset 0 -10px 18px rgb(0 0 0 / 0.34),
+        0 3px 7px rgb(0 0 0 / 0.36);
+      cursor: pointer;
+      transition: transform 110ms ease, border-color 110ms ease, filter 110ms ease;
+    }
+
+    .step::before {
+      content: "";
+      position: absolute;
+      inset: 7px;
+      background: rgb(10 7 4 / 0.34);
+      border: 1px solid rgb(255 224 173 / 0.08);
+      border-radius: inherit;
+    }
+
+    .step::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 15px;
+      width: 10px;
+      height: 10px;
+      background: #51351f;
+      border: 1px solid #6f4b2c;
+      border-radius: 50%;
+      box-shadow: 0 2px 5px rgb(0 0 0 / 0.5);
+      transform: translateX(-50%);
+    }
+
+    .step:hover,
+    .step:focus-visible {
+      border-color: rgb(255 220 157 / 0.55);
+      outline: none;
+      transform: translateY(-2px);
+    }
+
+    .step[aria-pressed="true"] {
+      background:
+        linear-gradient(180deg, rgb(255 245 214 / 0.4), rgb(129 70 29 / 0.48)),
+        #c4823f;
+      border-color: rgb(255 234 189 / 0.78);
+      box-shadow:
+        inset 0 2px 0 rgb(255 250 229 / 0.5),
+        inset 0 -12px 20px rgb(83 41 14 / 0.38),
+        0 0 0 2px rgb(229 156 71 / 0.16),
+        0 0 18px rgb(228 150 62 / 0.2);
+    }
+
+    .step[aria-pressed="true"]::before {
+      background: rgb(255 213 144 / 0.08);
+      border-color: rgb(255 245 220 / 0.15);
+    }
+
+    .step[aria-pressed="true"]::after {
+      background: #ffe0a0;
+      border-color: #fff0c9;
+      box-shadow: 0 0 12px rgb(255 196 105 / 0.92);
+    }
+
+    .beat-labels {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      padding: 8px 14px 0;
+      color: #765c43;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-align: center;
+    }
+
+    .clip-count-indicator {
+      position: absolute;
+      left: 50%;
+      bottom: 13px;
+      z-index: 2;
+      min-width: 58px;
+      padding: 4px 11px;
+      color: #a98962;
+      background: rgb(28 17 10 / 0.72);
+      border: 1px solid rgb(255 219 157 / 0.22);
+      border-radius: 999px;
+      box-shadow: inset 0 1px 0 rgb(255 242 211 / 0.08);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-align: center;
+      transform: translateX(-50%);
+    }
+
+    .template-workspace {
+      position: absolute;
+      inset: 78px 0 0;
+      z-index: 20;
+      padding: 18px 22px 22px;
+      background:
+        linear-gradient(180deg, rgb(69 37 17 / 0.12), rgb(24 12 6 / 0.24)),
+        url("../assets/skeuo/wood-panel.png") center / cover,
+        #714c2f;
+    }
+
+    .template-workspace[hidden] { display: none; }
+
+    .workspace-panel {
+      display: grid;
+      grid-template-rows: 46px minmax(0, 1fr);
+      height: 100%;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgb(255 225 174 / 0.04), rgb(0 0 0 / 0.2)),
+        url("../assets/skeuo/dark-grid-panel.png") center / cover,
+        #1b130e;
+      border: 1px solid rgb(255 221 160 / 0.28);
+      border-radius: 12px;
+      box-shadow:
+        inset 0 1px 0 rgb(255 244 214 / 0.12),
+        inset 0 -14px 28px rgb(0 0 0 / 0.34),
+        0 5px 14px rgb(0 0 0 / 0.32);
+    }
+
+    .workspace-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 16px 0 18px;
+      background:
+        linear-gradient(180deg, rgb(255 226 177 / 0.1), rgb(9 6 4 / 0.28)),
+        rgb(39 24 15 / 0.72);
+      border-bottom: 1px solid rgb(255 221 160 / 0.18);
+    }
+
+    .workspace-title {
+      margin: 0;
+      color: #ffe2ad;
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-size: 18px;
+      text-shadow: 0 2px 3px rgb(0 0 0 / 0.64);
+    }
+
+    .workspace-head-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .workspace-icon-button {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      flex: 0 0 36px;
+      padding: 0;
+      color: #2a170d;
+      background:
+        linear-gradient(180deg, rgb(255 230 172 / 0.68), rgb(117 74 35 / 0.48)),
+        url("../assets/skeuo/brass-panel.png") center / cover,
+        #a4733e;
+      border: 1px solid rgb(72 38 15 / 0.5);
+      border-radius: 9px;
+      box-shadow:
+        inset 0 1px 0 rgb(255 239 196 / 0.52),
+        inset 0 -10px 18px rgb(39 17 4 / 0.38),
+        0 4px 10px rgb(0 0 0 / 0.35);
+      cursor: pointer;
+      transition: filter 120ms ease, transform 120ms ease;
+    }
+
+    .workspace-icon-button:hover,
+    .workspace-icon-button:focus-visible {
+      filter: brightness(1.14);
+      outline: 2px solid rgb(255 226 174 / 0.58);
+      outline-offset: 2px;
+      transform: translateY(-1px);
+    }
+
+    .workspace-icon-button:active,
+    .workspace-icon-button.is-playing {
+      filter: brightness(0.88);
+      transform: translateY(1px);
+    }
+
+    .workspace-icon-button img {
+      width: 18px;
+      height: 18px;
+      pointer-events: none;
+    }
+
+    .workspace-preview-button {
+      width: 36px;
+      height: 36px;
+      flex-basis: 36px;
+      color: #261307;
+      border-radius: 50%;
+      box-shadow:
+        inset 0 1px 0 rgb(255 239 196 / 0.48),
+        inset 0 -7px 12px rgb(39 17 4 / 0.3),
+        0 2px 5px rgb(0 0 0 / 0.3);
+    }
+
+    .workspace-preview-button img {
+      width: 17px;
+      height: 17px;
+      margin-left: 2px;
+    }
+
+    .workspace-close-button {
+      background: url("../assets/skeuo/drum-close-button.png") center / cover, #a4733e;
+    }
+
+    .workspace-body {
+      display: grid;
+      grid-template-columns: 178px minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      column-gap: 24px;
+      row-gap: 20px;
+      min-height: 0;
+      padding: 20px 22px 18px;
+    }
+
+    .workspace-label {
+      align-self: center;
+      color: #c9aa7e;
+      font-size: 13px;
+      font-weight: 850;
+      line-height: 1.35;
+      text-shadow: 0 1px 2px rgb(0 0 0 / 0.7);
+    }
+
+    .workspace-label span {
+      display: block;
+      margin-top: 4px;
+      color: #795f47;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 8px;
+      font-weight: 900;
+      letter-spacing: 0.1em;
+    }
+
+    .progression-options {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      padding: 0;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+    }
+
+    .progression-option {
+      display: grid;
+      align-content: start;
+      gap: 9px;
+      height: 152px;
+      min-height: 152px;
+      padding: 12px;
+      color: #d9bd94;
+      background:
+        linear-gradient(180deg, rgb(255 225 176 / 0.12), rgb(10 6 4 / 0.42)),
+        #28180f;
+      border: 1px solid rgb(255 219 157 / 0.24);
+      border-radius: 10px;
+      box-shadow:
+        inset 0 1px 0 rgb(255 244 213 / 0.08),
+        0 4px 10px rgb(0 0 0 / 0.26);
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .progression-option:hover,
+    .progression-option:focus-visible {
+      border-color: rgb(255 225 170 / 0.56);
+      outline: none;
+    }
+
+    .progression-option[aria-pressed="true"] {
+      color: #f4d6aa;
+      background:
+        linear-gradient(180deg, rgb(255 226 181 / 0.2), rgb(15 8 4 / 0.42)),
+        #5c4436;
+      border-color: rgb(255 220 153 / 0.82);
+      box-shadow:
+        inset 0 1px 0 rgb(255 244 213 / 0.12),
+        0 0 0 2px rgb(229 154 69 / 0.26),
+        0 6px 14px rgb(0 0 0 / 0.34);
+    }
+
+    .progression-option-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .progression-option-name {
+      color: #f4d6aa;
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-size: 15px;
+      font-weight: 850;
+      text-shadow: 0 2px 3px rgb(0 0 0 / 0.68);
+    }
+
+    .progression-degree {
+      flex: 0 0 auto;
+      padding: 3px 7px;
+      color: #b99264;
+      background: rgb(10 7 4 / 0.66);
+      border-radius: 999px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 8px;
+      font-weight: 900;
+    }
+
+    .progression-chord-line {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      padding: 8px;
+      background: rgb(9 6 4 / 0.52);
+      border: 1px solid rgb(255 219 157 / 0.2);
+      border-radius: 7px;
+    }
+
+    .progression-chord {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      min-width: 42px;
+      height: 30px;
+      padding: 0;
+      box-sizing: border-box;
+      color: #f4d6a4;
+      background:
+        linear-gradient(180deg, rgb(255 222 169 / 0.14), rgb(14 8 5 / 0.46)),
+        #321e12;
+      border: 1px solid rgb(255 220 158 / 0.24);
+      border-radius: 7px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .progression-separator {
+      color: #8c6e50;
+      font-size: 10px;
+      font-weight: 900;
+    }
+
+    .progression-description {
+      color: #9d7e5c;
+      font-size: 9px;
+      line-height: 1.45;
+    }
+
+    .groove-options {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      align-content: start;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .groove-card {
+      display: grid;
+      gap: 10px;
+      height: 152px;
+      min-width: 0;
+      padding: 13px;
+      color: #d3b58b;
+      background:
+        linear-gradient(180deg, rgb(255 222 167 / 0.1), rgb(10 6 4 / 0.44)),
+        rgb(38 23 14 / 0.88);
+      border: 1px solid rgb(255 219 157 / 0.24);
+      border-radius: 10px;
+      box-shadow:
+        inset 0 1px 0 rgb(255 244 213 / 0.08),
+        0 4px 10px rgb(0 0 0 / 0.26);
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .groove-card:hover,
+    .groove-card:focus-visible {
+      border-color: rgb(255 225 170 / 0.56);
+      outline: none;
+    }
+
+    .groove-card[aria-pressed="true"] {
+      border-color: rgb(255 220 153 / 0.82);
+      box-shadow:
+        inset 0 1px 0 rgb(255 244 213 / 0.12),
+        0 0 0 2px rgb(229 154 69 / 0.26),
+        0 6px 14px rgb(0 0 0 / 0.34);
+    }
+
+    .groove-card-title {
+      color: #f4d4a2;
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-size: 14px;
+      font-weight: 850;
+      text-shadow: 0 2px 3px rgb(0 0 0 / 0.68);
+    }
+
+    .mini-groove {
+      display: grid;
+      grid-template-columns: repeat(16, minmax(0, 1fr));
+      gap: 3px;
+      height: 52px;
+      padding: 8px;
+      background: rgb(9 6 4 / 0.52);
+      border: 1px solid rgb(255 219 157 / 0.18);
+      border-radius: 7px;
+    }
+
+    .mini-step {
+      min-width: 0;
+      background: #3d2a1d;
+      border: 1px solid rgb(255 226 174 / 0.08);
+      border-radius: 3px;
+    }
+
+    .mini-step.on {
+      background: linear-gradient(180deg, #f7d6a1, #a16838);
+      border-color: rgb(255 239 204 / 0.48);
+      box-shadow: 0 0 6px rgb(224 147 66 / 0.24);
+    }
+
+    .groove-card-copy {
+      margin: 0;
+      color: #8f7457;
+      font-size: 9px;
+      line-height: 1.45;
+    }
+
+    .groove-card-meta {
+      color: #b28e65;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 8px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+    }
+
+    .workspace-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .apply-button {
+      min-width: 148px;
+      min-height: 38px;
+      padding: 0 16px;
+      color: #d9bd94;
+      background:
+        linear-gradient(180deg, rgb(255 225 174 / 0.15), rgb(10 6 4 / 0.44)),
+        #28180f;
+      border: 1px solid rgb(255 221 160 / 0.3);
+      border-radius: 9px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .apply-button.primary {
+      color: #29170c;
+      background: linear-gradient(180deg, #ffe2a8, #a46730);
+      border-color: rgb(255 237 198 / 0.72);
+      text-shadow: 0 1px 0 rgb(255 244 214 / 0.46);
+    }
+
+    .apply-button:hover,
+    .apply-button:focus-visible {
+      border-color: rgb(255 229 180 / 0.64);
+      outline: none;
+      transform: translateY(-1px);
+    }
+
+    .apply-toast {
+      position: absolute;
+      right: 38px;
+      bottom: 32px;
+      z-index: 24;
+      padding: 10px 14px;
+      color: #2a170c;
+      background: #f1c47f;
+      border: 1px solid #ffe7bc;
+      border-radius: 8px;
+      box-shadow: 0 8px 22px rgb(0 0 0 / 0.4);
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .apply-toast[hidden] { display: none; }
+
+    @media (max-width: 1180px) {
+      .hardware-button { padding-inline: 10px; font-size: 11px; }
+      .summary-left { width: 190px; min-width: 170px; }
+      .editor-body { padding-inline: 54px; }
+      .step-grid { gap: 5px; }
+      .workspace-body { grid-template-columns: 156px minmax(0, 1fr); }
+      .groove-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+
+    html.capture body {
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    html.capture .stage {
+      display: block;
+      width: 621px;
+      min-height: 0;
+      padding: 8px;
+    }
+
+    html.capture .editor {
+      width: 1060px;
+      min-height: 610px;
+      zoom: 0.57;
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <section class="editor" aria-label="Chord Editor rhythm concept">
+      <header class="editor-head">
+        <div class="identity">
+          <img class="identity-icon" src="../assets/skeuo/clip-chord.png" alt="" />
+          <span class="track-label">Chord</span>
+          <span class="clip-name">Chord 01</span>
+          <span class="editor-meta">CHORD EDITOR · BAR 01</span>
+        </div>
+
+        <div class="tools">
+          <button class="hardware-button primary" id="openTemplateWorkspace" type="button" aria-expanded="false">选择和弦模板与律动</button>
+          <button class="hardware-button danger" id="clearBar" type="button">清空本小节</button>
+          <button class="close-button" type="button" aria-label="关闭编辑器">关闭</button>
+        </div>
+      </header>
+
+      <div class="editor-body">
+        <button class="clip-page-button previous" id="previousClip" type="button" aria-label="前一个 Clip" disabled>上一<br />Clip</button>
+        <button class="clip-page-button next" id="nextClip" type="button" aria-label="后一个 Clip">下一<br />Clip</button>
+        <section class="rhythm-panel">
+          <div class="summary-row">
+            <div class="summary-left">
+              <div class="progression-info">
+                <span class="eyebrow">Progression</span>
+                <strong class="progression-name" id="progressionName">Doo-Wop</strong>
+                <span class="progression-chords" id="progressionChords">C · Am · F · G</span>
+              </div>
+              <div class="chord-readout">
+                <div class="readout-copy">
+                  <span class="readout-label">当前小节主和弦</span>
+                  <span class="readout-sub">BAR 01 · ROOT CHORD</span>
+                </div>
+                <span class="chord-badge" id="currentChord">C</span>
+              </div>
+            </div>
+            <div class="chord-readout next-chord-readout">
+              <div class="readout-copy">
+                <span class="readout-label">下一小节主和弦</span>
+                <span class="readout-sub">BAR 02 · NEXT CHORD</span>
+              </div>
+              <span class="chord-badge" id="nextChord">Am</span>
+            </div>
+          </div>
+
+          <div class="sequencer-head">
+            <div>
+              <h1 class="sequencer-title">本小节弹奏律动</h1>
+              <p class="sequencer-help">点击 16 个步进开关，决定这个和弦在一小节里的触发位置</p>
+            </div>
+            <div class="groove-status">
+              <span class="status-lamp" aria-hidden="true"></span>
+              <span id="grooveName">GROOVE · 八分律动</span>
+            </div>
+          </div>
+
+          <div class="step-grid" id="stepGrid" aria-label="16 step chord groove"></div>
+          <div class="beat-labels" aria-hidden="true">
+            <span>BEAT 1</span>
+            <span>BEAT 2</span>
+            <span>BEAT 3</span>
+            <span>BEAT 4</span>
+          </div>
+          <div class="clip-count-indicator" id="clipCount" aria-live="polite">0 / 8</div>
+        </section>
+      </div>
+
+      <section class="template-workspace" id="templateWorkspace" role="dialog" aria-modal="true" aria-labelledby="workspaceTitle" hidden>
+        <div class="workspace-panel">
+          <header class="workspace-head">
+            <h2 class="workspace-title" id="workspaceTitle">和弦模板与弹奏律动</h2>
+            <div class="workspace-head-actions">
+              <button class="workspace-icon-button workspace-preview-button" id="previewSelectedProgression" type="button" aria-label="试听所选和弦" title="试听所选和弦" aria-pressed="false">
+                <img src="../assets/skeuo/icon-play.svg" alt="" aria-hidden="true" />
+              </button>
+              <button class="workspace-icon-button workspace-close-button" id="closeWorkspace" type="button" aria-label="关闭二级菜单" title="关闭二级菜单">
+                <img src="../assets/skeuo/icon-x.svg" alt="" aria-hidden="true" />
+              </button>
+            </div>
+          </header>
+
+          <div class="workspace-body">
+            <div class="workspace-label">
+              选择和弦模板
+              <span>CHORD PROGRESSION</span>
+            </div>
+            <div class="progression-options" aria-label="选择和弦模板">
+              <button class="progression-option" type="button" aria-pressed="false" data-name="轴心" data-chords="C · G · Dm · F" data-current="C" data-next="G">
+                <span class="progression-option-head">
+                  <span class="progression-option-name">轴心</span>
+                  <span class="progression-degree">I-V-vi-IV</span>
+                </span>
+                <span class="progression-chord-line">
+                  <span class="progression-chord">C</span><span class="progression-separator">–</span>
+                  <span class="progression-chord">G</span><span class="progression-separator">–</span>
+                  <span class="progression-chord">Dm</span><span class="progression-separator">–</span>
+                  <span class="progression-chord">F</span>
+                </span>
+                <span class="progression-description">流行音乐中最具代表性的四和弦进行之一，适合循环段落。</span>
+              </button>
+
+              <button class="progression-option" type="button" aria-pressed="true" data-name="Doo-Wop" data-chords="C · Am · F · G" data-current="C" data-next="Am">
+                <span class="progression-option-head">
+                  <span class="progression-option-name">Doo-Wop</span>
+                  <span class="progression-degree">I-vi-IV-V</span>
+                </span>
+                <span class="progression-chord-line">
+                  <span class="progression-chord">C</span><span class="progression-separator">–</span>
+                  <span class="progression-chord">Am</span><span class="progression-separator">–</span>
+                  <span class="progression-chord">F</span><span class="progression-separator">–</span>
+                  <span class="progression-chord">G</span>
+                </span>
+                <span class="progression-description">清晰的离家与归家旅程，适合抒情流行与复古段落。</span>
+              </button>
+
+              <button class="progression-option" type="button" aria-pressed="false" data-name="安达卢西亚" data-chords="Am · G · F · E" data-current="Am" data-next="G">
+                <span class="progression-option-head">
+                  <span class="progression-option-name">安达卢西亚</span>
+                  <span class="progression-degree">i-VII-VI-V</span>
+                </span>
+                <span class="progression-chord-line">
+                  <span class="progression-chord">Am</span><span class="progression-separator">–</span>
+                  <span class="progression-chord">G</span><span class="progression-separator">–</span>
+                  <span class="progression-chord">F</span><span class="progression-separator">–</span>
+                  <span class="progression-chord">E</span>
+                </span>
+                <span class="progression-description">下行级进带来忧郁与张力，适合西语流行和影视感段落。</span>
+              </button>
+            </div>
+
+            <div class="workspace-label">
+              选择和弦弹奏律动模板
+              <span>CHORD GROOVE</span>
+            </div>
+            <div class="groove-options" aria-label="选择和弦弹奏律动模板">
+              <button class="groove-card" type="button" aria-pressed="true" data-groove-index="0">
+                <span class="groove-card-title">柱式音型基础律动</span>
+                <span class="mini-groove" data-pattern="0" aria-hidden="true"></span>
+                <span class="groove-card-copy">每小节第一拍触发一次完整和弦，保持稳定的柱式音型。</span>
+                <span class="groove-card-meta">1 HIT / BAR · DEFAULT</span>
+              </button>
+              <button class="groove-card" type="button" aria-pressed="false" data-groove-index="2">
+                <span class="groove-card-title">柱式音型切分律动</span>
+                <span class="mini-groove" data-pattern="0,6,12" aria-hidden="true"></span>
+                <span class="groove-card-copy">在第 1、7、13 步触发完整和弦，形成清晰的切分重心。</span>
+                <span class="groove-card-meta">3 HITS / BAR</span>
+              </button>
+            </div>
+
+            <div aria-hidden="true"></div>
+            <div class="workspace-actions">
+              <button class="apply-button primary" id="applyToBar" type="button">应用到本小节</button>
+              <button class="apply-button" id="applyGlobally" type="button">应用到全局</button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div class="apply-toast" id="applyToast" role="status" hidden></div>
+    </section>
+  </main>
+
+  <script>
+    const groovePresets = [
+      { name: "柱式音型基础律动", active: [0] },
+      { name: "四分音符", active: [0, 4, 8, 12] },
+      { name: "柱式音型切分律动", active: [0, 6, 12] },
+    ];
+
+    const stepGrid = document.querySelector("#stepGrid");
+    const grooveName = document.querySelector("#grooveName");
+    const templateWorkspace = document.querySelector("#templateWorkspace");
+    const templateTrigger = document.querySelector("#openTemplateWorkspace");
+    const applyToast = document.querySelector("#applyToast");
+    const progressionOptions = [...document.querySelectorAll(".progression-option")];
+    const grooveCards = [...document.querySelectorAll(".groove-card")];
+    let selectedProgression = progressionOptions.find((option) => option.getAttribute("aria-pressed") === "true");
+    let grooveIndex = 0;
+    let toastTimer = null;
+    let previewTimer = null;
+    let clipIndex = 0;
+    const totalClips = 8;
+
+    function buildSteps() {
+      for (let index = 0; index < 16; index += 1) {
+        const wrap = document.createElement("div");
+        wrap.className = "step-wrap";
+
+        const number = document.createElement("span");
+        number.className = "step-number";
+        number.textContent = String(index + 1).padStart(2, "0");
+
+        const step = document.createElement("button");
+        step.className = "step";
+        step.type = "button";
+        step.setAttribute("aria-label", `切换第 ${index + 1} 步`);
+        step.setAttribute("aria-pressed", "false");
+        step.addEventListener("click", () => {
+          step.setAttribute("aria-pressed", String(step.getAttribute("aria-pressed") !== "true"));
+        });
+
+        wrap.append(number, step);
+        stepGrid.append(wrap);
+      }
+    }
+
+    function applyGroove(preset) {
+      const steps = [...document.querySelectorAll(".step")];
+      steps.forEach((step, index) => {
+        step.setAttribute("aria-pressed", String(preset.active.includes(index)));
+      });
+      grooveName.textContent = `GROOVE · ${preset.name}`;
+    }
+
+    function buildMiniGrooves() {
+      document.querySelectorAll(".mini-groove").forEach((preview) => {
+        const activeSteps = preview.dataset.pattern.split(",").map(Number);
+        for (let index = 0; index < 16; index += 1) {
+          const step = document.createElement("span");
+          step.className = `mini-step${activeSteps.includes(index) ? " on" : ""}`;
+          preview.append(step);
+        }
+      });
+    }
+
+    function updateClipNavigation() {
+      document.querySelector("#clipCount").textContent = `${clipIndex} / ${totalClips}`;
+      document.querySelector("#previousClip").disabled = clipIndex === 0;
+      document.querySelector("#nextClip").disabled = clipIndex === totalClips;
+    }
+
+    function closeTemplateWorkspace() {
+      templateWorkspace.hidden = true;
+      templateTrigger.setAttribute("aria-expanded", "false");
+    }
+
+    function showApplyToast(message) {
+      window.clearTimeout(toastTimer);
+      applyToast.textContent = message;
+      applyToast.hidden = false;
+      toastTimer = window.setTimeout(() => {
+        applyToast.hidden = true;
+      }, 1400);
+    }
+
+    function applyTemplateSelection(scopeLabel) {
+      document.querySelector("#progressionName").textContent = selectedProgression.dataset.name;
+      document.querySelector("#progressionChords").textContent = selectedProgression.dataset.chords;
+      document.querySelector("#currentChord").textContent = selectedProgression.dataset.current;
+      document.querySelector("#nextChord").textContent = selectedProgression.dataset.next;
+      applyGroove(groovePresets[grooveIndex]);
+      closeTemplateWorkspace();
+      showApplyToast(`已应用到${scopeLabel}`);
+    }
+
+    buildSteps();
+    buildMiniGrooves();
+    applyGroove(groovePresets[0]);
+    updateClipNavigation();
+
+    document.querySelector("#previousClip").addEventListener("click", () => {
+      clipIndex = Math.max(0, clipIndex - 1);
+      updateClipNavigation();
+    });
+
+    document.querySelector("#nextClip").addEventListener("click", () => {
+      clipIndex = Math.min(totalClips, clipIndex + 1);
+      updateClipNavigation();
+    });
+
+    document.querySelector("#clearBar").addEventListener("click", () => {
+      document.querySelectorAll(".step").forEach((step) => step.setAttribute("aria-pressed", "false"));
+      grooveName.textContent = "GROOVE · 自定义空白";
+    });
+
+    templateTrigger.addEventListener("click", () => {
+      templateWorkspace.hidden = false;
+      templateTrigger.setAttribute("aria-expanded", "true");
+    });
+
+    document.querySelector("#closeWorkspace").addEventListener("click", closeTemplateWorkspace);
+
+    progressionOptions.forEach((option) => {
+      option.addEventListener("click", () => {
+        progressionOptions.forEach((candidate) => candidate.setAttribute("aria-pressed", "false"));
+        option.setAttribute("aria-pressed", "true");
+        selectedProgression = option;
+      });
+    });
+
+    grooveCards.forEach((card) => {
+      card.addEventListener("click", () => {
+        grooveCards.forEach((candidate) => candidate.setAttribute("aria-pressed", "false"));
+        card.setAttribute("aria-pressed", "true");
+        grooveIndex = Number(card.dataset.grooveIndex);
+      });
+    });
+
+    document.querySelector("#previewSelectedProgression").addEventListener("click", (event) => {
+      const button = event.currentTarget;
+      window.clearTimeout(previewTimer);
+      button.setAttribute("aria-pressed", "true");
+      button.setAttribute("aria-label", `正在试听 ${selectedProgression.dataset.name}`);
+      button.classList.add("is-playing");
+      showApplyToast(`正在试听 ${selectedProgression.dataset.name}`);
+      previewTimer = window.setTimeout(() => {
+        button.setAttribute("aria-pressed", "false");
+        button.setAttribute("aria-label", "试听所选和弦");
+        button.classList.remove("is-playing");
+      }, 900);
+    });
+
+    document.querySelector("#applyToBar").addEventListener("click", () => applyTemplateSelection("本小节"));
+    document.querySelector("#applyGlobally").addEventListener("click", () => applyTemplateSelection("全局"));
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeTemplateWorkspace();
+    });
+  </script>
+</body>
+</html>

@@ -93,7 +93,7 @@ test('createUiAudioDispatcher connects transport commands and drums preview audi
     bar: 0,
     step: 0,
     instrument: 'kick',
-    previewInstruments: ['kick', 'hihat'],
+    preview: true,
   });
   await dispatch({ type: 'transport.stop' });
 
@@ -111,7 +111,7 @@ test('createUiAudioDispatcher connects transport commands and drums preview audi
   assert.equal(store.getState().currentBar, 1);
   assert.equal(store.getState().currentStep, 5);
   assert.deepEqual(audioCalls.slice(1), [
-    ['preview', ['kick', 'hihat']],
+    ['preview', 'kick'],
     ['stop'],
   ]);
 });
@@ -161,18 +161,20 @@ test('createUiAudioDispatcher previews melody key presses without recording note
   const dispatch = createUiAudioDispatcher({
     store,
     audio: {
-      triggerMelodyNote: (note, duration) => audioCalls.push(['melody', note, duration]),
+      triggerMelodyInputOneShot: (note) => (
+        audioCalls.push(['melody-input-one-shot', note])
+      ),
     },
   });
 
-  await dispatch({ type: 'melody.noteOn', note: 'C4' });
-  await dispatch({ type: 'melody.noteOff', note: 'C4' });
+  await dispatch({ type: 'melody.noteOn', inputId: 'keyboard:KeyA', note: 'C4', source: 'keyboard' });
+  await dispatch({ type: 'melody.noteOff', inputId: 'keyboard:KeyA', note: 'C4' });
 
   assert.equal(store.getState().matrix.melody[1][5], null);
   assert.deepEqual(store.calls, []);
   assert.equal(store.getState().currentStep, 5);
   assert.deepEqual(audioCalls, [
-    ['melody', 'C4', '16n'],
+    ['melody-input-one-shot', 'C4'],
   ]);
 });
 
@@ -188,7 +190,7 @@ test('createUiAudioDispatcher does not fall back to recording melody notes witho
     audio: {},
   });
 
-  await dispatch({ type: 'melody.noteOn', note: 'D4' });
+  await dispatch({ type: 'melody.noteOn', inputId: 'keyboard:KeyS', note: 'D4', source: 'keyboard' });
 
   assert.deepEqual(store.calls, []);
   assert.equal(store.getState().matrix.melody[0][3], null);

@@ -20,25 +20,33 @@ function TrackBarPager({
   return (
     <div className={shellClassName} data-type={trackId}>
       <button
-        aria-label="上一小节"
+        aria-label="切换到上一个 Clip"
         className="track-page-btn previous"
         disabled={!canPageBars}
         onClick={onPreviousBar}
-        title="上一小节"
+        title="切换到上一个 Clip"
         type="button"
       >
         {renderIcon(ChevronLeft)}
+        <span className="track-page-btn-label" aria-hidden="true">
+          <span>上一个</span>
+          <span className="track-page-btn-kind">CLIP</span>
+        </span>
       </button>
       <div className={contentClassNames}>{children}</div>
       <button
-        aria-label="下一小节"
+        aria-label="切换到下一个 Clip"
         className="track-page-btn next"
         disabled={!canPageBars}
         onClick={onNextBar}
-        title="下一小节"
+        title="切换到下一个 Clip"
         type="button"
       >
         {renderIcon(ChevronRight)}
+        <span className="track-page-btn-label" aria-hidden="true">
+          <span>下一个</span>
+          <span className="track-page-btn-kind">CLIP</span>
+        </span>
       </button>
     </div>
   );

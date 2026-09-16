@@ -6,9 +6,12 @@ import {
   BASS_GROOVE_TEMPLATES,
   clearBassBar,
   createBassPreviewEvents,
+  getBassCellToggleResult,
+  hasExistingBassClipContent,
   isBassCellActive,
   toggleBassCell,
 } from '../src/app/bassActions.js';
+import { getBassGroovePreviewSteps } from '../src/app/bassGroovePreview.js';
 import { BASS_NOTES } from '../src/data/bassNotes.js';
 import {
   createChordCell,
@@ -60,6 +63,26 @@ test('toggleBassCell writes replaces and clears one bass note per sixteenth step
   assert.equal(cleared.bass[2][5], null);
 });
 
+test('bass cell toggle result auditions additions and replacements but not removals', () => {
+  const matrix = createInitialMatrix();
+
+  const added = getBassCellToggleResult(matrix, 2, 5, 'C1');
+  assert.equal(added.auditionNote, 'C1');
+  assert.deepEqual(added.nextMatrix.bass[2][5], {
+    type: 'bass',
+    note: 'C1',
+    duration: '16n',
+  });
+
+  const replaced = getBassCellToggleResult(added.nextMatrix, 2, 5, 'F#0');
+  assert.equal(replaced.auditionNote, 'F#0');
+  assert.equal(replaced.nextMatrix.bass[2][5].note, 'F#0');
+
+  const removed = getBassCellToggleResult(replaced.nextMatrix, 2, 5, 'F#0');
+  assert.equal(removed.auditionNote, null);
+  assert.equal(removed.nextMatrix.bass[2][5], null);
+});
+
 test('clearBassBar clears only the selected bass bar', () => {
   const matrix = createInitialMatrix();
   matrix.bass[1][0] = { type: 'bass', note: 'C1', duration: '16n' };
@@ -90,6 +113,17 @@ test('bass groove templates match the three reference picker options', () => {
     '8n',
     '16n',
   ]);
+});
+
+test('bass groove picker preview expands eighth notes onto sixteenth cells', () => {
+  assert.deepEqual(
+    BASS_GROOVE_TEMPLATES.map((template) => getBassGroovePreviewSteps(template)),
+    [
+      [0, 1, 4, 5, 8, 9, 12, 13],
+      [0, 1, 4, 5, 10, 11, 14, 15],
+      [0, 3, 6, 8, 12],
+    ],
+  );
 });
 
 test('applyBassGrooveTemplateToBar writes current bass clip from same-beat chord roots only', () => {
@@ -201,6 +235,24 @@ test('applyBassGrooveTemplateToExistingClips is a no-op without bass clips or a 
 
   assert.equal(applyBassGrooveTemplateToExistingClips(matrix, noBassClips, 'bass-8th-basic'), matrix);
   assert.equal(applyBassGrooveTemplateToExistingClips(matrix, noBassClips, 'missing'), matrix);
+});
+
+test('hasExistingBassClipContent only reports notes inside existing Bass clips', () => {
+  const matrix = createInitialMatrix();
+  const clips = createClips(
+    { id: 'bass-bar-0', trackId: 'bass', bar: 0 },
+    { id: 'chord-bar-1', trackId: 'chord', bar: 1 },
+  );
+
+  matrix.bass[2][0] = { type: 'bass', note: 'D1', duration: '16n' };
+  matrix.chord[1][0] = createChordCell('C');
+  assert.equal(hasExistingBassClipContent(matrix, clips), false);
+
+  matrix.bass[0][4] = { type: 'bass', note: 'G0', duration: '16n' };
+  assert.equal(hasExistingBassClipContent(matrix, clips), true);
+
+  matrix.bass[0][4] = { note: 'A0' };
+  assert.equal(hasExistingBassClipContent(matrix, clips), true);
 });
 
 test('bass groove templates fall back to the first bar chord and then C1', () => {

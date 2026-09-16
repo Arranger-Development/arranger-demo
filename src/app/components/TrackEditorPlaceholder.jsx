@@ -6,6 +6,8 @@ import { TrackBarPager } from './TrackBarPager.jsx';
 
 function TrackEditorPlaceholder({
   activeTrackId,
+  activeTrackName,
+  activeTrackType,
   canPageBars = false,
   clipName,
   onNextBar = () => {},
@@ -17,10 +19,10 @@ function TrackEditorPlaceholder({
       <header className="editor-head">
         <div className="editor-left">
           <div className="clip-chip">
-            {renderIcon(TRACK_ICONS[activeTrackId] ?? Music)}
+            {renderIcon(TRACK_ICONS[activeTrackType] ?? Music)}
           </div>
           <div className="clip-title">
-            <div className="crumb">Track · Phrase</div>
+            <div className="crumb">{activeTrackName ?? 'Track'} · Phrase</div>
             {createElement(ClipNameInput, { clipName, onRenameClip })}
           </div>
         </div>

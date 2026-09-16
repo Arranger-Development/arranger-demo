@@ -525,6 +525,17 @@ test('hasExistingChordClipContent only reports content in existing chord clips',
   matrix.drums[1][0] = { instruments: ['kick'] };
   assert.equal(hasExistingChordClipContent(matrix, clips), false);
 
+  matrix.chord[0][0] = {
+    type: 'chord-source',
+    label: 'C',
+    sourceChordLabel: 'C',
+  };
+  assert.equal(hasExistingChordClipContent(matrix, clips), false);
+
+  matrix.chord[0][6] = { type: 'notes', notes: ['E4'], label: 'E4' };
+  assert.equal(hasExistingChordClipContent(matrix, clips), true);
+  matrix.chord[0][6] = null;
+
   matrix.chord[3][14] = { type: 'chord', label: 'C/B', grooveTemplateId: 'passing-shortcut' };
   assert.equal(hasExistingChordClipContent(matrix, clips), true);
 });

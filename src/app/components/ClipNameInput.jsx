@@ -3,6 +3,7 @@ import { renderIcon } from './icons.js';
 
 function ClipNameInput({
   clipName = '',
+  disabled = false,
   onRenameClip = () => {},
 }) {
   return (
@@ -12,6 +13,7 @@ function ClipNameInput({
         type="text"
         aria-label="Clip name"
         value={clipName}
+        disabled={disabled}
         onChange={(event) => onRenameClip(event.target.value)}
       />
       <span className="clip-name-edit-icon" aria-hidden="true">

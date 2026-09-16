@@ -1,0 +1,104 @@
+name: Deploy Development preview
+
+on:
+  push:
+    branches: [main, release/development-pages]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: development-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'Arranger-Development/arranger-demo' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_sha: ${{ steps.release.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: source/package-lock.json
+      - name: Test and build main
+        working-directory: source
+        run: |
+          npm ci
+          npm test
+          npm run lint
+          npm run build
+          python3 .github/scripts/check-pages-artifact.py dist arranger-demo
+      - uses: actions/checkout@v4
+        with:
+          ref: release/development-pages
+          path: release
+      - name: Prepare release files
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          python3 source/.github/scripts/prepare-pages-release.py source/dist release "$SOURCE_SHA"
+      - name: Update release branch
+        id: release
+        working-directory: release
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add --all
+          if ! git diff --cached --quiet; then
+            git commit -m "release(pages): preview main $SOURCE_SHA"
+            git push origin HEAD:release/development-pages
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: build
+    if: >-
+      always() && !cancelled() && github.repository == 'Arranger-Development/arranger-demo' &&
+      (needs.build.result == 'success' || github.ref == 'refs/heads/release/development-pages')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout trusted release checks
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: tooling
+          persist-credentials: false
+      - name: Checkout exact release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build.outputs.release_sha || github.sha }}
+          path: release
+          persist-credentials: false
+      - name: Validate release artifact
+        run: |
+          mkdir dist
+          git -C release archive HEAD | tar -x -C dist
+          python3 tooling/.github/scripts/check-pages-artifact.py dist arranger-demo
+          echo "Development release: $(git -C release rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          echo 'External demo is unchanged. Publish only after user acceptance.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - name: Deploy Development Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

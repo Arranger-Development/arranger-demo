@@ -62,7 +62,6 @@ test('directory checkpoint for bass prepares drums and chord while leaving bass 
   assert.equal(checkpoint.appState.selectedClipId, null);
   assert.equal(checkpoint.tutorialProgress.chordTrackClipsFilled, true);
   assert.equal(checkpoint.tutorialProgress.chordTemplateSelected, true);
-  assert.equal(checkpoint.tutorialProgress.chordGrooveSelected, true);
   assert.equal(checkpoint.tutorialProgress.bassTrackClipsFilled, false);
 });
 

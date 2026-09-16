@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chord Editor visual comparison</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      color: #ebd8ba;
+      background: #17110d;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+    main {
+      display: grid;
+      gap: 24px;
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+    figure {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 12px;
+      background: #241a14;
+      border: 1px solid #5b4535;
+      border-radius: 12px;
+    }
+    figcaption {
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+    .visual {
+      display: block;
+      width: 100%;
+      background: white;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: contain;
+      border-radius: 7px;
+    }
+    .visual.reference {
+      aspect-ratio: 1822 / 838;
+      background-image: url("./chord-editor-rhythm-reference.png");
+    }
+    .visual.implementation {
+      aspect-ratio: 1280 / 720;
+      background-image: url("./chord-editor-rhythm-implementation.png");
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <figure>
+      <figcaption>结构参考：顶部操作、进行摘要、当前/下一和弦、16 步槽位</figcaption>
+      <div class="visual reference" role="img" aria-label="参考结构"></div>
+    </figure>
+    <figure>
+      <figcaption>实现：Project Arranger 暖色拟物硬件风格</figcaption>
+      <div class="visual implementation" role="img" aria-label="HTML 实现"></div>
+    </figure>
+  </main>
+</body>
+</html>

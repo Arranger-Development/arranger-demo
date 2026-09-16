@@ -1,12 +1,17 @@
-import { STEPS_PER_BAR, TOTAL_BARS } from '../domain/musicConstants.js';
+import { getMatrixBars, MAX_PROJECT_BARS } from '../domain/projectLength.js';
+import { STEPS_PER_BAR } from '../domain/musicConstants.js';
 import { createDrumsCell } from '../domain/drumsCells.js';
+import {
+  getDrumTemplate,
+  getDrumTemplateHitFeel,
+} from '../data/drumStyleTemplates.js';
+import { hasExistingTrackClipContent } from './trackContent.js';
 
-const BASIC_DRUMS_STEPS = Object.freeze([
-  Object.freeze({ step: 0, instruments: Object.freeze(['kick', 'hihat']) }),
-  Object.freeze({ step: 4, instruments: Object.freeze(['hihat']) }),
-  Object.freeze({ step: 8, instruments: Object.freeze(['snare', 'hihat']) }),
-  Object.freeze({ step: 12, instruments: Object.freeze(['hihat']) }),
-]);
+const LEGACY_BASIC_DRUMS_HITS = Object.freeze({
+  hihat: Object.freeze([0, 4, 8, 12]),
+  kick: Object.freeze([0]),
+  snare: Object.freeze([8]),
+});
 
 function createCell(instruments) {
   return createDrumsCell(instruments);
@@ -16,43 +21,98 @@ function createEmptyDrumsBar() {
   return Array.from({ length: STEPS_PER_BAR }, () => null);
 }
 
-function createBasicDrumsBar() {
-  const bar = createEmptyDrumsBar();
+function createDrumsBarFromTemplate(templateId) {
+  const template = getDrumTemplate(templateId);
+  if (!template) return null;
 
-  for (const event of BASIC_DRUMS_STEPS) {
-    bar[event.step] = createCell(event.instruments);
+  const bar = createEmptyDrumsBar();
+  const instrumentsByStep = Array.from({ length: STEPS_PER_BAR }, () => []);
+  const timingOffsetsByStep = Array.from({ length: STEPS_PER_BAR }, () => ({}));
+  const velocitiesByStep = Array.from({ length: STEPS_PER_BAR }, () => ({}));
+  for (const [instrument, steps] of Object.entries(template.hits)) {
+    steps.forEach((step) => {
+      instrumentsByStep[step].push(instrument);
+      const feel = getDrumTemplateHitFeel(template, instrument, step);
+      timingOffsetsByStep[step][instrument] = feel.timingOffset;
+      velocitiesByStep[step][instrument] = feel.velocity;
+    });
+  }
+  instrumentsByStep.forEach((instruments, step) => {
+    if (instruments.length) {
+      bar[step] = createDrumsCell(instruments, {
+        timingOffsets: timingOffsetsByStep[step],
+        velocities: velocitiesByStep[step],
+      });
+    }
+  });
+  return bar;
+}
+
+function createDrumTemplatePreviewEvents(templateId) {
+  const template = getDrumTemplate(templateId);
+  if (!template) return [];
+
+  const instrumentsByStep = Array.from({ length: STEPS_PER_BAR }, () => []);
+  for (const [instrument, steps] of Object.entries(template.hits)) {
+    steps.forEach((step) => instrumentsByStep[step].push(instrument));
   }
 
+  return instrumentsByStep.flatMap((instruments, step) => {
+    if (!instruments.length) return [];
+    const cell = createDrumsCell(instruments, {
+      timingOffsets: Object.fromEntries(instruments.map((instrument) => (
+        [instrument, getDrumTemplateHitFeel(template, instrument, step).timingOffset]
+      ))),
+      velocities: Object.fromEntries(instruments.map((instrument) => (
+        [instrument, getDrumTemplateHitFeel(template, instrument, step).velocity]
+      ))),
+    });
+
+    return [{
+      instruments: cell.instruments,
+      step,
+      timingOffsets: cell.timingOffsets,
+      velocities: cell.velocities,
+    }];
+  });
+}
+
+function createBasicDrumsBar() {
+  const bar = createEmptyDrumsBar();
+  for (const [instrument, steps] of Object.entries(LEGACY_BASIC_DRUMS_HITS)) {
+    steps.forEach((step) => {
+      bar[step] = createCell([
+        ...(bar[step]?.instruments ?? []),
+        instrument,
+      ]);
+    });
+  }
   return bar;
 }
 
 function createBasicDrumsBarWithoutKick() {
-  const bar = createEmptyDrumsBar();
-
-  for (const event of BASIC_DRUMS_STEPS) {
-    const instruments = event.instruments.filter((instrument) => instrument !== 'kick');
-    bar[event.step] = instruments.length ? createCell(instruments) : null;
-  }
-
-  return bar;
+  return createBasicDrumsBar().map((cell) => {
+    const instruments = cell?.instruments?.filter((instrument) => instrument !== 'kick') ?? [];
+    return instruments.length ? createCell(instruments) : null;
+  });
 }
 
 function createDefaultDrumsPattern() {
-  return BASIC_DRUMS_STEPS.flatMap((event) => (
-    event.instruments.map((instrument) => ({
+  return Object.entries(LEGACY_BASIC_DRUMS_HITS).flatMap(([instrument, steps]) => (
+    steps.map((step) => ({
       bar: 0,
-      step: event.step,
+      step,
       instrument,
     }))
   ));
 }
 
-function isValidBarIndex(barIndex) {
-  return Number.isInteger(barIndex) && barIndex >= 0 && barIndex < TOTAL_BARS;
+function isValidBarIndex(barIndex, totalBars = MAX_PROJECT_BARS) {
+  return Number.isInteger(barIndex) && barIndex >= 0 && barIndex < totalBars;
 }
 
 function replaceDrumsBar(matrix, barIndex, bar) {
-  if (!matrix?.drums || !isValidBarIndex(barIndex)) return matrix;
+  if (!matrix?.drums || !isValidBarIndex(barIndex, getMatrixBars(matrix))) return matrix;
 
   const nextDrums = [...matrix.drums];
   nextDrums[barIndex] = bar;
@@ -67,6 +127,12 @@ function applyBasicDrumsBar(matrix, barIndex) {
   return replaceDrumsBar(matrix, barIndex, createBasicDrumsBar());
 }
 
+function applyDrumsTemplateToBar(matrix, barIndex, templateId) {
+  const bar = createDrumsBarFromTemplate(templateId);
+  if (!bar) return matrix;
+  return replaceDrumsBar(matrix, barIndex, bar);
+}
+
 function getDrumsClipBarIndexes(clips) {
   const ids = clips?.ids ?? [];
   const byId = clips?.byId ?? {};
@@ -78,15 +144,31 @@ function getDrumsClipBarIndexes(clips) {
   return [...new Set(barIndexes)].sort((left, right) => left - right);
 }
 
-function applyBasicDrumsAllBars(matrix, barIndexes = Array.from({ length: TOTAL_BARS }, (_, index) => index)) {
+function applyBasicDrumsAllBars(matrix, barIndexes = Array.from({ length: getMatrixBars(matrix) }, (_, index) => index)) {
   if (!matrix?.drums) return matrix;
 
-  const targetBars = new Set(barIndexes.filter(isValidBarIndex));
+  const targetBars = new Set(barIndexes.filter((bar) => isValidBarIndex(bar, getMatrixBars(matrix))));
 
   return {
     ...matrix,
-    drums: Array.from({ length: TOTAL_BARS }, (_, barIndex) => (
+    drums: Array.from({ length: getMatrixBars(matrix) }, (_, barIndex) => (
       targetBars.has(barIndex) ? createBasicDrumsBar() : createEmptyDrumsBar()
+    )),
+  };
+}
+
+function applyDrumsTemplateToBars(matrix, barIndexes, templateId) {
+  if (!matrix?.drums) return matrix;
+  const template = getDrumTemplate(templateId);
+  if (!template) return matrix;
+
+  const targetBars = new Set((barIndexes ?? []).filter((bar) => isValidBarIndex(bar, getMatrixBars(matrix))));
+  if (!targetBars.size) return matrix;
+
+  return {
+    ...matrix,
+    drums: matrix.drums.map((bar, barIndex) => (
+      targetBars.has(barIndex) ? createDrumsBarFromTemplate(template.id) : bar
     )),
   };
 }
@@ -95,13 +177,22 @@ function clearDrumsBar(matrix, barIndex) {
   return replaceDrumsBar(matrix, barIndex, createEmptyDrumsBar());
 }
 
+function hasExistingDrumsClipContent(matrix, clips) {
+  return hasExistingTrackClipContent(matrix, clips, 'drums');
+}
+
 export {
   applyBasicDrumsAllBars,
   applyBasicDrumsBar,
+  applyDrumsTemplateToBar,
+  applyDrumsTemplateToBars,
   clearDrumsBar,
   createBasicDrumsBar,
   createBasicDrumsBarWithoutKick,
   createDefaultDrumsPattern,
+  createDrumsBarFromTemplate,
+  createDrumTemplatePreviewEvents,
   createEmptyDrumsBar,
   getDrumsClipBarIndexes,
+  hasExistingDrumsClipContent,
 };

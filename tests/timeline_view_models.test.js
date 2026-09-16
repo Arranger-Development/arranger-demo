@@ -84,6 +84,39 @@ test('createTimelineTracks decorates chord clips with the current chord label', 
   assert.equal(chord.bars[2].clip.chordLabel, 'Cmaj7');
 });
 
+test('createTimelineTracks treats silent chord source metadata as empty', () => {
+  const clips = createInitialClips();
+  const matrix = createInitialMatrix();
+  clips.ids.push('chord-bar-2');
+  clips.byId['chord-bar-2'] = {
+    id: 'chord-bar-2',
+    trackId: 'chord',
+    bar: 2,
+    name: 'Chord 03',
+  };
+  matrix.chord[2][0] = {
+    type: 'chord-source',
+    label: 'F',
+    sourceChordLabel: 'F',
+    progressionTemplateId: 'doowop',
+    selectedGrooveTemplateId: 'custom-rhythm',
+  };
+
+  const tracks = createTimelineTracks({
+    barNumbers: BAR_NUMBERS,
+    clips,
+    matrix,
+    selectedBar: 2,
+    trackUi: TRACK_UI,
+  });
+  const chord = tracks.find((track) => track.id === 'chord');
+
+  assert.equal(chord.clip.hasContent, false);
+  assert.equal(chord.clip.chordLabel, null);
+  assert.equal(chord.bars[2].clip.hasContent, false);
+  assert.equal(chord.bars[2].clip.chordLabel, null);
+});
+
 test('createTimelineTracks marks drums clips with matrix content as non-empty', () => {
   const clips = createInitialClips();
   const matrix = createInitialMatrix();

@@ -1,30 +1,45 @@
+import { getTotalBars } from '../domain/projectLength.js';
+import { normalizeMelodyProjectState } from '../data/melodyStyleTemplates.js';
+
 const UNDO_HISTORY_LIMIT = 50;
 
 const UNDO_APP_STATE_KEYS = Object.freeze([
   'activeTrackId',
   'bpm',
+  'totalBars',
   'clips',
   'currentBar',
   'currentStep',
   'matrix',
+  'melodyRhythmTemplateId',
   'melodyScaleId',
+  'melodyTimbreId',
+  'mutedTracks',
+  'nextTrackCreatedIndex',
+  'nextTrackOrdinalByType',
+  'primaryChordTrackId',
   'rootKey',
   'scale',
   'seekBar',
   'seekStep',
   'selectedBar',
   'selectedClipId',
+  'trackInstancesById',
+  'trackOrder',
   'visibleTrackIds',
   'volumes',
 ]);
 
 const UNDO_TUTORIAL_STATE_KEYS = Object.freeze([
+  'activeTutorialId',
   'appliedTutorialSetups',
   'currentTutorialStepIndex',
   'tutorialModeActive',
+  'tutorialPanelState',
   'tutorialProgress',
   'tutorialSidebarCollapsed',
   'tutorialStepCheckpoints',
+  'tutorialSessions',
   'tutorialVisible',
 ]);
 
@@ -64,9 +79,11 @@ function normalizeValue(value) {
 function createUndoSnapshot({
   appState,
   tutorialState,
+  editorState = {},
 } = {}) {
   return {
     appState: pickStateKeys(appState, UNDO_APP_STATE_KEYS),
+    editorState: cloneValue(editorState),
     tutorialState: pickStateKeys(tutorialState, UNDO_TUTORIAL_STATE_KEYS),
   };
 }
@@ -139,10 +156,14 @@ function createRedoTransition({
 }
 
 function restoreUndoSnapshot({
+  setTimelineSelection,
+  setActiveTutorialId,
   setAppliedTutorialSetups,
   setCurrentTutorialStepIndex,
   setTutorialModeActive,
+  setTutorialPanelState,
   setTutorialProgress,
+  setTutorialSessions,
   setTutorialSidebarCollapsed,
   setTutorialStepCheckpoints,
   setTutorialVisible,
@@ -151,14 +172,18 @@ function restoreUndoSnapshot({
 } = {}) {
   if (!snapshot) return false;
 
-  store?.setState?.(cloneValue(snapshot.appState));
+  store?.setState?.(normalizeMelodyProjectState({ ...cloneValue(snapshot.appState), totalBars: getTotalBars(snapshot.appState) }));
+  setTimelineSelection?.(cloneValue(snapshot.editorState?.timelineSelection ?? null));
+  setActiveTutorialId?.(cloneValue(snapshot.tutorialState.activeTutorialId));
   setCurrentTutorialStepIndex?.(cloneValue(snapshot.tutorialState.currentTutorialStepIndex));
   setTutorialProgress?.(cloneValue(snapshot.tutorialState.tutorialProgress));
+  setTutorialPanelState?.(cloneValue(snapshot.tutorialState.tutorialPanelState));
   setTutorialVisible?.(cloneValue(snapshot.tutorialState.tutorialVisible));
   setTutorialModeActive?.(cloneValue(snapshot.tutorialState.tutorialModeActive));
   setTutorialSidebarCollapsed?.(cloneValue(snapshot.tutorialState.tutorialSidebarCollapsed));
   setAppliedTutorialSetups?.(cloneValue(snapshot.tutorialState.appliedTutorialSetups));
   setTutorialStepCheckpoints?.(cloneValue(snapshot.tutorialState.tutorialStepCheckpoints));
+  setTutorialSessions?.(cloneValue(snapshot.tutorialState.tutorialSessions));
   return true;
 }
 

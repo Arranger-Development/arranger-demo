@@ -1,33 +1,53 @@
-# Private development and public demo
+# Development preview and external release
 
-Develop in `Arranger-Development/arranger-demo`. The public repository
-`Project-Arranger/arranger-demo` contains only compiled site files and deployment configuration.
+All source development lives in `Arranger-Development/arranger-demo`.
+Repository visibility is currently public; changing it is a separate decision.
 
-The public URL remains https://project-arranger.github.io/arranger-demo/.
-Pushing development commits does not update the public demo.
+## Normal development
 
-## Publish intentionally
+1. Develop on a feature or fix branch, then merge verified changes into `main`.
+2. A push to `main` runs **Deploy Development preview**: clean install, tests,
+   lint, build, and artifact validation. A failure leaves the release unchanged.
+3. The workflow writes only the built files, `.nojekyll`, and `deployment.json`
+   to `release/development-pages`. The manifest records the exact `main` commit.
+4. The workflow checks out that exact release commit and deploys it to
+   https://arranger-development.github.io/arranger-demo/ for acceptance.
+   Direct pushes to the release branch also deploy its artifact; ordinary
+   source changes belong on `main`, not on the artifact branch.
 
-In the private repository, open Actions → Publish demo manually → Run workflow.
-Run the workflow from `main`; enter the source branch, tag, or commit to publish.
-The workflow installs locked dependencies, builds, validates the output, and
-pushes only `dist` into the public repository's `site` directory.
-The public repository then deploys those files with GitHub Pages.
+GitHub Pages uses GitHub Actions, not the legacy branch builder. The build job's
+`GITHUB_TOKEN` push does not launch another workflow, so the same workflow
+explicitly deploys the release commit after pushing it. The existing
+`github-pages` environment permits `main` and `release/development-pages`.
 
-`PAGES_DEPLOY_KEY` is a dedicated SSH key with write access only to this
-public publishing repository. Keep it in this private repository's Actions secrets.
-Do not add source-repository credentials to the public repository.
+“Deploy” means update this Development preview. It never means external release.
+Uncommitted local files and unmerged feature branches are not included.
 
-## Roll back
+## External release: only after explicit user acceptance
 
-Run the private publishing workflow for a previously verified source commit,
-or restore a previously verified `site` tree in the public publishing repository.
-The migration backup includes a byte-for-byte verified copy of the original site.
-Keep the source repositories private during recovery.
+The external site is https://project-arranger.github.io/arranger-demo/.
+It is backed by `Project-Arranger/arranger-demo`, branch `main`, directory `site`.
 
-## Release check
+After the user explicitly approves external release:
 
-Run `python3 .github/scripts/check-pages-artifact.py dist arranger-demo` after building.
-The check rejects hidden files, source directories, source maps, credential markers,
-and asset URLs pointing to a different project path. It complements review; it is
-not an exhaustive secret scanner. Browser-delivered code and media remain public.
+1. Record the full `release/development-pages` commit SHA the user accepted.
+2. Run **Publish approved demo externally** from Development `main`, with that
+   `release_commit` and confirmation `PUBLISH`.
+3. The workflow verifies the release belongs to the artifact branch, comes from
+   Development `main`, and has a successful Development Pages deployment.
+4. It copies that exact release to the external repository's `site` directory
+   without rebuilding. The external repository deploys it automatically.
+5. Verify the external Pages deployment and served asset version.
+
+There is no push, workflow-completion, or scheduled trigger for external release.
+`PAGES_DEPLOY_KEY` is used only by this manual workflow and grants writes to the
+external publishing repository. The preview workflow does not use it.
+
+## Recovery
+
+Retry **Deploy Development preview** on `main` after a transient failure. To
+restore a prior preview, create a new release-branch commit containing the prior
+artifact and its original manifest; preserve branch history. External rollback
+also requires explicit user authorization and uses an already accepted release.
+Never force-push either publishing branch or copy source files into the external
+repository. Browser-required JavaScript, media, and fonts remain public.

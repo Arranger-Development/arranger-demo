@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chord template workspace comparison</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      color: #ebd8ba;
+      background: #17110d;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+    main {
+      display: grid;
+      gap: 24px;
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+    figure {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 12px;
+      background: #241a14;
+      border: 1px solid #5b4535;
+      border-radius: 12px;
+    }
+    figcaption {
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+    .visual {
+      width: 100%;
+      background-color: white;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: contain;
+      border-radius: 7px;
+    }
+    .reference {
+      aspect-ratio: 1584 / 644;
+      background-image: url("./chord-template-workspace-reference.png");
+    }
+    .implementation {
+      aspect-ratio: 1280 / 720;
+      background-image: url("./chord-template-workspace-implementation.png");
+    }
+    .groove-reference {
+      aspect-ratio: 1596 / 338;
+      background-image: url("./chord-groove-fill-reference.png");
+    }
+    .content-reference {
+      aspect-ratio: 2048 / 259;
+      background-image: url("./chord-template-content-reference.png");
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <figure>
+      <figcaption>实现：合并后的 Project Arranger 模板页面</figcaption>
+      <div class="visual implementation" role="img" aria-label="模板页面 HTML 实现"></div>
+    </figure>
+    <figure>
+      <figcaption>结构参考：进行模板、律动模板、应用范围</figcaption>
+      <div class="visual reference" role="img" aria-label="模板页面结构参考"></div>
+    </figure>
+    <figure>
+      <figcaption>律动参考：基础律动第 1 步；切分律动第 1、7、13 步</figcaption>
+      <div class="visual groove-reference" role="img" aria-label="律动填充位置参考"></div>
+    </figure>
+    <figure>
+      <figcaption>和弦内容参考：名称、级数、和弦、试听与说明</figcaption>
+      <div class="visual content-reference" role="img" aria-label="和弦模板内容参考"></div>
+    </figure>
+  </main>
+</body>
+</html>

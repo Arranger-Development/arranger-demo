@@ -1,28 +1,26 @@
 import { findClipForTrackBar } from '../store/slices/clipsSlice.js';
 import { getChordBarDisplayLabel } from './chordActions.js';
+import { hasClipContent } from './trackContent.js';
 import { createTrackVolumeView } from './trackVolumeViewModels.js';
 
 function getTrackVolume(track, volumes) {
   return createTrackVolumeView(volumes?.[track.id] ?? track.volume?.value);
 }
 
-function hasClipContent(clip, matrix) {
-  const bar = matrix?.[clip.trackId]?.[clip.bar];
-  return Array.isArray(bar) && bar.some((cell) => cell !== null);
-}
-
-function createClipView(clip, matrix) {
+function createClipView(clip, matrix, trackType = null) {
   if (!clip) return null;
 
-  const hasContent = hasClipContent(clip, matrix);
-  if (clip.trackId !== 'chord') {
-    return hasContent ? { ...clip, hasContent } : clip;
+  const clipHasContent = hasClipContent(matrix, clip);
+  if ((trackType ?? clip.trackId) !== 'chord') {
+    return clipHasContent ? { ...clip, hasContent: true } : clip;
   }
 
   return {
     ...clip,
-    chordLabel: getChordBarDisplayLabel(matrix, clip.bar),
-    hasContent,
+    chordLabel: clipHasContent
+      ? getChordBarDisplayLabel({ ...matrix, chord: matrix[clip.trackId] }, clip.bar)
+      : null,
+    hasContent: clipHasContent,
   };
 }
 
@@ -44,14 +42,18 @@ function createTimelineTracks({
       return {
         bar: barIndex,
         barNumber,
-        clip: createClipView(clip, matrix),
+        clip: createClipView(clip, matrix, track.type),
         canAddClip: !clip,
       };
     });
 
     return {
       ...track,
-      clip: createClipView(findClipForTrackBar(clips, track.id, selectedBar), matrix),
+      clip: createClipView(
+        findClipForTrackBar(clips, track.id, selectedBar),
+        matrix,
+        track.type,
+      ),
       bars,
       clipsByBar,
       hasClip: clipsByBar.some(Boolean),

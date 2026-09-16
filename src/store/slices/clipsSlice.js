@@ -1,34 +1,11 @@
-import { TOTAL_BARS, TRACK_IDS } from '../../domain/musicConstants.js';
-
-const TRACK_LABELS = Object.freeze({
-  drums: 'Drum',
-  bass: 'Bass',
-  chord: 'Chord',
-  melody: 'Melody',
-  pad: 'Pad',
-  sample: 'Sampler',
-  vocal: 'Vocal',
-});
-
-function createClipId(trackId, bar) {
-  return `${trackId}-bar-${bar}`;
-}
-
-function formatClipName(trackId, bar) {
-  const label = TRACK_LABELS[trackId] ?? trackId;
-  const barNumber = String(bar + 1).padStart(2, '0');
-
-  return `${label} ${barNumber}`;
-}
-
-function createClipRecord(trackId, bar) {
-  return {
-    id: createClipId(trackId, bar),
-    trackId,
-    bar,
-    name: formatClipName(trackId, bar),
-  };
-}
+import {
+  createClipId,
+  createClipRecord,
+  formatClipName,
+} from '../../domain/clipHelpers.js';
+import { createProjectLengthPatch, getTimelineBars, getTotalBars } from '../../domain/projectLength.js';
+import { STEPS_PER_BAR } from '../../domain/musicConstants.js';
+import { getTrackType } from '../../domain/trackInstances.js';
 
 function createEmptyBarLike(bar) {
   return Array.from({ length: bar.length }, () => null);
@@ -36,6 +13,19 @@ function createEmptyBarLike(bar) {
 
 function cloneBar(bar) {
   return [...bar];
+}
+
+function cloneCell(cell) {
+  if (cell === null || typeof cell !== 'object') return cell;
+  if (Array.isArray(cell)) return cell.map((item) => cloneCell(item));
+
+  return Object.fromEntries(
+    Object.entries(cell).map(([key, value]) => [key, cloneCell(value)]),
+  );
+}
+
+function cloneBarData(bar) {
+  return bar.map((cell) => cloneCell(cell));
 }
 
 function moveClipRecordToBar(clip, bar) {
@@ -47,8 +37,12 @@ function moveClipRecordToBar(clip, bar) {
   };
 }
 
-function isValidClipLocation(trackId, bar) {
-  return TRACK_IDS.includes(trackId) && Number.isInteger(bar) && bar >= 0 && bar < TOTAL_BARS;
+function isValidClipLocation(state, trackId, bar) {
+  return Boolean(state?.trackInstancesById?.[trackId])
+    && Array.isArray(state?.matrix?.[trackId])
+    && Number.isInteger(bar)
+    && bar >= 0
+    && bar < getTimelineBars(state);
 }
 
 function createInitialClips() {
@@ -71,11 +65,211 @@ function findClipForTrackBar(clips, trackId, bar) {
     .find((clip) => clip?.trackId === trackId && clip.bar === bar) ?? null;
 }
 
+function createPastedClipRecord(state, snapshot, targetTrackId, targetBar) {
+  const clip = createClipRecord(targetTrackId, targetBar);
+  if (snapshot?.customName === true) {
+    return {
+      ...clip,
+      customName: true,
+      name: snapshot.name,
+    };
+  }
+
+  return clip;
+}
+
+function createClipClipboardData(state, clip) {
+  const barData = state.matrix[clip.trackId]?.[clip.bar];
+  if (!Array.isArray(barData)) return null;
+
+  return {
+    sourceClipId: clip.id,
+    trackId: clip.trackId,
+    trackType: getTrackType(state, clip.trackId),
+    sourceBar: clip.bar,
+    name: clip.name,
+    customName: clip.customName === true,
+    barData: cloneBarData(barData),
+  };
+}
+
 export default function createClipsSlice(set, get) {
   return {
     clips: createInitialClips(),
 
     getClipForTrackBar: (trackId, bar) => findClipForTrackBar(get().clips, trackId, bar),
+
+    createClipClipboardSnapshot: (clipId = get().selectedClipId) => {
+      const state = get();
+      const clip = state.clips.byId[clipId];
+      if (!clip) return null;
+
+      return createClipClipboardData(state, clip);
+    },
+
+    createTimelineClipboardSnapshot: (selection) => {
+      if (
+        !selection
+        || !Number.isInteger(selection.startBar)
+        || !Number.isInteger(selection.endBar)
+        || selection.startBar < 0
+        || selection.endBar >= getTimelineBars(get())
+        || selection.startBar > selection.endBar
+        || !Array.isArray(selection.trackIds)
+        || selection.trackIds.length === 0
+        || selection.trackIds.some((trackId) => !get().trackInstancesById?.[trackId])
+      ) {
+        return null;
+      }
+
+      const state = get();
+      const items = state.clips.ids
+        .map((clipId) => state.clips.byId[clipId])
+        .filter((clip) => (
+          clip
+          && selection.trackIds.includes(clip.trackId)
+          && clip.bar >= selection.startBar
+          && clip.bar <= selection.endBar
+        ))
+        .map((clip) => ({
+          ...createClipClipboardData(state, clip),
+          barOffset: clip.bar - selection.startBar,
+        }))
+        .filter((item) => Array.isArray(item.barData));
+
+      if (items.length === 0) return null;
+
+      return {
+        kind: 'timeline-range',
+        sourceStartBar: selection.startBar,
+        sourceEndBar: selection.endBar,
+        trackIds: [...selection.trackIds],
+        items,
+      };
+    },
+
+    pasteClipClipboardSnapshot: (snapshot, targetTrackId, targetBar) => {
+      const state = get();
+      if (
+        !snapshot
+        || (snapshot.trackType ?? getTrackType(state, snapshot.trackId))
+          !== getTrackType(state, targetTrackId)
+        || !isValidClipLocation(state, targetTrackId, targetBar)
+        || !Array.isArray(snapshot.barData)
+      ) {
+        return null;
+      }
+
+      if (snapshot.barData.length !== STEPS_PER_BAR) return null;
+      const lengthPatch = createProjectLengthPatch(state, targetBar + 1);
+      const matrix = lengthPatch.matrix ?? state.matrix;
+      const trackMatrix = matrix[targetTrackId];
+
+      const targetClip = findClipForTrackBar(state.clips, targetTrackId, targetBar);
+      const pastedClip = createPastedClipRecord(state, snapshot, targetTrackId, targetBar);
+      const nextTrackMatrix = [...trackMatrix];
+      nextTrackMatrix[targetBar] = cloneBarData(snapshot.barData);
+
+      set({
+        ...lengthPatch,
+        activeTrackId: targetTrackId,
+        selectedBar: targetBar,
+        selectedClipId: pastedClip.id,
+        clips: {
+          ids: targetClip ? state.clips.ids : [...state.clips.ids, pastedClip.id],
+          byId: {
+            ...state.clips.byId,
+            [pastedClip.id]: pastedClip,
+          },
+        },
+        matrix: {
+          ...matrix,
+          [targetTrackId]: nextTrackMatrix,
+        },
+      });
+
+      return pastedClip;
+    },
+
+    pasteTimelineClipboardSnapshot: (snapshot, targetStartBar) => {
+      const barCount = snapshot?.sourceEndBar - snapshot?.sourceStartBar + 1;
+      if (
+        snapshot?.kind !== 'timeline-range'
+        || !Number.isInteger(targetStartBar)
+        || targetStartBar < 0
+        || !Number.isInteger(barCount)
+        || barCount < 1
+        || targetStartBar + barCount > getTimelineBars(get())
+        || !Array.isArray(snapshot.trackIds)
+        || snapshot.trackIds.length === 0
+        || !Array.isArray(snapshot.items)
+        || snapshot.items.length === 0
+      ) {
+        return null;
+      }
+
+      const state = get();
+      if (snapshot.items.some((item) => (
+        !Number.isInteger(item.barOffset) || item.barOffset < 0 || item.barOffset >= barCount
+        || !isValidClipLocation(state, item.trackId, targetStartBar + item.barOffset)
+        || !Array.isArray(item.barData) || item.barData.length !== STEPS_PER_BAR
+      ))) return null;
+      const lastClipBar = Math.max(...snapshot.items.map((item) => targetStartBar + item.barOffset));
+      const lengthPatch = createProjectLengthPatch(state, lastClipBar + 1);
+      const nextById = { ...state.clips.byId };
+      const nextIds = [...state.clips.ids];
+      const nextMatrix = { ...(lengthPatch.matrix ?? state.matrix) };
+      const nextTrackMatrices = new Map();
+      const pastedClips = [];
+
+      for (const item of snapshot.items) {
+        const targetBar = targetStartBar + item.barOffset;
+        if (
+          !isValidClipLocation(state, item.trackId, targetBar)
+          || !Array.isArray(item.barData)
+        ) {
+          return null;
+        }
+
+        const trackMatrix = nextTrackMatrices.get(item.trackId)
+          ?? [...nextMatrix[item.trackId]];
+        const targetBarData = trackMatrix[targetBar];
+        if (!Array.isArray(targetBarData) || targetBarData.length !== item.barData.length) {
+          return null;
+        }
+
+        const targetClip = findClipForTrackBar(state.clips, item.trackId, targetBar);
+        const pastedClip = createPastedClipRecord(state, item, item.trackId, targetBar);
+        trackMatrix[targetBar] = cloneBarData(item.barData);
+        nextTrackMatrices.set(item.trackId, trackMatrix);
+        nextById[pastedClip.id] = pastedClip;
+        if (!targetClip) nextIds.push(pastedClip.id);
+        pastedClips.push(pastedClip);
+      }
+
+      for (const [trackId, trackMatrix] of nextTrackMatrices) {
+        nextMatrix[trackId] = trackMatrix;
+      }
+
+      set({
+        ...lengthPatch,
+        activeTrackId: snapshot.trackIds[0],
+        selectedBar: targetStartBar,
+        selectedClipId: null,
+        clips: {
+          ids: nextIds,
+          byId: nextById,
+        },
+        matrix: nextMatrix,
+      });
+
+      return {
+        clips: pastedClips,
+        startBar: targetStartBar,
+        endBar: targetStartBar + barCount - 1,
+        trackIds: [...snapshot.trackIds],
+      };
+    },
 
     selectClip: (clipId) => {
       const clip = get().clips.byId[clipId];
@@ -91,7 +285,8 @@ export default function createClipsSlice(set, get) {
     },
 
     createClip: (trackId, bar) => {
-      if (!isValidClipLocation(trackId, bar)) return null;
+      const state = get();
+      if (!isValidClipLocation(state, trackId, bar)) return null;
 
       const existingClip = get().getClipForTrackBar(trackId, bar);
       if (existingClip) {
@@ -101,6 +296,7 @@ export default function createClipsSlice(set, get) {
 
       const clip = createClipRecord(trackId, bar);
       set((state) => ({
+        ...createProjectLengthPatch(state, bar + 1),
         activeTrackId: clip.trackId,
         selectedBar: clip.bar,
         selectedClipId: clip.id,
@@ -117,10 +313,9 @@ export default function createClipsSlice(set, get) {
     },
 
     createEmptyClipsForTrack: (trackId) => {
-      if (!TRACK_IDS.includes(trackId)) return [];
-
       const state = get();
-      const createdClips = Array.from({ length: TOTAL_BARS }, (_, bar) => bar)
+      if (!isValidClipLocation(state, trackId, 0)) return [];
+      const createdClips = Array.from({ length: getTimelineBars(state) }, (_, bar) => bar)
         .filter((bar) => !findClipForTrackBar(state.clips, trackId, bar))
         .map((bar) => createClipRecord(trackId, bar));
       const selectedClip = findClipForTrackBar(state.clips, trackId, 0)
@@ -133,9 +328,53 @@ export default function createClipsSlice(set, get) {
       }
 
       set({
+        ...createProjectLengthPatch(state, getTimelineBars(state)),
         activeTrackId: trackId,
         selectedBar: selectedClip?.bar ?? 0,
         selectedClipId: selectedClip?.id ?? null,
+        clips: {
+          ids: [...state.clips.ids, ...createdClips.map((clip) => clip.id)],
+          byId: {
+            ...state.clips.byId,
+            ...Object.fromEntries(createdClips.map((clip) => [clip.id, clip])),
+          },
+        },
+      });
+
+      return createdClips;
+    },
+
+    ensureMelodyClipsInRange: (
+      startBar,
+      endBar = getTotalBars(get()) - 1,
+      trackId = get().activeTrackId,
+    ) => {
+      if (
+        !Number.isInteger(startBar)
+        || !Number.isInteger(endBar)
+        || startBar < 0
+        || endBar >= getTimelineBars(get())
+        || startBar > endBar
+      ) {
+        return [];
+      }
+
+      const state = get();
+      const melodyTrackId = getTrackType(state, trackId) === 'melody'
+        ? trackId
+        : state.trackOrder.find((id) => getTrackType(state, id) === 'melody');
+      if (!melodyTrackId) return [];
+      const createdClips = Array.from(
+        { length: endBar - startBar + 1 },
+        (_, offset) => startBar + offset,
+      )
+        .filter((bar) => !findClipForTrackBar(state.clips, melodyTrackId, bar))
+        .map((bar) => createClipRecord(melodyTrackId, bar));
+
+      if (!createdClips.length) return createdClips;
+
+      set({
+        ...createProjectLengthPatch(state, endBar + 1),
         clips: {
           ids: [...state.clips.ids, ...createdClips.map((clip) => clip.id)],
           byId: {
@@ -210,17 +449,59 @@ export default function createClipsSlice(set, get) {
       return get().deleteClip(selectedClipId);
     },
 
+    deleteClipsByIds: (clipIds) => {
+      if (!Array.isArray(clipIds) || clipIds.length === 0) return [];
+
+      const state = get();
+      const deletedClips = [...new Set(clipIds)]
+        .map((clipId) => state.clips.byId[clipId])
+        .filter(Boolean);
+      if (deletedClips.length === 0) return deletedClips;
+
+      const nextById = { ...state.clips.byId };
+      const nextMatrix = { ...state.matrix };
+      const nextTrackMatrices = new Map();
+
+      for (const clip of deletedClips) {
+        delete nextById[clip.id];
+        const trackMatrix = nextTrackMatrices.get(clip.trackId)
+          ?? [...state.matrix[clip.trackId]];
+        if (Array.isArray(trackMatrix[clip.bar])) {
+          trackMatrix[clip.bar] = createEmptyBarLike(trackMatrix[clip.bar]);
+        }
+        nextTrackMatrices.set(clip.trackId, trackMatrix);
+      }
+
+      for (const [trackId, trackMatrix] of nextTrackMatrices) {
+        nextMatrix[trackId] = trackMatrix;
+      }
+
+      const deletedIds = new Set(deletedClips.map((clip) => clip.id));
+      set({
+        selectedClipId: deletedIds.has(state.selectedClipId) ? null : state.selectedClipId,
+        clips: {
+          ids: state.clips.ids.filter((clipId) => !deletedIds.has(clipId)),
+          byId: nextById,
+        },
+        matrix: nextMatrix,
+      });
+
+      return deletedClips;
+    },
+
     moveClipToBar: (clipId, targetBar) => {
       const state = get();
       const sourceClip = state.clips.byId[clipId];
-      if (!sourceClip || !isValidClipLocation(sourceClip.trackId, targetBar)) return null;
+      if (!sourceClip || !isValidClipLocation(state, sourceClip.trackId, targetBar)) return null;
 
       if (sourceClip.bar === targetBar) {
         get().selectClip(sourceClip.id);
         return sourceClip;
       }
 
-      const trackMatrix = state.matrix[sourceClip.trackId];
+      const lengthPatch = createProjectLengthPatch(state, targetBar + 1);
+      const matrix = lengthPatch.matrix ?? state.matrix;
+      const trackMatrix = matrix[sourceClip.trackId];
       if (!trackMatrix?.[sourceClip.bar] || !trackMatrix?.[targetBar]) return null;
 
       const targetClip = findClipForTrackBar(state.clips, sourceClip.trackId, targetBar);
@@ -250,6 +531,7 @@ export default function createClipsSlice(set, get) {
       }
 
       set({
+        ...lengthPatch,
         activeTrackId: selectedClip.trackId,
         selectedBar: selectedClip.bar,
         selectedClipId: selectedClip.id,
@@ -258,7 +540,7 @@ export default function createClipsSlice(set, get) {
           byId: nextById,
         },
         matrix: {
-          ...state.matrix,
+          ...matrix,
           [selectedClip.trackId]: nextTrackMatrix,
         },
       });
@@ -269,10 +551,6 @@ export default function createClipsSlice(set, get) {
 }
 
 export {
-  createClipId,
-  createClipRecord,
   createInitialClips,
   findClipForTrackBar,
-  formatClipName,
-  isValidClipLocation,
 };

@@ -4,7 +4,11 @@ import {
   TOTAL_BARS,
 } from '../domain/musicConstants.js';
 import { BASS_NOTE_IDS } from '../data/bassNotes.js';
-import { getDrumsCellInstruments } from '../domain/drumsCells.js';
+import {
+  getDrumsCellInstruments,
+  getDrumsCellTimingOffset,
+  getDrumsCellVelocity,
+} from '../domain/drumsCells.js';
 import {
   createChordTonePitches,
   getChordCellNotes,
@@ -14,7 +18,10 @@ import {
   getChordNotePitch,
   getChordToneRoots,
 } from '../domain/chordCells.js';
-import { isValidMelodyNote } from '../app/melodyActions.js';
+import { getMelodyCellNotes } from '../domain/melodyCells.js';
+import { getTrackTypeFromInstanceId } from '../domain/trackInstances.js';
+
+const PLAYBACK_TRACK_TYPE_ORDER = Object.freeze(['drums', 'bass', 'chord', 'melody']);
 
 function normalizeMatrixSource(matrixSource) {
   return typeof matrixSource === 'function' ? matrixSource : () => matrixSource;
@@ -24,14 +31,19 @@ function extractDrumsInstruments(cell) {
   return getDrumsCellInstruments(cell);
 }
 
-function createDrumsEvent(bar, step, instrument) {
-  return {
+function createDrumsEvent(bar, step, instrument, cell) {
+  const event = {
     type: 'drums',
     trackId: 'drums',
     bar,
     step,
     instrument,
   };
+  const timingOffset = getDrumsCellTimingOffset(cell, instrument);
+  const velocity = getDrumsCellVelocity(cell, instrument);
+  if (timingOffset !== 0) event.timingOffset = timingOffset;
+  if (velocity !== 1) event.velocity = velocity;
+  return event;
 }
 
 function createNotesFromToneRoots(root, toneRoots, tonePitches = null) {
@@ -52,6 +64,16 @@ function createSingleNotes(noteRoots) {
   if (!hasExplicitOctave) return createNotesFromToneRoots(noteRoots[0], noteRoots);
 
   return noteRoots.map((noteRoot) => getChordNotePitch(noteRoot)).filter(Boolean);
+}
+
+function withChordFeel(event, cell) {
+  if (Number.isFinite(cell?.timingOffset) && cell.timingOffset !== 0) {
+    event.timingOffset = cell.timingOffset;
+  }
+  if (Number.isFinite(cell?.velocity) && cell.velocity !== 1) {
+    event.velocity = cell.velocity;
+  }
+  return event;
 }
 
 function createChordNotesWithAddedNotes(root, toneRoots, addedNotes, removedTonePitches = [], tonePitches = null) {
@@ -85,7 +107,7 @@ function extractChordEvent(cell, bar, step) {
     const notes = createSingleNotes(noteRoots);
     if (!notes.length) return null;
 
-    return {
+    return withChordFeel({
       type: 'chord',
       trackId: 'chord',
       bar,
@@ -95,7 +117,7 @@ function extractChordEvent(cell, bar, step) {
       label: cell.label ?? noteRoots.join('/'),
       notes,
       duration: '16n',
-    };
+    }, cell);
   }
 
   const isChordLike = cell.type === 'chord' || (!cell.type && (cell.root || cell.label));
@@ -113,7 +135,7 @@ function extractChordEvent(cell, bar, step) {
     );
     if (!notes.length) return null;
 
-    return {
+    return withChordFeel({
       type: 'chord',
       trackId: 'chord',
       bar,
@@ -123,14 +145,14 @@ function extractChordEvent(cell, bar, step) {
       label: cell.label ?? cell.root,
       notes,
       duration: cell.duration,
-    };
+    }, cell);
   }
 
   if (!isChordTriggerStep(step)) {
     const notes = createSingleNotes(addedNotes);
     if (!notes.length) return null;
 
-    return {
+    return withChordFeel({
       type: 'chord',
       trackId: 'chord',
       bar,
@@ -140,7 +162,7 @@ function extractChordEvent(cell, bar, step) {
       label: addedNotes.join('/'),
       notes,
       duration: '16n',
-    };
+    }, cell);
   }
 
   const toneRoots = cell.toneRoots ?? getChordToneRoots(cell.label ?? cell.root);
@@ -153,7 +175,7 @@ function extractChordEvent(cell, bar, step) {
   );
   if (!notes.length) return null;
 
-  return {
+  return withChordFeel({
     type: 'chord',
     trackId: 'chord',
     bar,
@@ -163,20 +185,32 @@ function extractChordEvent(cell, bar, step) {
     label: cell.label ?? cell.root,
     notes,
     duration: '4n',
-  };
+  }, cell);
 }
 
-function extractMelodyEvent(cell, bar, step) {
-  if (cell?.type !== 'melody' || !isValidMelodyNote(cell.note)) return null;
-
-  return {
+function createMelodyEvent(cell, note, bar, step) {
+  const event = {
     type: 'melody',
     trackId: 'melody',
     bar,
     step,
-    note: cell.note,
+    note,
     duration: cell.duration ?? '16n',
   };
+  if (Number.isInteger(cell.durationSteps)) event.durationSteps = cell.durationSteps;
+  if (cell.timbreId) event.timbreId = cell.timbreId;
+  if (cell.playbackMode === 'natural') event.playbackMode = 'natural';
+  if (Number.isFinite(cell.velocity)) event.velocity = cell.velocity;
+  return event;
+}
+
+function extractMelodyEvent(cell, bar, step) {
+  const notes = getMelodyCellNotes(cell);
+  return notes.length === 1 ? createMelodyEvent(cell, notes[0], bar, step) : null;
+}
+
+function extractMelodyEvents(cell, bar, step) {
+  return getMelodyCellNotes(cell).map((note) => createMelodyEvent(cell, note, bar, step));
 }
 
 function extractBassEvent(cell, bar, step) {
@@ -208,25 +242,42 @@ function createMatrixPlaybackAdapter(matrixSource, options = {}) {
   }
 
   function getEventsForStep(bar, step) {
-    const matrix = readMatrix();
-    const drumsCell = matrix?.drums?.[bar]?.[step] ?? null;
-    const bassCell = matrix?.bass?.[bar]?.[step] ?? null;
-    const chordCell = matrix?.chord?.[bar]?.[step] ?? null;
-    const melodyCell = matrix?.melody?.[bar]?.[step] ?? null;
+    const source = readMatrix();
+    const matrix = source?.matrix ?? source;
+    const instanceAware = Boolean(source?.matrix);
+    const trackInstancesById = source?.trackInstancesById ?? null;
+    const trackOrder = source?.trackOrder ?? PLAYBACK_TRACK_TYPE_ORDER;
 
-    const drumEvents = extractDrumsInstruments(drumsCell).map((instrument) => (
-      createDrumsEvent(bar, step, instrument)
+    return PLAYBACK_TRACK_TYPE_ORDER.flatMap((trackType) => (
+      trackOrder
+        .filter((trackId) => (
+          trackInstancesById?.[trackId]?.type
+          ?? getTrackTypeFromInstanceId(trackId)
+        ) === trackType)
+        .flatMap((trackId) => {
+          const cell = matrix?.[trackId]?.[bar]?.[step] ?? null;
+          let events = [];
+          if (trackType === 'drums') {
+            events = extractDrumsInstruments(cell).map((instrument) => (
+              createDrumsEvent(bar, step, instrument, cell)
+            ));
+          } else if (trackType === 'bass') {
+            const event = extractBassEvent(cell, bar, step);
+            if (event) events = [event];
+          } else if (trackType === 'chord') {
+            const event = extractChordEvent(cell, bar, step);
+            if (event) events = [event];
+          } else if (trackType === 'melody') {
+            events = extractMelodyEvents(cell, bar, step);
+          }
+
+          return events.map((event) => (instanceAware ? {
+            ...event,
+            trackId,
+            trackType,
+          } : event));
+        })
     ));
-    const bassEvent = extractBassEvent(bassCell, bar, step);
-    const chordEvent = extractChordEvent(chordCell, bar, step);
-    const melodyEvent = extractMelodyEvent(melodyCell, bar, step);
-
-    return [
-      ...drumEvents,
-      ...(bassEvent ? [bassEvent] : []),
-      ...(chordEvent ? [chordEvent] : []),
-      ...(melodyEvent ? [melodyEvent] : []),
-    ];
   }
 
   return {
@@ -250,4 +301,5 @@ export {
   extractChordEvent,
   extractDrumsInstruments,
   extractMelodyEvent,
+  extractMelodyEvents,
 };

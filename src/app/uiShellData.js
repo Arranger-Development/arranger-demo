@@ -5,6 +5,7 @@ import {
 } from '../domain/musicConstants.js';
 import { CHORD_GRID_PITCHES } from '../domain/chordCells.js';
 import { createTrackVolumeView } from './trackVolumeViewModels.js';
+import { TRACK_TYPE_LABELS, getTrackTypeFromInstanceId } from '../domain/trackInstances.js';
 
 const trackLabels = {
   drums: 'Drums',
@@ -24,9 +25,22 @@ const TRACK_UI = Object.freeze(
   })),
 );
 
-function getTrackUiByIds(trackIds) {
+function getTrackUiByIds(trackIds, trackInstancesById = null) {
   const trackUiById = new Map(TRACK_UI.map((track) => [track.id, track]));
-  return trackIds.map((trackId) => trackUiById.get(trackId)).filter(Boolean);
+  return trackIds.map((trackId) => {
+    const instance = trackInstancesById?.[trackId];
+    const type = instance?.type ?? getTrackTypeFromInstanceId(trackId);
+    const typeUi = trackUiById.get(type);
+    if (!typeUi) return null;
+
+    return {
+      ...typeUi,
+      id: trackId,
+      label: instance?.name ?? TRACK_TYPE_LABELS[type] ?? typeUi.label,
+      ordinal: instance?.ordinal ?? 1,
+      type,
+    };
+  }).filter(Boolean);
 }
 
 const OPTIONAL_TRACK_UI = Object.freeze(getTrackUiByIds(OPTIONAL_TRACK_IDS));

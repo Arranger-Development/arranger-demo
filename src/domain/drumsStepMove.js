@@ -36,17 +36,32 @@ function createDrumsStepMovePatch({
     return createRejectedDrumsMove();
   }
 
+  const targetVelocities = { ...(targetCell?.velocities ?? {}) };
+  const targetTimingOffsets = { ...(targetCell?.timingOffsets ?? {}) };
+  if (Object.hasOwn(sourceCell?.velocities ?? {}, instrument)) {
+    targetVelocities[instrument] = sourceCell.velocities[instrument];
+  }
+  if (Object.hasOwn(sourceCell?.timingOffsets ?? {}, instrument)) {
+    targetTimingOffsets[instrument] = sourceCell.timingOffsets[instrument];
+  }
+
   return {
     allowed: true,
     nextMatrixPatch: [
       {
         bar,
-        cell: createDrumsCell(sourceInstruments.filter((item) => item !== instrument)),
+        cell: createDrumsCell(
+          sourceInstruments.filter((item) => item !== instrument),
+          sourceCell,
+        ),
         step: fromStep,
       },
       {
         bar,
-        cell: createDrumsCell([...targetInstruments, instrument]),
+        cell: createDrumsCell([...targetInstruments, instrument], {
+          timingOffsets: targetTimingOffsets,
+          velocities: targetVelocities,
+        }),
         step: toStep,
       },
     ],

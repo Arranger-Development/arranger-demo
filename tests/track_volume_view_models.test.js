@@ -22,6 +22,7 @@ test('createTrackVolumeView converts dB values into slider display data', () => 
     label: '0dB',
   });
   assert.equal(formatTrackVolumeLabel(3), '+3dB');
-  assert.equal(createTrackVolumeView(MIN_TRACK_VOLUME_DB).level, 0);
+  assert.deepEqual(createTrackVolumeView(MIN_TRACK_VOLUME_DB), { value: -24, level: 0, label: '静音' });
+  assert.equal(formatTrackVolumeLabel(-23), '-23dB');
   assert.equal(createTrackVolumeView(MAX_TRACK_VOLUME_DB).level, 100);
 });

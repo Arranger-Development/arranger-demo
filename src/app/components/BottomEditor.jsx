@@ -7,24 +7,33 @@ import { TrackEditorPlaceholder } from './TrackEditorPlaceholder.jsx';
 
 function BottomEditor({
   activeTrackId,
+  activeTrackName,
+  activeTrackType,
   activeTutorialTarget,
   canPageBars = false,
   tutorialLocked = false,
   tutorialTargets,
   selectedClipName = '',
+  isPlaying = false,
   matrix,
   clips,
+  drumsRecordingState,
+  genreId = 'pop',
+  launchpadHarmonySelection,
+  launchpadHarmonyTarget,
   melodyScaleId,
-  onChordCellSelect,
-  onChordNoteSelect,
-  onChordPick,
-  onChordPreview,
-  onChordGrooveTemplatePreview,
-  onChordGrooveTemplateApply,
-  onChordTemplatePreview,
-  onChordTemplateApply,
-  onPassingChordPreview,
-  onPassingChordPick,
+  melodyTimbreId,
+  melodyActiveInputNotes,
+  melodyRecordingState,
+  melodyRhythmTemplateId,
+  onChordRhythmStepToggle,
+  onChordStepHarmonyApply,
+  onChordStepHarmonyPreview,
+  onChordStepHarmonyPreviewStop,
+  onLaunchpadHarmonyClose,
+  onChordTemplateWorkspacePreview,
+  onChordTemplateWorkspacePreviewStop,
+  onChordTemplateWorkspaceApply,
   onBassPreview,
   onBassStepToggle,
   onBassGrooveTemplatePreview,
@@ -35,7 +44,14 @@ function BottomEditor({
   onClearMelody,
   onClearMelodyBar,
   onMelodyPreview,
-  onMelodyScaleChange,
+  onMelodyPreviewStop,
+  onMelodyNoteOff,
+  onMelodyNoteOn,
+  onMelodyRecordCancel,
+  onMelodyRecordConfirm,
+  onMelodyWriteToggle,
+  onMelodyStyleTemplateApply,
+  onMelodyTimbrePrepare,
   onMelodyStepToggle,
   onRenameClip,
   onClearCurrentDrumsBar,
@@ -44,13 +60,18 @@ function BottomEditor({
   onClearDrums,
   onGenerateAllDrumsBars,
   onGenerateCurrentDrumsBar,
+  onDrumTemplatePreview,
+  onDrumTemplatePreviewStop,
   onNextBar,
   onPreviousBar,
+  onDrumsPadInput,
   onDrumsStepMove,
   onDrumsStepToggle,
+  onDrumsRecordCancel,
+  onDrumsRecordConfirm,
+  onDrumsWriteToggle,
   selectedBar,
   selectedClipId,
-  shouldConfirmChordTemplateApply = false,
 }) {
   const editorTargetClass = [
     'track-editor-target',
@@ -58,28 +79,46 @@ function BottomEditor({
   ].filter(Boolean).join(' ');
   let editor;
 
-  if (activeTrackId === 'drums' && selectedClipId) {
+  const drumsWriting = Boolean(
+    drumsRecordingState?.phase
+    && drumsRecordingState.phase !== 'idle',
+  );
+
+  if (activeTrackType === 'drums' && (selectedClipId || drumsWriting)) {
     editor = createElement(DrumSequencer, {
+      clips,
       matrix,
       clipName: selectedClipName,
+      drumsRecordingState,
+      genreId,
+      hasClip: Boolean(selectedClipId),
       onClose: onCloseEditor,
       onClearCurrentBar: onClearCurrentDrumsBar,
       onClearDrums,
       canPageBars,
       onGenerateAllBars: onGenerateAllDrumsBars,
       onGenerateCurrentBar: onGenerateCurrentDrumsBar,
+      onTemplatePreview: onDrumTemplatePreview,
+      onTemplatePreviewStop: onDrumTemplatePreviewStop,
       onNextBar,
       onPreviousBar,
+      onPadInput: onDrumsPadInput,
+      onRecordCancel: onDrumsRecordCancel,
+      onRecordConfirm: onDrumsRecordConfirm,
       onStepMove: onDrumsStepMove,
       onStepToggle: onDrumsStepToggle,
+      onWriteToggle: onDrumsWriteToggle,
       onRenameClip,
       selectedBar,
       trackId: activeTrackId,
+      trackName: activeTrackName,
       tutorialLocked,
       tutorialTargets,
     });
-  } else if (activeTrackId === 'bass' && selectedClipId) {
+  } else if (activeTrackType === 'bass' && selectedClipId) {
     editor = createElement(BassEditor, {
+      clips,
+      isPlaying,
       matrix,
       clipName: selectedClipName,
       onBassPreview,
@@ -95,26 +134,27 @@ function BottomEditor({
       onRenameClip,
       selectedBar,
       trackId: activeTrackId,
+      trackName: activeTrackName,
       tutorialLocked,
       tutorialTargets,
     });
-  } else if (activeTrackId === 'chord' && selectedClipId) {
+  } else if (activeTrackType === 'chord' && selectedClipId) {
     editor = createElement(ChordEditor, {
       matrix,
       clips,
       clipName: selectedClipName,
-      onChordCellSelect,
-      onChordNoteSelect,
-      onChordPick,
-      onChordPreview,
-      onChordGrooveTemplatePreview,
-      onChordGrooveTemplateApply,
-      onChordTemplatePreview,
-      onChordTemplateApply,
-      onPassingChordPreview,
-      onPassingChordPick,
+      genreId,
+      launchpadHarmonySelection,
+      launchpadHarmonyTarget,
+      onChordRhythmStepToggle,
+      onChordStepHarmonyApply,
+      onChordStepHarmonyPreview,
+      onChordStepHarmonyPreviewStop,
+      onChordTemplateWorkspacePreview,
+      onChordTemplateWorkspacePreviewStop,
+      onChordTemplateWorkspaceApply,
+      onLaunchpadHarmonyClose,
       canPageBars,
-      shouldConfirmChordTemplateApply,
       onClose: onCloseEditor,
       onClearChord,
       onClearChordBar,
@@ -123,32 +163,47 @@ function BottomEditor({
       onRenameClip,
       selectedBar,
       trackId: activeTrackId,
+      trackName: activeTrackName,
       tutorialLocked,
       tutorialTargets,
     });
-  } else if (activeTrackId === 'melody' && selectedClipId) {
+  } else if (activeTrackType === 'melody' && selectedClipId) {
     editor = createElement(MelodyEditor, {
       matrix,
       clipName: selectedClipName,
       canPageBars,
       melodyScaleId,
+      melodyTimbreId,
+      activeInputNotes: melodyActiveInputNotes,
+      melodyRecordingState,
+      melodyRhythmTemplateId,
       onClearMelody,
       onClearMelodyBar,
       onClose: onCloseEditor,
       onNextBar,
       onPreviousBar,
       onMelodyPreview,
-      onMelodyScaleChange,
+      onMelodyPreviewStop,
+      onMelodyNoteOff,
+      onMelodyNoteOn,
+      onMelodyRecordCancel,
+      onMelodyRecordConfirm,
+      onMelodyWriteToggle,
+      onMelodyStyleTemplateApply,
+      onMelodyTimbrePrepare,
       onMelodyStepToggle,
       onRenameClip,
       selectedBar,
       trackId: activeTrackId,
+      trackName: activeTrackName,
       tutorialLocked,
       tutorialTargets,
     });
   } else {
     editor = createElement(TrackEditorPlaceholder, {
       activeTrackId,
+      activeTrackName,
+      activeTrackType,
       canPageBars,
       clipName: selectedClipName,
       onNextBar,
@@ -159,7 +214,9 @@ function BottomEditor({
 
   return (
     <div className={editorTargetClass} data-tutorial-target="track-editor">
-      {editor}
+      <div className="editor-hardware-shell">
+        {editor}
+      </div>
     </div>
   );
 }

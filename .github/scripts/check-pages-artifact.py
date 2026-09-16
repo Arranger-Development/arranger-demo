@@ -13,6 +13,8 @@ def validate(root, project):
     if not (root/'index.html').is_file(): problems.append('Missing index.html')
     for p in root.rglob('*'):
         rel=p.relative_to(root)
+        if rel.as_posix() == '.nojekyll' and p.is_file() and not p.is_symlink() and p.stat().st_size == 0:
+            continue
         if p.is_symlink():
             problems.append(f'Symlink: {rel}');continue
         if any(part.startswith('.') or part in forbidden_dirs for part in rel.parts):

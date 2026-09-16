@@ -1,82 +1,90 @@
-name: Publish demo manually
+name: Publish approved demo externally
+
 on:
   workflow_dispatch:
     inputs:
-      source_ref:
-        description: Source branch, tag or commit to publish
+      release_commit:
+        description: Full release/development-pages commit SHA already accepted on Development Pages
         required: true
-        default: main
         type: string
+      confirmation:
+        description: Enter PUBLISH only after explicit approval to update the external demo
+        required: true
+        type: string
+
 permissions:
   contents: read
+  deployments: read
+
 concurrency:
-  group: publish-demo
+  group: publish-external-demo
   cancel-in-progress: false
+
 jobs:
   publish:
-    if: github.repository_owner == 'Arranger-Development' && github.ref == 'refs/heads/main'
+    if: github.repository == 'Arranger-Development/arranger-demo' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Require dedicated publishing credential
+      - name: Require explicit approval and pinned release
         env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          RELEASE_COMMIT: ${{ inputs.release_commit }}
           PAGES_DEPLOY_KEY: ${{ secrets.PAGES_DEPLOY_KEY }}
         run: |
-          if [ -z "$PAGES_DEPLOY_KEY" ]; then
-            echo 'Configure the repository-specific PAGES_DEPLOY_KEY secret before publishing.'
-            exit 1
-          fi
+          test "$CONFIRMATION" = 'PUBLISH'
+          [[ "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test -n "$PAGES_DEPLOY_KEY"
       - name: Checkout trusted release checks
         uses: actions/checkout@v4
         with:
           ref: main
           path: tooling
           persist-credentials: false
-      - name: Checkout source version
+      - name: Checkout accepted release
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.source_ref }}
-          path: source
+          ref: release/development-pages
+          fetch-depth: 0
+          path: release
           persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: source/package-lock.json
-      - name: Install and build
-        working-directory: source
+      - name: Verify and extract accepted release
         env:
-          VITE_BASE_PATH: /arranger-demo/
+          RELEASE_COMMIT: ${{ inputs.release_commit }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          npm ci
-          npm run build
-      - name: Check publishable files
-        run: python3 tooling/.github/scripts/check-pages-artifact.py source/dist arranger-demo
-      - name: Checkout public publishing repository
+          git -C release merge-base --is-ancestor "$RELEASE_COMMIT" HEAD
+          mkdir dist
+          git -C release archive "$RELEASE_COMMIT" | tar -x -C dist
+          python3 tooling/.github/scripts/check-pages-artifact.py dist arranger-demo
+          python3 tooling/.github/scripts/verify-preview-release.py dist "$RELEASE_COMMIT"
+      - name: Checkout external publishing repository
         uses: actions/checkout@v4
         with:
           repository: Project-Arranger/arranger-demo
           ref: main
           path: publishing
           ssh-key: ${{ secrets.PAGES_DEPLOY_KEY }}
-      - name: Replace site with checked output
+      - name: Copy accepted files without rebuilding
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import shutil
-          target=Path('publishing/site')
-          if target.exists(): shutil.rmtree(target)
-          shutil.copytree('source/dist',target)
+          target = Path('publishing/site')
+          if target.exists():
+              shutil.rmtree(target)
+          shutil.copytree('dist', target)
           PY
-      - name: Publish site files
+      - name: Publish external demo
         working-directory: publishing
+        env:
+          RELEASE_COMMIT: ${{ inputs.release_commit }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -- site
           if git diff --cached --quiet; then
-            git push --dry-run origin HEAD:main
-            echo 'This version is already published.'
+            echo 'This accepted release is already published.'
             exit 0
           fi
-          git commit -m 'Publish demo'
+          git commit -m "release(pages): publish accepted preview $RELEASE_COMMIT"
           git push origin HEAD:main

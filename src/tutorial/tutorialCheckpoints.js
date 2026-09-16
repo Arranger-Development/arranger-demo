@@ -1,13 +1,31 @@
+import { getTotalBars } from '../domain/projectLength.js';
+import { normalizeMelodyProjectState } from '../data/melodyStyleTemplates.js';
+
 const CHECKPOINT_APP_STATE_KEYS = Object.freeze([
   'activeTrackId',
+  'bpm',
+  'totalBars',
   'clips',
   'currentBar',
   'currentStep',
   'matrix',
+  'melodyRhythmTemplateId',
+  'melodyScaleId',
+  'melodyTimbreId',
+  'mutedTracks',
+  'nextTrackCreatedIndex',
+  'nextTrackOrdinalByType',
+  'primaryChordTrackId',
+  'rootKey',
+  'scale',
   'seekBar',
   'seekStep',
   'selectedBar',
   'selectedClipId',
+  'trackInstancesById',
+  'trackOrder',
+  'visibleTrackIds',
+  'volumes',
 ]);
 
 function cloneValue(value) {
@@ -46,7 +64,7 @@ function restoreTutorialCheckpoint({
 } = {}) {
   if (!checkpoint) return false;
 
-  store?.setState?.(cloneValue(checkpoint.appState));
+  store?.setState?.(normalizeMelodyProjectState({ ...cloneValue(checkpoint.appState), totalBars: getTotalBars(checkpoint.appState) }));
   setTutorialProgress?.(cloneValue(checkpoint.tutorialProgress));
   setAppliedTutorialSetups?.(cloneValue(checkpoint.appliedTutorialSetups));
   return true;

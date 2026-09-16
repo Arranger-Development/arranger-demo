@@ -3,13 +3,11 @@ import {
   TOTAL_BARS,
 } from '../domain/musicConstants.js';
 
-const TOTAL_STEPS = TOTAL_BARS * STEPS_PER_BAR;
-
-function clampFlatStep(flatStep) {
-  return Math.max(0, Math.min(TOTAL_STEPS - 1, flatStep));
+function clampFlatStep(flatStep, totalBars) {
+  return Math.max(0, Math.min((totalBars * STEPS_PER_BAR) - 1, flatStep));
 }
 
-function getTimelinePlayheadSeekPosition(clientX, rect) {
+function getTimelinePlayheadSeekPosition(clientX, rect, totalBars = TOTAL_BARS) {
   const left = Number(rect?.left);
   const width = Number(rect?.width);
 
@@ -18,7 +16,7 @@ function getTimelinePlayheadSeekPosition(clientX, rect) {
   }
 
   const ratio = (clientX - left) / width;
-  const flatStep = clampFlatStep(Math.round(ratio * TOTAL_STEPS));
+  const flatStep = clampFlatStep(Math.round(ratio * (totalBars * STEPS_PER_BAR)), totalBars);
 
   return {
     bar: Math.floor(flatStep / STEPS_PER_BAR),

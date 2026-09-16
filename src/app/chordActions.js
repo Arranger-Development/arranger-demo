@@ -16,6 +16,7 @@ import {
   isPassingChordCell,
   toggleChordNoteCell,
 } from '../domain/chordCells.js';
+import { hasExistingTrackClipContent } from './trackContent.js';
 
 const PASSING_CHORD_SOURCE_SPAN_INDEX = BEATS_PER_BAR - 1;
 
@@ -302,9 +303,7 @@ function getPassingChordContext(matrix, clips, selectedBar) {
 }
 
 function hasExistingChordClipContent(matrix, clips) {
-  return getExistingChordClipBars(clips).some((barIndex) => (
-    matrix?.chord?.[barIndex]?.some((cell) => Boolean(cell))
-  ));
+  return hasExistingTrackClipContent(matrix, clips, 'chord');
 }
 
 function applyChordTemplateToExistingClips(matrix, clips, templateId) {

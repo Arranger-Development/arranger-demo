@@ -146,6 +146,193 @@ test('moveClipToBar ignores invalid clips and bars without changing state', () =
   assert.deepEqual(useMusicStore.getState().matrix, beforeMatrix);
 });
 
+test('createClipClipboardSnapshot captures clip metadata and deep cloned bar data', () => {
+  const state = useMusicStore.getState();
+  state.setCell('chord', 2, 0, { root: 'G', span: 1 });
+  state.setCell('chord', 2, 4, { root: 'Cmaj7', span: 2 });
+  state.createClip('chord', 2);
+  state.renameClip('chord-bar-2', 'Bright Chords');
+
+  const snapshot = useMusicStore.getState().createClipClipboardSnapshot('chord-bar-2');
+
+  assert.equal(snapshot.sourceClipId, 'chord-bar-2');
+  assert.equal(snapshot.trackId, 'chord');
+  assert.equal(snapshot.sourceBar, 2);
+  assert.equal(snapshot.name, 'Bright Chords');
+  assert.equal(snapshot.customName, true);
+  assert.deepEqual(snapshot.barData[0], { root: 'G', span: 1 });
+  assert.deepEqual(snapshot.barData[4], { root: 'Cmaj7', span: 2 });
+
+  useMusicStore.getState().setCell('chord', 2, 0, { root: 'F', span: 1 });
+  snapshot.barData[4].root = 'Am';
+
+  assert.deepEqual(snapshot.barData[0], { root: 'G', span: 1 });
+  assert.deepEqual(useMusicStore.getState().matrix.chord[2][4], { root: 'Cmaj7', span: 2 });
+});
+
+test('pasteClipClipboardSnapshot creates an empty target clip with copied content and default target name', () => {
+  const state = useMusicStore.getState();
+  state.setCell('bass', 1, 0, { note: 'C2' });
+  state.setCell('bass', 1, 8, { note: 'G2' });
+  state.createClip('bass', 1);
+  const snapshot = useMusicStore.getState().createClipClipboardSnapshot('bass-bar-1');
+
+  const pastedClip = useMusicStore.getState().pasteClipClipboardSnapshot(snapshot, 'bass', 4);
+
+  assert.deepEqual(pastedClip, {
+    id: 'bass-bar-4',
+    trackId: 'bass',
+    bar: 4,
+    name: 'Bass 05',
+  });
+  assert.equal(useMusicStore.getState().getClipForTrackBar('bass', 4).id, 'bass-bar-4');
+  assert.deepEqual(useMusicStore.getState().matrix.bass[4][0], { note: 'C2' });
+  assert.deepEqual(useMusicStore.getState().matrix.bass[4][8], { note: 'G2' });
+  assert.deepEqual(useMusicStore.getState().matrix.bass[1][0], { note: 'C2' });
+  assert.equal(useMusicStore.getState().selectedClipId, 'bass-bar-4');
+  assert.equal(useMusicStore.getState().activeTrackId, 'bass');
+  assert.equal(useMusicStore.getState().selectedBar, 4);
+});
+
+test('pasteClipClipboardSnapshot preserves names and strips legacy per-clip Melody templates', () => {
+  const state = useMusicStore.getState();
+  state.setCell('melody', 0, 0, { type: 'melody', note: 'C4' });
+  state.createClip('melody', 0);
+  state.renameClip('melody-bar-0', 'Hook Lead');
+  useMusicStore.setState((current) => ({
+    clips: {
+      ids: current.clips.ids,
+      byId: {
+        ...current.clips.byId,
+        'melody-bar-0': {
+          ...current.clips.byId['melody-bar-0'],
+          melodyRhythmTemplateId: 'syncopation',
+        },
+      },
+    },
+  }));
+  const snapshot = useMusicStore.getState().createClipClipboardSnapshot('melody-bar-0');
+  useMusicStore.getState().createClip('melody', 3);
+  useMusicStore.getState().setCell('melody', 3, 0, { type: 'melody', note: 'G4' });
+
+  const pastedClip = useMusicStore.getState().pasteClipClipboardSnapshot(snapshot, 'melody', 3);
+
+  assert.deepEqual(pastedClip, {
+    id: 'melody-bar-3',
+    trackId: 'melody',
+    bar: 3,
+    name: 'Hook Lead',
+    customName: true,
+  });
+  assert.deepEqual(useMusicStore.getState().clips.ids.filter((id) => id === 'melody-bar-3'), ['melody-bar-3']);
+  assert.deepEqual(useMusicStore.getState().matrix.melody[3][0], { type: 'melody', note: 'C4' });
+  assert.deepEqual(useMusicStore.getState().matrix.melody[0][0], { type: 'melody', note: 'C4' });
+});
+
+test('pasteClipClipboardSnapshot rejects cross-track and invalid paste targets without changing state', () => {
+  const state = useMusicStore.getState();
+  state.setCell('drums', 0, 0, { instruments: ['kick'] });
+  const snapshot = state.createClipClipboardSnapshot('drums-bar-0');
+  const beforeClips = structuredClone(useMusicStore.getState().clips);
+  const beforeMatrix = structuredClone(useMusicStore.getState().matrix);
+
+  assert.equal(useMusicStore.getState().pasteClipClipboardSnapshot(snapshot, 'bass', 0), null);
+  assert.equal(useMusicStore.getState().pasteClipClipboardSnapshot(snapshot, 'drums', -1), null);
+  assert.equal(useMusicStore.getState().pasteClipClipboardSnapshot(snapshot, 'drums', 8), null);
+  assert.equal(useMusicStore.getState().pasteClipClipboardSnapshot(null, 'drums', 1), null);
+  assert.deepEqual(useMusicStore.getState().clips, beforeClips);
+  assert.deepEqual(useMusicStore.getState().matrix, beforeMatrix);
+});
+
+test('timeline clipboard copies multiple tracks and preserves relative bar offsets on paste', () => {
+  const state = useMusicStore.getState();
+  state.setCell('drums', 1, 0, { instruments: ['kick'] });
+  state.createClip('drums', 1);
+  state.setCell('chord', 3, 4, { type: 'chord', chord: 'Am' });
+  state.createClip('chord', 3);
+  state.renameClip('chord-bar-3', 'Turnaround');
+
+  const snapshot = useMusicStore.getState().createTimelineClipboardSnapshot({
+    startBar: 1,
+    endBar: 3,
+    trackIds: ['drums', 'chord'],
+  });
+
+  assert.equal(snapshot.kind, 'timeline-range');
+  assert.deepEqual(snapshot.trackIds, ['drums', 'chord']);
+  assert.deepEqual(
+    snapshot.items.map((item) => [item.trackId, item.barOffset]),
+    [['drums', 0], ['chord', 2]],
+  );
+
+  const pasted = useMusicStore.getState().pasteTimelineClipboardSnapshot(snapshot, 4);
+  const nextState = useMusicStore.getState();
+
+  assert.deepEqual(pasted, {
+    clips: [
+      {
+        id: 'drums-bar-4',
+        trackId: 'drums',
+        bar: 4,
+        name: 'Drum 05',
+      },
+      {
+        id: 'chord-bar-6',
+        trackId: 'chord',
+        bar: 6,
+        name: 'Turnaround',
+        customName: true,
+      },
+    ],
+    startBar: 4,
+    endBar: 6,
+    trackIds: ['drums', 'chord'],
+  });
+  assert.deepEqual(nextState.matrix.drums[4][0], { instruments: ['kick'] });
+  assert.deepEqual(nextState.matrix.chord[6][4], { type: 'chord', chord: 'Am' });
+  assert.equal(nextState.selectedClipId, null);
+  assert.equal(nextState.selectedBar, 4);
+});
+
+test('timeline clipboard rejects a paste range that would overflow bar 8', () => {
+  const state = useMusicStore.getState();
+  const snapshot = state.createTimelineClipboardSnapshot({
+    startBar: 0,
+    endBar: 2,
+    trackIds: ['drums'],
+  });
+  const beforeClips = structuredClone(state.clips);
+  const beforeMatrix = structuredClone(state.matrix);
+
+  assert.equal(state.pasteTimelineClipboardSnapshot(snapshot, 6), null);
+  assert.deepEqual(useMusicStore.getState().clips, beforeClips);
+  assert.deepEqual(useMusicStore.getState().matrix, beforeMatrix);
+});
+
+test('deleteClipsByIds removes a multi-track selection atomically and preserves other clips', () => {
+  const state = useMusicStore.getState();
+  state.setCell('drums', 0, 0, { instruments: ['kick'] });
+  state.createClip('chord', 1);
+  state.setCell('chord', 1, 0, { type: 'chord', chord: 'C' });
+  state.createClip('bass', 2);
+  state.setCell('bass', 2, 0, { note: 'C2' });
+
+  const deleted = useMusicStore.getState().deleteClipsByIds([
+    'drums-bar-0',
+    'chord-bar-1',
+    'missing-clip',
+  ]);
+  const nextState = useMusicStore.getState();
+
+  assert.deepEqual(deleted.map((clip) => clip.id), ['drums-bar-0', 'chord-bar-1']);
+  assert.equal(nextState.getClipForTrackBar('drums', 0), null);
+  assert.equal(nextState.getClipForTrackBar('chord', 1), null);
+  assert.equal(nextState.getClipForTrackBar('bass', 2).id, 'bass-bar-2');
+  assert.equal(nextState.matrix.drums[0].every((cell) => cell === null), true);
+  assert.equal(nextState.matrix.chord[1].every((cell) => cell === null), true);
+  assert.deepEqual(nextState.matrix.bass[2][0], { note: 'C2' });
+});
+
 test('selectClip links selectedClipId, activeTrackId, and selectedBar', () => {
   const state = useMusicStore.getState();
   state.createClip('chord', 0);
@@ -252,4 +439,36 @@ test('createEmptyClipsForTrack ignores invalid track ids without changing state'
   assert.deepEqual(createdClips, []);
   assert.deepEqual(useMusicStore.getState().clips, beforeClips);
   assert.deepEqual(useMusicStore.getState().matrix, beforeMatrix);
+});
+
+test('ensureMelodyClipsInRange creates only missing clips without changing selection or content', () => {
+  const state = useMusicStore.getState();
+  state.createClip('melody', 3);
+  state.renameClip('melody-bar-3', 'Keep Me');
+  state.setCell('melody', 3, 6, { type: 'melody', note: 'E4' });
+  state.selectClip('drums-bar-0');
+  const existingClip = useMusicStore.getState().clips.byId['melody-bar-3'];
+
+  const created = useMusicStore.getState().ensureMelodyClipsInRange(2, 5);
+  const nextState = useMusicStore.getState();
+
+  assert.deepEqual(created.map((clip) => clip.bar), [2, 4, 5]);
+  assert.deepEqual(
+    [2, 3, 4, 5].map((bar) => nextState.getClipForTrackBar('melody', bar)?.id),
+    ['melody-bar-2', 'melody-bar-3', 'melody-bar-4', 'melody-bar-5'],
+  );
+  assert.equal(nextState.clips.byId['melody-bar-3'], existingClip);
+  assert.deepEqual(nextState.matrix.melody[3][6], { type: 'melody', note: 'E4' });
+  assert.equal(nextState.selectedClipId, 'drums-bar-0');
+  assert.equal(nextState.activeTrackId, 'drums');
+  assert.equal(nextState.selectedBar, 0);
+});
+
+test('ensureMelodyClipsInRange rejects invalid ranges without changing clips', () => {
+  const before = useMusicStore.getState().clips;
+
+  assert.deepEqual(useMusicStore.getState().ensureMelodyClipsInRange(-1, 3), []);
+  assert.deepEqual(useMusicStore.getState().ensureMelodyClipsInRange(5, 4), []);
+  assert.deepEqual(useMusicStore.getState().ensureMelodyClipsInRange(0, 8), []);
+  assert.equal(useMusicStore.getState().clips, before);
 });

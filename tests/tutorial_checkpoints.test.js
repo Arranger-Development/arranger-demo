@@ -29,6 +29,7 @@ function createAppState() {
     currentBar: 1,
     currentStep: 4,
     matrix,
+    melodyTimbreId: 'yangqin',
     seekBar: 1,
     seekStep: 4,
     selectedBar: 0,
@@ -79,6 +80,7 @@ test('tutorial checkpoint captures and restores app state, progress, and setups'
   assert.equal(store.restoredState.selectedClipId, 'drums-bar-0');
   assert.equal(store.restoredState.currentBar, 1);
   assert.equal(store.restoredState.currentStep, 4);
+  assert.equal(store.restoredState.melodyTimbreId, 'yangqin');
   assert.equal(store.restoredState.seekBar, 1);
   assert.equal(store.restoredState.seekStep, 4);
   assert.deepEqual(restoredProgress.kickVariationEditedCells, ['0:2']);

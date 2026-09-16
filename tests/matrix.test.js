@@ -102,12 +102,40 @@ test('store starts with transport, context, volumes, and matrix defaults', () =>
   assert.equal(state.seekBar, 0);
   assert.equal(state.seekStep, 0);
   assert.equal(state.activeTrackId, 'drums');
+  assert.equal(state.melodyScaleId, 'chinese');
+  assert.equal(state.melodyRhythmTemplateId, null);
+  assert.equal(state.melodyTimbreId, 'piano');
   assert.deepEqual(state.visibleTrackIds, CORE_TRACK_IDS);
   assert.equal(state.selectedBar, 0);
   assert.equal(state.selectedClipId, null);
   assert.deepEqual(Object.keys(state.volumes), TRACK_IDS);
   assert.equal(Object.values(state.volumes).every((volume) => volume === 0), true);
+  assert.deepEqual(Object.keys(state.mutedTracks), CORE_TRACK_IDS);
+  assert.equal(Object.values(state.mutedTracks).every((muted) => muted === false), true);
   assert.equal(everyCell(state.matrix, (cell) => cell === null), true);
+});
+
+test('Melody style application updates global scale and rhythm atomically', () => {
+  const store = useMusicStore.getState();
+  let notifications = 0;
+  const unsubscribe = useMusicStore.subscribe(() => {
+    notifications += 1;
+  });
+
+  assert.equal(store.setMelodyStyleTemplate('blues'), true);
+  unsubscribe();
+  assert.equal(notifications, 1);
+  assert.equal(useMusicStore.getState().melodyScaleId, 'blues');
+  assert.equal(useMusicStore.getState().melodyRhythmTemplateId, 'blues');
+  assert.equal(useMusicStore.getState().melodyTimbreId, 'blues');
+  assert.equal(useMusicStore.getState().setMelodyStyleTemplate('syncopation'), false);
+  assert.equal(useMusicStore.getState().melodyScaleId, 'blues');
+  assert.equal(useMusicStore.getState().melodyRhythmTemplateId, 'blues');
+  assert.equal(useMusicStore.getState().melodyTimbreId, 'blues');
+  assert.equal(useMusicStore.getState().setMelodyStyleTemplate('chinese', 'piano'), true);
+  assert.equal(useMusicStore.getState().melodyTimbreId, 'piano');
+  useMusicStore.getState().setMelodyScaleId('major');
+  assert.equal(useMusicStore.getState().melodyScaleId, 'chinese');
 });
 
 test('addVisibleTrack adds optional tracks once and selects the new row', () => {
@@ -147,6 +175,26 @@ test('setTrackVolume updates one track and clamps values to the supported range'
   assert.deepEqual(useMusicStore.getState().volumes, volumes);
 });
 
+test('toggleTrackMute flips one valid track without changing its stored volume', () => {
+  const store = useMusicStore.getState();
+  store.setTrackVolume('chord', -9);
+
+  store.toggleTrackMute('chord');
+  let state = useMusicStore.getState();
+  assert.equal(state.mutedTracks.chord, true);
+  assert.equal(state.volumes.chord, -9);
+  assert.equal(state.mutedTracks.drums, false);
+
+  state.toggleTrackMute('chord');
+  state = useMusicStore.getState();
+  assert.equal(state.mutedTracks.chord, false);
+  assert.equal(state.volumes.chord, -9);
+
+  const previousMutedTracks = state.mutedTracks;
+  state.toggleTrackMute('unknown-track');
+  assert.equal(useMusicStore.getState().mutedTracks, previousMutedTracks);
+});
+
 test('setCell writes only the requested cell', () => {
   const cell = { instruments: ['kick'] };
 
@@ -157,6 +205,28 @@ test('setCell writes only the requested cell', () => {
   assert.equal(matrix.drums[2][3], null);
   assert.equal(matrix.drums[3][4], null);
   assert.equal(matrix.bass[2][4], null);
+});
+
+test('setTrackMatrix replaces one track with one store notification', () => {
+  const nextBassTrack = createInitialMatrix().bass;
+  nextBassTrack[0][0] = { type: 'bass', note: 'C1', duration: '16n' };
+  nextBassTrack[3][8] = { type: 'bass', note: 'G0', duration: '16n' };
+  useMusicStore.getState().setCell('drums', 2, 4, { instruments: ['kick'] });
+
+  let notifications = 0;
+  const unsubscribe = useMusicStore.subscribe(() => {
+    notifications += 1;
+  });
+  useMusicStore.getState().setTrackMatrix('bass', nextBassTrack);
+  unsubscribe();
+
+  const { matrix } = useMusicStore.getState();
+  assert.equal(notifications, 1);
+  assert.deepEqual(matrix.bass, nextBassTrack);
+  assert.deepEqual(matrix.drums[2][4], { instruments: ['kick'] });
+
+  useMusicStore.getState().setTrackMatrix('unknown-track', nextBassTrack);
+  assert.equal(useMusicStore.getState().matrix, matrix);
 });
 
 test('clearStep clears only the requested cell', () => {
@@ -178,6 +248,27 @@ test('clearTrack clears one track without clearing other tracks', () => {
   const { matrix } = useMusicStore.getState();
 
   assert.equal(matrix.drums.every((bar) => bar.every((cell) => cell === null)), true);
+  assert.deepEqual(matrix.bass[0][0], { note: 'C1', velocity: 100 });
+});
+
+test('clearTrack removes Chord notes and source metadata without touching other tracks', () => {
+  useMusicStore.getState().setCell('chord', 0, 0, {
+    chordName: 'C',
+    progressionTemplateId: 'doowop',
+    selectedGrooveTemplateId: 'block-basic',
+    type: 'chord-source',
+  });
+  useMusicStore.getState().setCell('chord', 0, 4, {
+    chordName: 'C',
+    grooveTemplateId: 'block-basic',
+    type: 'chord',
+  });
+  useMusicStore.getState().setCell('bass', 0, 0, { note: 'C1', velocity: 100 });
+
+  useMusicStore.getState().clearTrack('chord');
+  const { matrix } = useMusicStore.getState();
+
+  assert.equal(matrix.chord.every((bar) => bar.every((cell) => cell === null)), true);
   assert.deepEqual(matrix.bass[0][0], { note: 'C1', velocity: 100 });
 });
 

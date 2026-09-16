@@ -43,3 +43,13 @@ test('local sample backups and generated metadata are ignored', () => {
   assert.match(gitignore, /\/public\/samples\/\.DS_Store/);
   assert.match(gitignore, /\/public\/samples\/\*\/\.DS_Store/);
 });
+
+test('demo build prunes ignored sample backup folders from dist', () => {
+  const viteConfig = readFileSync('vite.config.js', 'utf8');
+
+  assert.match(viteConfig, /function\s+prunePublicSampleBackups\(\)/);
+  assert.match(viteConfig, /closeBundle\(\)\s*\{/);
+  assert.match(viteConfig, /samplesDir\s*=\s*resolve\(__dirname,\s*'dist',\s*'samples'\)/);
+  assert.match(viteConfig, /entry\.isDirectory\(\)\s*&&\s*entry\.name\.endsWith\('-old'\)/);
+  assert.match(viteConfig, /rmSync\(resolve\(samplesDir,\s*entry\.name\),\s*\{\s*recursive:\s*true,\s*force:\s*true\s*\}\)/);
+});

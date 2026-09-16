@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chord editor navigation comparison</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      min-width: 1280px;
+      margin: 0;
+      padding: 24px;
+      color: #ebd8ba;
+      background: #17110d;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      width: 1232px;
+      margin: 0 auto;
+    }
+    figure {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 12px;
+      background: #241a14;
+      border: 1px solid #5b4535;
+      border-radius: 12px;
+    }
+    figcaption {
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .visual {
+      width: 100%;
+      aspect-ratio: 1280 / 720;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: contain;
+      border-radius: 7px;
+    }
+    .reference { background-image: url("./current-chord-editor-navigation-reference.png"); }
+    .implementation { background-image: url("./chord-editor-navigation-implementation.png"); }
+  </style>
+</head>
+<body>
+  <main>
+    <figure>
+      <figcaption>现有编辑器导航参考</figcaption>
+      <div class="visual reference" role="img" aria-label="现有编辑器导航"></div>
+    </figure>
+    <figure>
+      <figcaption>HTML 原型：前后 Clip 与 0 / 8</figcaption>
+      <div class="visual implementation" role="img" aria-label="新增 Clip 导航后的 HTML 原型"></div>
+    </figure>
+  </main>
+</body>
+</html>

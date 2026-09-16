@@ -8,6 +8,7 @@ import {
 import {
   getChordDefinition,
 } from '../domain/chordCells.js';
+import { hasExistingTrackClipContent } from './trackContent.js';
 
 const DEFAULT_BASS_NOTE = 'C1';
 const LOW_BASS_OCTAVE_ROOTS = new Set(['F', 'F#', 'G', 'G#', 'A', 'A#', 'B']);
@@ -83,6 +84,19 @@ function toggleBassCell(matrix, bar, step, note) {
     ? null
     : createBassCell(note);
   return nextMatrix;
+}
+
+function getBassCellToggleResult(matrix, bar, step, note) {
+  const removingExistingNote = isBassCellActive(matrix, bar, step, note);
+  const nextMatrix = toggleBassCell(matrix, bar, step, note);
+  const nextCell = nextMatrix?.bass?.[bar]?.[step];
+
+  return {
+    auditionNote: !removingExistingNote && nextCell?.note === note
+      ? note
+      : null,
+    nextMatrix,
+  };
 }
 
 function clearBassBar(matrix, bar) {
@@ -171,6 +185,10 @@ function getExistingBassClipBars(clips) {
     .sort((a, b) => a - b);
 }
 
+function hasExistingBassClipContent(matrix, clips) {
+  return hasExistingTrackClipContent(matrix, clips, 'bass');
+}
+
 function getExistingChordClipBarSet(clips) {
   return new Set((clips?.ids ?? [])
     .map((id) => clips.byId?.[id])
@@ -208,7 +226,9 @@ export {
   clearBassBar,
   createBassCell,
   createBassPreviewEvents,
+  getBassCellToggleResult,
   getBassGrooveTemplate,
+  hasExistingBassClipContent,
   isBassCellActive,
   isValidBassNote,
   toggleBassCell,

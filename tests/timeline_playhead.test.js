@@ -7,6 +7,7 @@ test('getTimelinePlayheadSeekPosition snaps client x to a sixteenth-note step', 
   const rect = { left: 100, width: 800 };
 
   assert.deepEqual(getTimelinePlayheadSeekPosition(100, rect), { bar: 0, flatStep: 0, step: 0 });
+  assert.deepEqual(getTimelinePlayheadSeekPosition(106.25, rect), { bar: 0, flatStep: 1, step: 1 });
   assert.deepEqual(getTimelinePlayheadSeekPosition(300, rect), { bar: 2, flatStep: 32, step: 0 });
   assert.deepEqual(getTimelinePlayheadSeekPosition(350, rect), { bar: 2, flatStep: 40, step: 8 });
 });
