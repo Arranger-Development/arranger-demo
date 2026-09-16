@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ArrowLeft, ArrowRightToLine, Check, Drum, Guitar, Music2, Piano, Play, Save, Square } from 'lucide-react';
 import createAudioEngine from '../../audio/createAudioEngine.js';
 import { getDrumTemplateGenre } from '../../data/drumStyleTemplates.js';
@@ -10,6 +10,8 @@ import {
 } from '../performanceModel.js';
 import { createPerformancePlayback } from '../performancePlayback.js';
 import './performance.css';
+import { createPerformanceEditor } from '../performanceEditor.js';
+import { mapPerformanceKeyboard, performanceKeyLabel } from '../../input/performanceInput.js';
 import { createPerformanceImport } from '../performanceImport.js';
 
 // This repository's lint parser does not count JSX component names as reads.
@@ -57,11 +59,10 @@ function PerformanceLoops({ active, playback, status, sequenceIndices, selectedL
   </div>;
 }
 
-export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack, onImport }) {
+export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack, onImport, controlsRef, hardwareInput }) {
   const aiTemplates = profileId === AI_PERFORMANCE_PROFILE_ID;
-  const [session, setSession] = useState(() => readPerformanceSession(browserStorage(), genreId, initialBpm, profileId));
-  const [drafts, setDrafts] = useState(() => session.saved.map((selection) => ({ ...selection })));
-  const [selectedLoop, setSelectedLoop] = useState(0);
+  const [editor] = useState(() => createPerformanceEditor(readPerformanceSession(browserStorage(), genreId, initialBpm, profileId)));
+  const { session, drafts, selectedLoop } = useSyncExternalStore(editor.subscribe, editor.getSnapshot);
   const [status, setStatus] = useState({ mode: 'stopped', loading: false, bar: 0, step: 0, error: '' });
   const [message, setMessage] = useState('');
   const [storageError, setStorageError] = useState(false);
@@ -87,13 +88,12 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   }, [active, playback]);
 
   function persist(next) {
-    setSession(next);
     const stored = writePerformanceSession(browserStorage(), genreId, next, profileId);
     setStorageError(!stored);
     return stored;
   }
   function preview(selection) {
-    if (hasSelection(selection)) playback.preview(createPerformanceMatrix(selection, genreId, profileId), session.bpm);
+    if (hasSelection(selection)) playback.preview(createPerformanceMatrix(selection, genreId, profileId), editor.getSnapshot().session.bpm);
     else playback.stop();
   }
   function resetSaveFeedback() {
@@ -102,21 +102,20 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   }
   function selectTemplate(trackId, templateId) {
     resetSaveFeedback();
-    const next = { ...draft, [trackId]: draft[trackId] === templateId ? null : templateId };
-    setDrafts((current) => current.map((value, index) => index === selectedLoop ? next : value));
+    const next = editor.toggleTemplate(trackId, templateId);
     preview(next);
     setMessage('');
   }
   function selectLoop(index) {
     resetSaveFeedback();
     playback.stop();
-    setSelectedLoop(index);
-    preview(drafts[index]);
+    const selection = editor.selectLoop(index);
+    if (selection) preview(selection);
     setMessage('');
   }
   function save() {
     resetSaveFeedback();
-    const stored = persist({ ...session, saved: session.saved.map((value, index) => index === selectedLoop ? { ...draft } : value) });
+    const stored = persist(editor.save());
     if (stored) {
       setSaveFeedback(true);
       saveTimer.current = setTimeout(() => setSaveFeedback(false), 1400);
@@ -126,25 +125,26 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   function togglePlayback() {
     // Read the controller synchronously so rapid clicks also cancel loading.
     if (playback.isActive()) { playback.stop(); setMessage(''); return; }
-    const sequence = createPerformanceSequence(session.saved, genreId, profileId);
+    const currentSession = editor.getSnapshot().session;
+    const sequence = createPerformanceSequence(currentSession.saved, genreId, profileId);
     if (!sequence.indices.length) {
       setMessage('先保存至少一个 Loop，再播放整组。');
       return;
     }
     setSequenceIndices(sequence.indices);
-    playback.sequence(sequence, session.bpm);
+    playback.sequence(sequence, currentSession.bpm);
     setMessage('');
   }
   function changeBpm(value) {
     const bpm = normalizePerformanceBpm(value);
-    persist({ ...session, bpm });
+    persist(editor.setBpm(bpm));
     playback.setTempo(bpm);
   }
   function importArrangement() {
     if (importingRef.current || !active || !canImport) return;
     importingRef.current = true;
     try {
-      const snapshot = createPerformanceImport({ ...session, genreId, profileId });
+      const snapshot = createPerformanceImport({ ...editor.getSnapshot().session, genreId, profileId });
       playback.stop();
       resetSaveFeedback();
       onImport(snapshot);
@@ -156,6 +156,50 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     }
   }
   function back() { resetSaveFeedback(); playback.stop(); onBack(); }
+
+  // The bridge is refreshed at commit time. All actions read the synchronous editor
+  // snapshot, so several inputs before the next React render are still ordered.
+  useLayoutEffect(() => {
+    if (!active || !controlsRef) return undefined;
+    const controls = {
+      templates,
+      dispatch(command) {
+        if (importingRef.current) return;
+        if (command.type === 'template') selectTemplate(command.trackId, command.templateId);
+        else if (command.type === 'loop') selectLoop(command.index);
+        else if (command.type === 'save') save();
+        else if (command.type === 'togglePlayback') togglePlayback();
+      },
+      getSurface() {
+        const current = editor.getSnapshot();
+        return { templates, drafts: current.drafts, saved: current.session.saved,
+          selectedLoop: current.selectedLoop, status, sequenceIndices,
+          progress: playback.getProgress(), beatPhase: playback.getBeatPhase(), saveFeedback, storageError };
+      },
+    };
+    controlsRef.current = controls;
+    return () => { if (controlsRef.current === controls) controlsRef.current = null; };
+  });
+
+  useEffect(() => {
+    if (!active) return undefined;
+    const onKeyDown = (event) => {
+      const command = mapPerformanceKeyboard(event, templates);
+      if (!command || importingRef.current) return;
+      event.preventDefault();
+      selectTemplate(command.trackId, command.templateId);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
+
+  const connected = hardwareInput?.status === 'connected';
+  const connecting = hardwareInput?.status === 'connecting';
+  const connectionLabel = connected ? 'Launchpad 已连接' : connecting ? '连接中…' : '连接 Launchpad';
+  function connectHardware() {
+    void playback.unlockAudio().catch((error) => setMessage(error.message || '音频未能启动，请重试'));
+    void hardwareInput?.onConnect();
+  }
 
   return (
     <section className="performance-mode" hidden={!active} aria-label="演奏模式">
@@ -175,6 +219,14 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       <main className="performance-body">
         <div className="performance-intro">
           <span className="performance-eyebrow">{aiTemplates ? 'AI 多模态 · 每段 2–4 小节' : `${getDrumTemplateGenre(genreId).label} · 每段 2 小节`}</span>
+          <button type="button" className="performance-connect" onClick={connectHardware}
+            disabled={connecting || hardwareInput?.status === 'unsupported'}
+            title="Launchpad X 请手动切换至 Programmer Mode" aria-label={connectionLabel}>
+            <span className={`performance-connection-light ${connected ? 'is-connected' : ''}`} aria-hidden="true" />
+            {connectionLabel}
+          </button>
+          {hardwareInput?.errorMessage || hardwareInput?.ledErrorMessage || hardwareInput?.status === 'unsupported'
+            ? <p className="performance-connection-error" role="status">{hardwareInput.errorMessage || hardwareInput.ledErrorMessage || '此浏览器不支持 MIDI，请使用支持 Web MIDI 的浏览器连接。'}</p> : null}
         </div>
 
         <div className="performance-workbench">
@@ -187,9 +239,9 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
                 {templates[trackId].map((template, index) => {
                   const selected = draft[trackId] === template.id;
                   return <button type="button" className={`performance-pad ${selected ? 'is-selected' : ''}`}
-                    key={template.id} aria-label={`${PERFORMANCE_LABELS[trackId]}：${template.name}`}
+                    key={template.id} aria-keyshortcuts={performanceKeyLabel(trackId, index)} title={`${template.name} · ${performanceKeyLabel(trackId, index)}`} aria-label={`${PERFORMANCE_LABELS[trackId]}：${template.name}`}
                     aria-pressed={selected} onClick={() => selectTemplate(trackId, template.id)}>
-                    <span className="performance-pad-top"><span>0{index + 1}</span>{selected ? <Check size={16} /> : <Icon size={16} />}</span>
+                    <span className="performance-pad-top"><span className="performance-key-hint" aria-hidden="true">{performanceKeyLabel(trackId, index)}</span>{selected ? <Check size={16} /> : <Icon size={16} />}</span>
                     <strong>{template.name}</strong>
                   </button>;
                 })}

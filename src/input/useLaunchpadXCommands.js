@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react';
@@ -17,6 +18,8 @@ import {
   findLaunchpadXMidiOutput,
 } from './launchpadXPorts.js';
 import { formatMidiMessage, parseLaunchpadXMessage } from './launchpadXProtocol.js';
+import { createPerformanceMidiInput } from './performanceInput.js';
+import { createLedFrameSender, createLaunchpadXPerformanceLedFrame } from './launchpadXPerformanceSurface.js';
 import { getLaunchpadMelodyInputId } from './melodyInputLayout.js';
 
 const MIDI_CONNECTION_STATUS = Object.freeze({
@@ -28,6 +31,8 @@ const MIDI_CONNECTION_STATUS = Object.freeze({
   IDLE: 'idle',
   UNSUPPORTED: 'unsupported',
 });
+
+function performanceNow() { return globalThis.performance?.now() ?? Date.now(); }
 
 function supportsWebMidi() {
   return typeof navigator !== 'undefined'
@@ -86,6 +91,8 @@ function useLaunchpadXCommands({
   drumsActive = false,
   drumsClipBars = [],
   enabled = true,
+  performanceActive = false,
+  performanceControlsRef = null,
   isPlaying = false,
   matrix = null,
   melodyActive = false,
@@ -97,6 +104,9 @@ function useLaunchpadXCommands({
   selectedBar = 0,
 } = {}) {
   const accessRef = useRef(null);
+  const modeRef = useRef({ enabled, performanceActive, performanceControlsRef });
+  const performanceMidiRef = useRef(createPerformanceMidiInput());
+  const ledSenderRef = useRef(createLedFrameSender());
   const melodyNoteByPadRef = useRef(new Map());
   const contextRef = useRef({
     activeMelodyNotes: melodyNoteByPadRef.current,
@@ -222,12 +232,15 @@ function useLaunchpadXCommands({
     if (!output || outputRef.current !== output) return false;
 
     try {
-      const frame = surfaceRef.current.chordActive
+      const performance = modeRef.current.performanceActive;
+      const frame = performance
+        ? createLaunchpadXPerformanceLedFrame(modeRef.current.performanceControlsRef?.current?.getSurface(), performanceNow())
+        : surfaceRef.current.chordActive
         ? createLaunchpadXChordLedFrame(surfaceRef.current)
         : surfaceRef.current.melodyActive
           ? createLaunchpadXMelodyLedFrame(surfaceRef.current)
           : createLaunchpadXDrumsLedFrame(surfaceRef.current);
-      frame.forEach((message) => output.send(message));
+      ledSenderRef.current.send(output, frame);
       return true;
     } catch (error) {
       if (mountedRef.current && outputRef.current === output) {
@@ -264,6 +277,13 @@ function useLaunchpadXCommands({
       setConnection((current) => ({ ...current, lastMessage }));
     }
 
+    if (!modeRef.current.enabled) return;
+    if (modeRef.current.performanceActive) {
+      const controls = modeRef.current.performanceControlsRef?.current;
+      const command = performanceMidiRef.current.handle(event.data, controls?.templates);
+      if (command) controls?.dispatch(command);
+      return;
+    }
     if (chordGestureRef.current.handle(event.data)) return;
 
     const message = parseLaunchpadXMessage(event.data);
@@ -345,6 +365,25 @@ function useLaunchpadXCommands({
     if (melodyPadChanged) sendLedFrame();
   }, [sendLedFrame]);
 
+  useLayoutEffect(() => {
+    modeRef.current = { enabled, performanceActive, performanceControlsRef };
+    performanceMidiRef.current.reset();
+    chordGestureRef.current.cancel();
+    releaseMelodyPads({ redraw: false });
+    ledSenderRef.current.reset();
+    sendLedFrame();
+  }, [enabled, performanceActive, performanceControlsRef, releaseMelodyPads, sendLedFrame]);
+
+  useEffect(() => {
+    if (!performanceActive || !connection.ledAvailable) return undefined;
+    let frame;
+    function update() {
+      if (sendLedFrame()) frame = requestAnimationFrame(update);
+    }
+    frame = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(frame);
+  }, [performanceActive, connection.ledAvailable, sendLedFrame]);
+
   const melodyInputContextKey = getMelodyInputContextKey({
     melodyActive,
     melodyRecordingState,
@@ -361,7 +400,11 @@ function useLaunchpadXCommands({
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
-    const handleWindowBlur = () => releaseMelodyPads();
+    const handleWindowBlur = () => {
+      performanceMidiRef.current.reset();
+      chordGestureRef.current.cancel();
+      releaseMelodyPads();
+    };
     window.addEventListener('blur', handleWindowBlur);
     return () => window.removeEventListener('blur', handleWindowBlur);
   }, [releaseMelodyPads]);
@@ -374,6 +417,7 @@ function useLaunchpadXCommands({
       ledAvailable: true,
       ledErrorMessage: null,
     }));
+    ledSenderRef.current.reset();
     sendLedFrame(output);
   }, [sendLedFrame]);
 
@@ -402,9 +446,13 @@ function useLaunchpadXCommands({
     const output = findLaunchpadXMidiOutput(access.outputs.values());
     const previousInput = inputRef.current;
 
-    if (previousInput && previousInput !== input) {
-      detachInput(previousInput);
+    if (previousInput !== input) {
+      if (previousInput) detachInput(previousInput);
+      performanceMidiRef.current.reset();
+      chordGestureRef.current.cancel();
+      releaseMelodyPads({ redraw: false });
     }
+    if (outputRef.current !== output) ledSenderRef.current.reset();
 
     inputRef.current = input;
     outputRef.current = output;
@@ -517,6 +565,7 @@ function useLaunchpadXCommands({
 
   useEffect(() => {
     mountedRef.current = true;
+    const performanceMidi = performanceMidiRef.current;
 
     return () => {
       mountedRef.current = false;
@@ -524,6 +573,7 @@ function useLaunchpadXCommands({
       detachInput(inputRef.current);
       chordGestureRef.current?.cancel();
       releaseMelodyPads({ redraw: false });
+      performanceMidi.reset();
       inputRef.current = null;
       outputRef.current = null;
     };

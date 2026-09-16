@@ -216,6 +216,7 @@ export default function App({
   const timelineBars = getTimelineBars({ totalBars });
   const barNumbers = useMemo(() => Array.from({ length: timelineBars }, (_, index) => index + 1), [timelineBars]);
   const [performanceActive, setPerformanceActive] = useState(false);
+  const performanceControlsRef = useRef(null);
   const [performanceVisited, setPerformanceVisited] = useState(false);
   const bpm = useMusicStore((state) => state.bpm);
   const rootKey = useMusicStore((state) => state.rootKey);
@@ -2463,7 +2464,8 @@ export default function App({
     connect: connectLaunchpad,
     ...launchpadInput
   } = useLaunchpadXCommands({
-    enabled: !performanceActive,
+    performanceActive,
+    performanceControlsRef,
     activeInputNotes: melodyRecording.activeInputNotes,
     chordActive,
     chordClipBars,
@@ -3395,6 +3397,8 @@ export default function App({
     {performanceVisited ? <PerformanceMode
       key={`${genreId}:${performanceProfileId ?? 'default'}`}
       active={performanceActive}
+      controlsRef={performanceControlsRef}
+      hardwareInput={{ ...launchpadInput, onConnect: connectLaunchpad }}
       genreId={genreId}
       profileId={performanceProfileId}
       initialBpm={bpm}

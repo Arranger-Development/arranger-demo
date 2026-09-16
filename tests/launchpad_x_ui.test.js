@@ -99,7 +99,7 @@ test('Launchpad X hook requests non-SysEx access, binds both ports, and redraws 
   assert.match(source, /window\.addEventListener\('blur', handleWindowBlur\)/);
   assert.match(source, /pressedMelodyPads\.add\(message\.number\)/);
   assert.match(source, /pressedMelodyPads\.delete\(message\.number\)/);
-  assert.match(source, /output\.send\(message\)/);
+  assert.match(source, /ledSenderRef\.current\.send\(output, frame\)/);
 });
 
 test('Chord editor synchronizes its harmony popover to the Launchpad target', async () => {

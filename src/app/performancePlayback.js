@@ -58,6 +58,12 @@ export function createPerformancePlayback(audio, notify = () => {}, {
 
   return {
     stop,
+    unlockAudio() { return Promise.resolve(audio.startAudio()); },
+    getBeatPhase() {
+      if (mode === 'stopped' || loading) return 0;
+      const position = audio.getPlaybackProgress?.()?.position ?? audio.getPlaybackPosition();
+      return Number.isFinite(position) ? (position % 4) / 4 : 0;
+    },
     isActive() { return mode !== 'stopped'; },
     getProgress() {
       if (mode === 'stopped' || loading) return null;
