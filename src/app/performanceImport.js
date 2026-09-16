@@ -1,3 +1,4 @@
+import { AI_PERFORMANCE_PROFILE_ID } from '../data/aiPerformanceTemplates.js';
 import { createDefaultTrackState } from '../domain/trackInstances.js';
 import { createClipRecord } from '../domain/clipHelpers.js';
 import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
@@ -20,7 +21,7 @@ export function createPerformanceImport({ saved, bpm, genreId, profileId = null 
       const template = templates[trackId].find(({ id }) => id === selections[loopIndex][trackId]);
       if (!template) return [];
       const clip = createClipRecord(trackId, startStep / 16 + offset);
-      return [{ ...clip, customName: true, name: `Loop ${loopIndex + 1} · ${template.name}` }];
+      return [{ ...clip, ...(trackId === 'chord' && profileId === AI_PERFORMANCE_PROFILE_ID ? { editorMode: 'notes' } : {}), customName: true, name: `Loop ${loopIndex + 1} · ${template.name}` }];
     })).flat()
   ));
   const first = records.find((clip) => matrix[clip.trackId][clip.bar].some(Boolean)) ?? records[0];

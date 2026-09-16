@@ -69,6 +69,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const [playback] = useState(() => createPerformancePlayback(createAudioEngine(), setStatus, {
     melodyTimbreIds: aiTemplates ? ['piano'] : ['yangqin', 'blues'],
     melodyPlaybackMode: aiTemplates ? 'natural' : undefined,
+    additionalTimbres: aiTemplates ? [{ trackId: 'chord', timbreId: 'piano', playbackMode: 'natural' }] : [],
   }));
   const importingRef = useRef(false);
   const canImport = session.saved.some(hasSelection);

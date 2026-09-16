@@ -1,6 +1,6 @@
 // Owns a single transport session. Draft changes replace its source, not its clock.
 export function createPerformancePlayback(audio, notify = () => {}, {
-  melodyTimbreIds = ['yangqin', 'blues'], melodyPlaybackMode,
+  melodyTimbreIds = ['yangqin', 'blues'], melodyPlaybackMode, additionalTimbres = [],
 } = {}) {
   let generation = 0;
   let mode = 'stopped';
@@ -39,6 +39,7 @@ export function createPerformancePlayback(audio, notify = () => {}, {
         // Prepare every required bank so pad switches never load on a beat.
         melodyTimbreIds,
         melodyPlaybackMode,
+        additionalTimbres,
         onPositionChange: (bar, step) => {
           if (request === generation) notify({ mode, loading: false, bar, step, error: '' });
         },
