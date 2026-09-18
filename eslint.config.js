@@ -5,7 +5,12 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default [
   {
-    ignores: ['dist', '.vite', '.worktrees'],
+    ignores: [
+      'dist', '.vite', '.worktrees',
+      '.codex-ringo-bp-build-v1/**',
+      '.codex-ringo-bp-professional-v1/**',
+      '.codex-ringo-bp.*/**',
+    ],
   },
   js.configs.recommended,
   {

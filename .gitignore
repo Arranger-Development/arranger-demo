@@ -5,6 +5,9 @@ dist/
 .DS_Store
 *.local
 .worktrees/
+/.codex-ringo-bp-build-v1/
+/.codex-ringo-bp-professional-v1/
+/.codex-ringo-bp.*/
 /design.md
 /output/playwright/
 /public/samples/*-old/

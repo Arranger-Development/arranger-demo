@@ -1,29 +1,30 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { readdirSync, rmSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 function prunePublicSampleBackups() {
+  let outputDir;
   return {
     name: 'prune-public-sample-backups',
+    configResolved(config) {
+      outputDir = resolve(config.root, config.build.outDir);
+    },
     closeBundle() {
-      const samplesDir = resolve(__dirname, 'dist', 'samples');
-      let entries;
-
-      try {
-        entries = readdirSync(samplesDir, { withFileTypes: true });
-      } catch {
-        return;
-      }
-
-      for (const entry of entries) {
-        if (entry.isDirectory() && entry.name.endsWith('-old')) {
-          rmSync(resolve(samplesDir, entry.name), { recursive: true, force: true });
+      if (!outputDir || !existsSync(outputDir)) return;
+      const samplesDir = resolve(outputDir, 'samples');
+      function prune(directory) {
+        for (const entry of readdirSync(directory, { withFileTypes: true })) {
+          const path = resolve(directory, entry.name);
+          if (entry.name === '.DS_Store'
+            || (directory === samplesDir && entry.isDirectory() && entry.name.endsWith('-old'))) {
+            rmSync(path, { recursive: true, force: true });
+          } else if (entry.isDirectory()) {
+            prune(path);
+          }
         }
       }
+      prune(outputDir);
     },
   };
 }
