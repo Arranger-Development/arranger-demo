@@ -1,6 +1,9 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import viteConfig from '../vite.config.js';
 
 const requiredFiles = [
   'src/data/bassNotes.js',
@@ -44,12 +47,23 @@ test('local sample backups and generated metadata are ignored', () => {
   assert.match(gitignore, /\/public\/samples\/\*\/\.DS_Store/);
 });
 
-test('demo build prunes ignored sample backup folders from dist', () => {
-  const viteConfig = readFileSync('vite.config.js', 'utf8');
-
-  assert.match(viteConfig, /function\s+prunePublicSampleBackups\(\)/);
-  assert.match(viteConfig, /closeBundle\(\)\s*\{/);
-  assert.match(viteConfig, /samplesDir\s*=\s*resolve\(__dirname,\s*'dist',\s*'samples'\)/);
-  assert.match(viteConfig, /entry\.isDirectory\(\)\s*&&\s*entry\.name\.endsWith\('-old'\)/);
-  assert.match(viteConfig, /rmSync\(resolve\(samplesDir,\s*entry\.name\),\s*\{\s*recursive:\s*true,\s*force:\s*true\s*\}\)/);
-});
+for (const outDir of ['dist', 'custom-output']) {
+  test(`build removes metadata and sample backups only from ${outDir}`, (t) => {
+    const root = mkdtempSync(join(tmpdir(), 'arranger-build-cleanup-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const discarded = ['.DS_Store', 'samples/.DS_Store', 'assets/art/.DS_Store', 'samples/chords-old/backup.wav'];
+    const retained = ['index.html', 'assets/app.js', 'assets/art-old/image.png', 'samples/Chords/chord.wav'];
+    const sourceFiles = ['public/.DS_Store', 'public/samples/chords-old/backup.wav'];
+    for (const file of [...discarded, ...retained].map((file) => join(outDir, file)).concat(sourceFiles)) {
+      const path = join(root, file);
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, 'fixture');
+    }
+    const plugin = viteConfig.plugins.find(({ name }) => name === 'prune-public-sample-backups');
+    plugin.configResolved({ root, build: { outDir } });
+    plugin.closeBundle();
+    for (const file of discarded) assert.equal(existsSync(join(root, outDir, file)), false, file);
+    for (const file of retained) assert.equal(existsSync(join(root, outDir, file)), true, file);
+    for (const file of sourceFiles) assert.equal(existsSync(join(root, file)), true, file);
+  });
+}
