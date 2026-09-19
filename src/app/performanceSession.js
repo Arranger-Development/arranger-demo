@@ -2,8 +2,8 @@ import {PERFORMANCE_TRACKS as TRACKS, emptySelection, performanceTemplates, crea
 import {MAX_PROJECT_BARS} from '../domain/projectLength.js';
 
 export const SESSION_VERSION = 4;
-export const MAIN_PHRASE_SLOTS = 5;
-export const TRANSITION_PHRASE_SLOTS = 0;
+export const MAIN_PHRASE_SLOTS = 10;
+export const TRANSITION_PHRASE_SLOTS = 4;
 export const clone = (value) => structuredClone(value);
 const uid = () => globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 export const defaultTimbres = () => Object.fromEntries(TRACKS.map((id) => [id, ({ drums: 'soft-electronic-kit', chord: 'warm-electric-piano', bass: 'round-electric-bass', melody: 'airy-synth-lead' })[id]]));
@@ -17,6 +17,11 @@ export function nextSectionNumber(sections, kind) {
     const match = s.name.match(new RegExp(`^${prefix}\\s*(\\d+)$`));
     return match ? Number(match[1]) : 0;
   })) + 1;
+}
+export function fixedPerformancePads(catalog) {
+  return Object.fromEntries(TRACKS.map((track) => [track, Array.from({ length: MAIN_PHRASE_SLOTS + TRANSITION_PHRASE_SLOTS }, (_, i) => (
+    catalog[track].filter((p) => (p.kind ?? 'main') === (i < MAIN_PHRASE_SLOTS ? 'main' : 'transition'))[i < MAIN_PHRASE_SLOTS ? i : i - MAIN_PHRASE_SLOTS] ?? null
+  ))]));
 }
 export function createSession(genre, profile, bpm = 100) {
   const catalog = performanceTemplates(genre, profile);

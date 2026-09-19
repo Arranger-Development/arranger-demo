@@ -1,0 +1,74 @@
+/* Jam reuses the original gem workbench. Live's pw-workspace rules do not apply. */
+.jam-workspace nav { display: flex; gap: 6px; }
+.jam-workspace nav button { padding: 6px 10px; border: 1px solid var(--hardware-control-border); border-radius: 5px; color: var(--ink-2); background: var(--asset-drum-control-button) center / 100% 100%; }
+.jam-workspace nav button[aria-pressed=true] { color: #ffe3b6; border-color: #d9b47a; box-shadow: inset 0 0 8px #edc88222; }
+.jam-body { width: 100%; gap: 10px; padding: 12px 18px 8px; }
+.jam-zone-label { color: var(--ink-2); font-size: 10px; letter-spacing: .08em; }
+.jam-zone-label span { margin-left: 24px; padding-left: 24px; border-left: 1px solid #af8e5955; }
+.jam-grid { --pad-size: min(144px,calc((100cqw - 177px) / var(--jam-total-slots)),calc((100cqh - 114px) / 4)); gap: 10px; }
+.jam-row { grid-template-columns: 40px auto auto; gap: 12px; }
+.jam-pad-group { display: grid; grid-template-columns: repeat(var(--jam-main-slots),var(--pad-size)); gap: 8px; }
+.jam-transitions { grid-template-columns: repeat(var(--jam-transition-slots),var(--pad-size)); border-left: 1px solid #af8e5955; padding-left: 12px; }
+.jam-pad-slot { display: grid; gap: 3px; min-width: 0; }
+.jam-pad-slot .performance-pad { position: relative; }
+.jam-pad-slot .performance-pad strong { font-size: clamp(10px,calc(var(--pad-size) * .15),16px); }
+.jam-pad-slot .performance-pad-top { font-size: clamp(9px,calc(var(--pad-size) * .115),12px); }
+.jam-manage { position: relative; }
+.jam-manage > summary { cursor: pointer; list-style: none; }
+.jam-manage-panel { position: absolute; right: 0; top: calc(100% + 8px); z-index: 21; display: grid; gap: 9px; width: 220px; padding: 14px; border: 1px solid #8d7044; border-radius: 6px; background: var(--asset-metal) center / cover; box-shadow: 0 10px 30px #000c; }
+.jam-manage-panel label { display: grid; gap: 5px; font-size: 11px; color: var(--ink-2); }
+.jam-sequence { display: block; min-width: 0; padding-top: 7px; }
+.jam-loops { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(110px,1fr); grid-template-columns: none; overflow-x: auto; padding: 2px 4px 4px; scrollbar-color: #947044 #211a14; }
+.jam-loops .performance-loop { display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center; }
+.jam-loops .performance-loop-dial { width: 44px; height: 44px; }
+.jam-loops .performance-loop-circle { width: 34px; height: 34px; font-size: 10px; }
+.jam-loops .performance-loop.is-editing .performance-loop-circle::after { bottom: 4px; width: 3px; height: 3px; }
+.jam-loops .performance-loop strong { text-align: center; font-size: 11px; }
+.jam-loops .performance-loop small { text-align: center; font-size: 9px; }
+.jam-loops .performance-loop strong { min-height: 1.4em; }
+.jam-footer { display: flex; align-items: center; justify-content: space-between; min-height: 22px; }
+@media(max-width:900px) {
+  .jam-workspace .performance-header { gap: 10px; padding-inline: 10px; }
+  .jam-workspace .performance-title h1 { font-size: 17px; }
+  .jam-body { padding: 12px; }
+  .jam-workbench { gap: 12px; grid-template-columns: minmax(0,1fr) 115px; }
+  .jam-save-panel .performance-save { width: 115px; }
+  .jam-grid { --pad-size: min(112px,calc((100cqw - 140px) / var(--jam-total-slots)),calc((100cqh - 114px) / 4)); }
+  .jam-row { gap: 8px; }
+  .jam-pad-group { gap: 5px; }
+}
+@media(max-width:650px) {
+  .jam-workspace { grid-template-rows: 90px minmax(0,1fr); }
+  .jam-workspace .performance-header { flex-wrap: wrap; gap: 6px; }
+  .jam-workspace .performance-title { flex-basis: 55%; }
+  .jam-workspace .performance-title .performance-eyebrow { display: none; }
+  .jam-workspace .performance-tempo { margin-left: auto; }
+  .jam-workbench { grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,1fr) 44px; }
+  .jam-grid { --pad-size: min(72px,calc((100cqw - 116px) / var(--jam-total-slots)),calc((100cqh - 174px) / 4)); }
+  .jam-row { grid-template-columns: 26px auto auto; gap: 5px; }
+  .jam-pad-group { gap: 4px; }
+  .jam-transitions { padding-left: 5px; }
+  .jam-save-panel { flex-direction: row; gap: 8px; }
+  .jam-manage-panel { top: auto; bottom: calc(100% + 8px); }
+  .jam-loops { grid-auto-columns: 105px; }
+}
+
+.jam-sequence { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 12px; }
+.jam-add-section { display: flex; align-items: center; gap: 6px; }
+.jam-add-section select { max-width: 100px; padding: 6px 4px; font: inherit; font-size: 10px; color: var(--ink-2); border: 1px solid #8d7044; border-radius: 4px; background: #211a14; }
+.jam-add-section button { white-space: nowrap; }
+@media(max-width:650px) { .jam-add-section { flex-direction: column; gap: 3px; } }
+
+/* The template row uses the full workbench width; actions sit above it. */
+.jam-workbench { grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,1fr); }
+.jam-save-panel { flex-direction: row; gap: 8px; }
+.jam-save-panel .performance-save { width: auto; min-height: 28px; padding: 5px 10px; }
+.jam-zone-label { margin-left: auto; margin-right: 16px; }
+@media(max-width:650px) {
+  .jam-save-panel .performance-save { width: auto; font-size: 9px!important; }
+  .jam-zone-label { margin-right: 0; }
+  .jam-grid { --pad-size: max(48px,min(72px,calc((100cqw - 116px) / var(--jam-total-slots)),calc((100cqh - 114px) / 4))); }
+  .jam-workbench { overflow-x: auto; }
+  .jam-manage-panel { top: calc(100% + 8px); bottom: auto; }
+}
+
