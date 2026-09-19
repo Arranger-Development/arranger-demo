@@ -147,7 +147,9 @@
 .pw-library-head { position: sticky; top: -10px; z-index: 3; margin: -10px -10px 0; padding: 10px; background: #171310; }
 .pw-library .pw-library-edit { min-height: 44px; margin: 10px 0; padding: 8px 4px; align-items: center; justify-content: center; text-align: center; font-size: 11px; cursor: pointer; touch-action: auto; border-color: #b18a51; color: #ffe3b6; }
 
-.pw-library .pw-library-section { position: relative; overflow: hidden; min-height: 56px; margin: 8px 0; padding: 8px 10px; gap: 4px; justify-content: center; }
+.pw-library .pw-library-section { position: relative; overflow: hidden; min-height: 44px; margin: 6px 0; padding: 5px 10px; gap: 1px; justify-content: center; }
+.pw-library-section small { line-height: 12px; }
+.pw-library-section strong { line-height: 18px; }
 .pw-workspace .pw-library-section[aria-pressed=true] { color: #ffe3b6; background: #493724; border-color: #ffe0a0; }
 .pw-workspace .pw-library-section[data-playing=true] { box-shadow: 0 0 0 2px #e8c28a,inset 0 0 20px #e5b15e20; }
 .pw-workspace .pw-library-section[data-pending=true] { outline: 2px dashed #ddc79e; outline-offset: 2px; }
