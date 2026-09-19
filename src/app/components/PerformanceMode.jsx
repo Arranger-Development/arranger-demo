@@ -258,7 +258,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         </header>
         {TRACKS.map((t) => <div className="pw-live-slot" data-track={t} key={t}><button type="button" className="pw-live-cell" data-track={t} aria-label={`${column.name} · 选择${LABELS[t]}轨道`}
           aria-pressed={selectedLiveTrack === t} onPointerDown={(e) => drag.begin(e, 'column', column.id)} onPointerMove={drag.move} onPointerUp={drag.end} onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}
-          onClick={(e) => clickColumn(e, column.id, t)}><strong>{column.snapshot?.phraseNames[t] ?? '拖入或选择'}</strong><span>{column.snapshot ? `${column.snapshot.totalBars} 小节` : '空槽'}</span><Progress playback={playback} id={column.id} bars={column.snapshot?.phraseBars[t]} running={active && status.playingId === column.id} /></button>
+          onClick={(e) => clickColumn(e, column.id, t)}><strong title={column.snapshot?.phraseNames[t]}>{column.snapshot?.phraseNames[t] ?? '拖入或选择'}</strong><span>{column.snapshot ? `${column.snapshot.totalBars} 小节` : '空槽'}</span><Progress playback={playback} id={column.id} bars={column.snapshot?.phraseBars[t]} running={active && status.playingId === column.id} /></button>
           <label className="pw-live-replace-control" title="替换乐句" data-disabled={liveLocked}>
           {renderIcon(ChevronDown, { size: 14 })}
           <select className="pw-live-replace" aria-label={`曲式 ${index + 1} ${LABELS[t]}替换乐句`} disabled={liveLocked} value=""
