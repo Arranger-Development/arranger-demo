@@ -231,7 +231,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           onRewind={() => { setMessage(''); playback.rewindLive(session.columns, session.bpm); }} />
         <button disabled={liveLocked || !session.columns.some((c) => c.snapshot)} onClick={() => { if (previewing) playback.stop(); setCounts(Object.fromEntries(session.columns.filter((c) => c.snapshot && c.repeat === null).map((c) => [c.id, 1]))); setExporting(true); }}>导出到创作模式 →</button>
       </div>
-      <aside className="pw-library"><div className="pw-library-head"><h2>段落素材</h2><button type="button" className="pw-library-edit" ref={editorEntryRef} onClick={openSectionEditor}>编辑／保存段落</button><p>点击试听，再点停止；拖入曲式列，或选中后点击“放入”</p></div>{session.sections.map((s) => {
+      <aside className="pw-library"><div className="pw-library-head"><h2>段落素材</h2><button type="button" className="pw-library-edit" ref={editorEntryRef} onClick={openSectionEditor}>编辑／保存段落</button></div>{session.sections.map((s) => {
         const playing = previewing && status.playingId === s.id;
         const pending = previewing && status.pendingId === s.id;
         const preparing = previewing && !status.playingId && status.requestedId === s.id;
