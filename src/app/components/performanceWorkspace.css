@@ -69,6 +69,9 @@
 .pw-column footer > button { padding: 6px 2px; }
 .pw-repeat-count { display: flex; align-items: center; gap: 3px; }.pw-repeat-count input { width: 45px; padding: 5px!important; }.pw-repeat-count button { padding: 4px 8px; font-size: 20px; }
 .pw-add-column { align-self: center; margin: 0 15px; width: 50px; height: 50px; font-size: 25px!important; transform: rotate(0); }
+.pw-dialog-backdrop { position: fixed; inset: 0; background: #000a; z-index: 300; display: grid; place-items: center; }
+.pw-dialog { background: #30261d; color: #f2dfc0; border: 1px solid #b79764; border-radius: 12px; padding: 28px; width: min(460px,90vw); box-shadow: 0 20px 80px #000a; }
+.pw-dialog h2 { margin-top: 0; }.pw-dialog p { font-size: 12px; line-height: 1.7; }.pw-dialog label { display: flex; justify-content: space-between; align-items: center; margin: 12px 0; }.pw-dialog input { width: 90px; }.pw-dialog > button { margin-right: 8px; }
 .results-continue-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
 .results-continue-actions button { padding: 12px 20px; color: #f2dbb5; background: #302218; border: 1px solid #ac8450; border-radius: 7px; cursor: pointer; }
 @media(max-height:850px) { .pw-live-trackheads { grid-template-rows: 55px repeat(4,130px); gap: 8px; }.pw-column { grid-template-rows: 55px repeat(4,130px) auto; gap: 8px; }.pw-track-controls { gap: 2px; padding: 7px; }.pw-track-controls label { font-size: 9px; }.pw-track-controls input[type=range] { height: 11px; }.pw-jam-row { margin-bottom: 8px; }.pw-pad { grid-template-rows: minmax(98px,1fr) 28px; } }

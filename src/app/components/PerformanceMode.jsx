@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useRef, useState, useSyncExternalStore} from 'react';
 import createAudioEngine from '../../audio/createAudioEngine.js';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, performanceTemplates, hasSelection, normalizePerformanceBpm } from '../performanceModel.js';
-import {createForm, MAIN_PHRASE_SLOTS, fixedPerformancePads, createSessionEditor, readSession, writeSession, snapshotSection} from '../performanceSession.js';
+import { createForm, MAIN_PHRASE_SLOTS, fixedPerformancePads, createSessionEditor, readSession, writeSession, snapshotSection, createLiveImport, liveExportLength } from '../performanceSession.js';
 import { createSessionPlayback } from '../sessionPlayback.js';
 import { mapPerformanceKeyboard } from '../../input/performanceInput.js';
 import { Progress, TrackControls } from './PerformanceControls.jsx';
@@ -17,15 +17,17 @@ import './jamView.css';
 void [LiveTransport, Progress, TrackControls, JamView, SectionEditorDialog];
 const storage = () => { try { return window.localStorage; } catch { return null; } };
 
-export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, recommendation, onBack, hardwareInput }) {
+export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, recommendation, onBack, onImport, hardwareInput }) {
   const [editor] = useState(() => createSessionEditor(readSession(storage(), genreId, profileId, initialBpm, recommendation)));
   const { session, drafts, editingId, liveUndo, liveRedo } = useSyncExternalStore(editor.subscribe, editor.getSnapshot);
   const [audio] = useState(() => createAudioEngine());
   const [status, setStatus] = useState({ mode: 'stopped', loading: false, playingId: null, pendingId: null });
   const [playback] = useState(() => createSessionPlayback(audio, setStatus));
   const [message, setMessage] = useState('');
+  const [exporting, setExporting] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const editorEntryRef = useRef(null);
+  const [counts, setCounts] = useState({});
   const [librarySelection, setLibrarySelection] = useState('');
   const [selectedLiveTrack, setSelectedLiveTrack] = useState('drums');
   const editingSection = active && editorOpen;
@@ -168,7 +170,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     return () => window.removeEventListener('keydown', key);
   });
   useEffect(() => {
-    if (!active || editingSection) return undefined;
+    if (!active || editingSection || exporting) return undefined;
     const key = (event) => {
       if (event.key === 'Escape' && dragState) { event.preventDefault(); drag.cancel(); return; }
       const command = liveKeyboardCommand(event); if (!command) return;
@@ -181,6 +183,8 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   });
 
 
+  let exportLength = 0; let exportError = '';
+  try { exportLength = liveExportLength(session.columns, counts); } catch (error) { exportError = error.message; }
   return <><section className="performance-mode pw-workspace" hidden={!active} inert={editingSection ? true : undefined} aria-label="Live 编排">
     <header className="performance-header">
       <button onClick={() => { commitLiveEdit(); playback.stop(); onBack(); }}>← 创作模式</button>
@@ -194,7 +198,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       <div className="pw-live-toolbar"><label>选择曲式 <select aria-label="选择曲式" disabled={liveLocked} value="" onChange={(e) => columnChange(createForm(e.target.value))}><option value="" disabled>选择曲式模板</option><option value="screenshot">完整曲式 · 截图模板</option><option value="blank">空白自定义</option></select></label><LiveTransport playback={playback} columns={session.columns} status={status} canUndo={liveUndo.length > 0} canRedo={liveRedo.length > 0}
           onUndo={() => restoreHistory('undo')} onRedo={() => restoreHistory('redo')} onPlay={toggleLive} onStop={() => playback.stop()}
           onRewind={() => { setMessage(''); playback.rewindLive(session.columns, session.bpm); }} />
-
+        <button disabled={liveLocked || !session.columns.some((c) => c.snapshot)} onClick={() => { if (previewing) playback.stop(); setCounts(Object.fromEntries(session.columns.filter((c) => c.snapshot && c.repeat === null).map((c) => [c.id, 1]))); setExporting(true); }}>导出到创作模式 →</button>
       </div>
       <aside className="pw-library"><div className="pw-library-head"><h2>段落素材</h2><button type="button" className="pw-library-edit" ref={editorEntryRef} onClick={openSectionEditor}>编辑／保存段落</button><p>点击试听，再点停止；拖入曲式列，或选中后点击“放入”</p></div>{session.sections.map((s) => {
         const playing = previewing && status.playingId === s.id;
@@ -238,7 +242,9 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         <p className="pw-effect-hint">点击轨道头或格子选择轨道。滤波与重复器仅影响现场声音。</p>
       </aside>
     </main>
-
+    {exporting && <div className="pw-dialog-backdrop"><section className="pw-dialog" role="dialog" aria-modal="true" aria-label="导出到创作模式"><h2>展开曲式</h2><p>无限循环仅在本次导出中转换为有限次数。</p>{session.columns.filter((c) => c.snapshot && c.repeat === null).map((c) => <label key={c.id}>{c.name} <input type="number" min="1" aria-label={`${c.name}导出次数`} value={counts[c.id] ?? ''} onChange={(e) => setCounts({ ...counts, [c.id]: e.target.value })} /></label>)}<p role="status">{exportError || `共 ${exportLength} 小节 · 上限 256 小节`}</p><p>将替换当前创作编排，可在创作模式撤销。</p><button onClick={() => setExporting(false)}>取消</button><button className="pw-primary" disabled={Boolean(exportError) || exportLength < 1 || exportLength > 256} onClick={() => {
+      try { const result = createLiveImport(session, counts); playback.stop(); onImport(result); setExporting(false); } catch (error) { setMessage(error.message); }
+    }}>展开并进入创作</button></section></div>}
   </section>
     {editingSection && <SectionEditorDialog bpm={session.bpm} onBpmChange={changeBpm} onClose={closeSectionEditor} hardwareInput={hardwareInput} onConnect={connectHardware}>
       <JamView active={editingSection} session={session} drafts={drafts} editingId={editingId} draft={draft}

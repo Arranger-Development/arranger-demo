@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createSession, fixedPerformancePads, EXTRA_PHRASE_PLACEHOLDERS, createSessionEditor, readSession, writeSession, sessionKey, snapshotSection, createForm} from '../src/app/performanceSession.js';
+import { createSession, fixedPerformancePads, EXTRA_PHRASE_PLACEHOLDERS, createSessionEditor, readSession, writeSession, sessionKey, snapshotSection, createLiveImport, createForm, liveExportLength } from '../src/app/performanceSession.js';
 import { performanceStorageKey, performanceTemplates } from '../src/app/performanceModel.js';
 import { AI_PERFORMANCE_PROFILE_ID as profile } from '../src/data/aiPerformanceTemplates.js';
+import { getTotalBars, MAX_PROJECT_BARS } from '../src/domain/projectLength.js';
+import { createProjectFile } from '../src/export/projectFile.js';
+import { collectProjectEvents } from '../src/export/audioFile.js';
 import { createInitialRecommendationSelections, createMultimodalRecommendationAppState } from '../src/app/multimodalRecommendation.js';
 const genre = 'chill';
 function populated() {
@@ -46,6 +49,28 @@ test('form edits undo and restored copies remain independent of mutated source',
   editor.columns([]); assert.equal(editor.getSnapshot().session.columns.length,0); editor.undoLive();
   assert.deepEqual(editor.getSnapshot().session.columns,before);
   editor.add('transition'); const state = editor.getSnapshot(); assert.equal(state.drafts[state.editingId].kind,'transition');
+});
+test('Live repeats are finite on export only; notes, placeholders and mix survive', () => {
+  const s = populated(); const copy = snapshotSection(s.sections[0],genre,profile);
+  s.columns = [{id:'a',name:'主歌',repeat:2,snapshot:copy},{id:'b',name:'副歌',repeat:null,snapshot:copy},{id:'empty',repeat:null,snapshot:null}];
+  s.volumes.drums = -8;
+  assert.throws(()=>createLiveImport(s),/有限循环次数/);
+  const result = createLiveImport(s,{b:3});
+  assert.equal(result.totalBars,copy.totalBars*5); assert.equal(s.columns[1].repeat,null);
+  assert.equal(result.volumes.drums,-8); assert.equal(result.bpm,100);
+  assert.equal(result.matrix.chord[0].find(Boolean).requestedTimbreId,s.sections[0].timbres.chord);
+  assert.equal(result.clips.byId[result.clips.ids[0]].customName,true);
+  result.matrix.drums[0].fill(null); assert.ok(copy.matrix.drums[0].some(Boolean));
+});
+test('256 bars exports in full, 257 is rejected before constructing a replacement', () => {
+  const s = populated(); const snapshot = snapshotSection(s.sections[0],genre,profile);
+  const one = {...snapshot,totalBars:1,matrix:Object.fromEntries(Object.entries(snapshot.matrix).map(([t,bars])=>[t,[bars[0]]]))};
+  s.columns = [{id:'a',name:'长曲式',repeat:256,snapshot:one}];
+  const result = createLiveImport(s); assert.equal(MAX_PROJECT_BARS,256); assert.equal(getTotalBars(result),256);
+  assert.equal(createProjectFile(result).arrangement.totalBars,256);
+  assert.ok(collectProjectEvents(result).some(e=>e.bar===255));
+  s.columns[0].repeat=257; assert.equal(liveExportLength(s.columns),257); assert.throws(()=>createLiveImport(s),/257/);
+  s.columns[0].repeat=1; assert.equal(getTotalBars(createLiveImport(s)),1);
 });
 test('AI recommendation branches share requested timbres, BPM and muted track selections', () => {
   const selections = createInitialRecommendationSelections(); selections.selectedTrackIds=['drums']; selections.timbreByTrackId.chord='muted-rhodes';

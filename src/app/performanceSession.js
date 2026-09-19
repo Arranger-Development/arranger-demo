@@ -1,5 +1,7 @@
 import { UNDO_HISTORY_LIMIT } from './undoHistory.js';
 import { PERFORMANCE_TRACKS as TRACKS, emptySelection, performanceTemplates, createPerformanceMatrix, normalizePerformanceBpm, performanceStorageKey } from './performanceModel.js';
+import { createDefaultTrackState } from '../domain/trackInstances.js';
+import { createClipRecord } from '../domain/clipHelpers.js';
 import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
 
 export const SESSION_VERSION = 4;
@@ -112,6 +114,44 @@ export function snapshotSection(section, genre, profile) {
     phraseBars: Object.fromEntries(TRACKS.map((t, i) => [t, selected[i]?.barCount ?? 2])),
   };
 }
+export function resolveLiveColumns(columns, counts = {}) {
+  return columns.filter((c) => validSnapshot(c.snapshot)).map((c) => {
+    const repeat = c.repeat === null ? Number(counts[c.id]) : c.repeat;
+    if (!Number.isSafeInteger(repeat) || repeat < 1) throw new Error(`请填写「${c.name}」的有限循环次数。`);
+    return { ...c, repeat };
+  });
+}
+export function liveExportLength(columns, counts) {
+  return resolveLiveColumns(columns, counts).reduce((n, c) => n + c.snapshot.totalBars * c.repeat, 0);
+}
+export function createLiveImport(session, counts = {}) {
+  const columns = resolveLiveColumns(session.columns, counts);
+  const totalBars = liveExportLength(session.columns, counts);
+  if (!totalBars) throw new Error('请先将已保存段落放入曲式。');
+  if (totalBars > MAX_PROJECT_BARS) throw new Error(`编曲最多支持 ${MAX_PROJECT_BARS} 小节，当前为 ${totalBars} 小节。`);
+  const matrix = Object.fromEntries(TRACKS.map((t) => [t, []]));
+  const records = [];
+  let bar = 0;
+  for (const column of columns) for (let r = 0; r < column.repeat; r++) {
+    for (let b = 0; b < column.snapshot.totalBars; b++, bar++) for (const t of TRACKS) {
+      const content = clone(column.snapshot.matrix[t][b]);
+      matrix[t].push(content);
+      if (!content.some(Boolean)) continue;
+      records.push({ ...createClipRecord(t, bar), customName: true, name: `${column.name} · ${column.snapshot.phraseNames[t]}`,
+        requestedTimbreId: column.snapshot.timbres[t], ...(t === 'chord' ? { editorMode: 'notes' } : {}) });
+    }
+  }
+  const first = records[0];
+  return { ...createDefaultTrackState(), totalBars, matrix,
+    clips: { ids: records.map((c) => c.id), byId: Object.fromEntries(records.map((c) => [c.id, c])) },
+    bpm: session.bpm, isPlaying: false, currentBar: 0, currentStep: 0, seekBar: 0, seekStep: 0,
+    selectedBar: first?.bar ?? 0, selectedClipId: first?.id ?? null, activeTrackId: first?.trackId ?? 'drums',
+    visibleTrackIds: [...TRACKS], volumes: { ...session.volumes }, mutedTracks: { ...session.mutedTracks },
+    melodyTimbreId: matrix.melody.flat().find((c) => c?.timbreId)?.timbreId ?? 'piano',
+    melodyScaleId: 'chinese', melodyRhythmTemplateId: null,
+  };
+}
+
 export function createSessionEditor(initial) {
   let state = { session: clone(initial), drafts: Object.fromEntries(initial.sections.map((s) => [s.id, clone(s)])), editingId: initial.sections[0].id, liveUndo: [], liveRedo: [], livePosition: null };
   const listeners = new Set();
