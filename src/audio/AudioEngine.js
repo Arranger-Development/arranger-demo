@@ -280,6 +280,12 @@ export default class AudioEngine {
 
   // Fractional steps at the actual audio clock, without scheduler lookahead or
   // input quantization. Reading this never seeks or changes the transport.
+  getAbsolutePlaybackStep() {
+    if (!this.transportRunning || this.playbackStartedAt === null || this.immediate() < this.playbackStartedAt) return null;
+    const transport = this.getStartedTransport();
+    return transport?.getTicksAtTime ? transport.getTicksAtTime(this.immediate()) / (transport.PPQ / 4) : null;
+  }
+
   getPlaybackPosition() {
     return this.getPlaybackProgress()?.position ?? null;
   }
@@ -1488,8 +1494,17 @@ export default class AudioEngine {
 
     this.transportEventId = transport.scheduleRepeat((time) => {
       if (this.playbackStartedAt === null) this.playbackStartedAt = time;
-      const nextSnapshot = this.playbackSource?.();
-      if (nextSnapshot && nextSnapshot !== snapshot) {
+      const nextSnapshot = this.playbackSource?.(this.transportAbsoluteStep, time);
+      if (nextSnapshot?.done) {
+        void this.stop(time);
+        this.stopAllVoices(time);
+        const draw = this.tone?.getDraw?.() ?? this.tone?.Draw;
+        if (draw?.schedule) draw.schedule(nextSnapshot.onAudible, time);
+        else nextSnapshot.onAudible?.();
+        return;
+      }
+      if (nextSnapshot?.releaseVoices) this.stopAllVoices(time);
+      if (nextSnapshot && (nextSnapshot.matrix !== snapshot?.matrix || nextSnapshot.totalBars !== snapshot?.totalBars)) {
         const totalBars = Number.isInteger(nextSnapshot.totalBars) && nextSnapshot.totalBars > 0
           ? nextSnapshot.totalBars : this.playbackTotalBars;
         if (totalBars !== this.playbackTotalBars) {
@@ -1500,7 +1515,7 @@ export default class AudioEngine {
         this.matrixAdapter = adapter;
         snapshot = nextSnapshot;
       }
-      const position = adapter.getPositionForFlatStep(this.transportAbsoluteStep);
+      const position = adapter.getPositionForFlatStep(this.transportAbsoluteStep - (nextSnapshot?.stepOffset ?? 0));
       this.currentBar = position.bar;
       this.currentStep = position.step;
       this.onScheduledPositionChange?.(position.bar, position.step);
@@ -1508,6 +1523,7 @@ export default class AudioEngine {
       const notifyAudiblePosition = () => {
         if (notificationGeneration !== this.positionNotificationGeneration) return;
         this.onPositionChange?.(position.bar, position.step);
+        nextSnapshot?.onAudible?.();
       };
       const draw = this.tone?.getDraw?.() ?? this.tone?.Draw;
       if (typeof draw?.schedule === 'function') {
