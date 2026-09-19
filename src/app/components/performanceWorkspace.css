@@ -1,4 +1,4 @@
-.pw-workspace { grid-template-rows: 66px 36px minmax(0,1fr); padding: 14px; gap: 0; }
+.pw-workspace { grid-template-rows: 66px auto minmax(0,1fr); padding: 14px; gap: 0; }
 .pw-workspace button,.pw-workspace select,.pw-workspace input:not([type=range]) { color: #eddfc9; background: #251e18; border: 1px solid #685744; border-radius: 5px; padding: 7px 10px; font: inherit; }
 .pw-workspace button { box-shadow: inset 0 1px #ffffff15,0 2px 3px #0005; }
 .pw-workspace button:hover:not(:disabled) { background: #423124; border-color: #b18a51; }
@@ -6,7 +6,8 @@
 .pw-workspace select { max-width: 100%; font-size: 11px; }
 .pw-workspace input[type=range] { width: 100%; accent-color: #d2aa70; height: 15px; }
 .pw-workspace nav { display: flex; gap: 6px; }
-.pw-status { display: flex; align-items: center; justify-content: space-between; background: #17120fea; padding: 3px 18px; color: #dac3a1; font-size: 11px; border-inline: 1px solid #665139; }
+.pw-status { display: flex; align-items: center; justify-content: space-between; min-height: 36px; background: #17120fea; padding: 3px 18px; color: #dac3a1; font-size: 11px; border-inline: 1px solid #665139; }
+.pw-status:empty { min-height: 0; padding: 0; border: 0; }
 .pw-status button { padding: 2px 12px; font-size: 11px; }
 .pw-jam,.pw-live { background: linear-gradient(125deg,#36291fec,#1a1411f5),var(--asset-metal); border: 1px solid #665139; border-top: 0; border-radius: 0 0 10px 10px; overflow: auto; min-height: 0; color: #eddfc9; }
 .pw-jam { padding: 18px; }
@@ -99,7 +100,7 @@
 .pw-column footer > button { font-size: 9px; padding: 4px 1px; }
 .pw-add-column { margin-inline: 8px; width: 42px; height: 42px; }
 @media(max-width:700px) {
-  .pw-workspace { grid-template-rows: 100px 36px minmax(0,1fr); }
+  .pw-workspace { grid-template-rows: 100px auto minmax(0,1fr); }
   .pw-workspace .performance-header { display: grid; grid-template-columns: auto 1fr auto; grid-template-rows: 36px 40px; gap: 6px; }
   .pw-workspace .performance-title { grid-column: 2 / -1; }
   .pw-workspace .performance-title h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
