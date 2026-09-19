@@ -1,3 +1,4 @@
+import { UNDO_HISTORY_LIMIT } from './undoHistory.js';
 import { PERFORMANCE_TRACKS as TRACKS, emptySelection, performanceTemplates, createPerformanceMatrix, normalizePerformanceBpm, performanceStorageKey } from './performanceModel.js';
 import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
 
@@ -112,10 +113,34 @@ export function snapshotSection(section, genre, profile) {
   };
 }
 export function createSessionEditor(initial) {
-  let state = { session: clone(initial), drafts: Object.fromEntries(initial.sections.map((s) => [s.id, clone(s)])), editingId: initial.sections[0].id };
+  let state = { session: clone(initial), drafts: Object.fromEntries(initial.sections.map((s) => [s.id, clone(s)])), editingId: initial.sections[0].id, liveUndo: [], liveRedo: [], livePosition: null };
   const listeners = new Set();
   const update = (patch) => { state = { ...state, ...patch }; listeners.forEach((fn) => fn()); return state; };
   const sessionPatch = (patch) => update({ session: { ...state.session, ...patch } });
+  let transaction = null;
+  const capture = (position = state.livePosition) => clone({
+    columns: state.session.columns, bpm: state.session.bpm, volumes: state.session.volumes,
+    mutedTracks: state.session.mutedTracks, position,
+  });
+  const changed = (a, b) => ['columns', 'bpm', 'volumes', 'mutedTracks'].some(key => JSON.stringify(a[key]) !== JSON.stringify(b[key]));
+  const checkpoint = (before) => {
+    if (!changed(before, capture())) return state;
+    return update({ liveUndo: [...state.liveUndo, before].slice(-UNDO_HISTORY_LIMIT), liveRedo: [] });
+  };
+  const commitLiveEdit = () => {
+    const before = transaction; transaction = null;
+    return before ? checkpoint(before) : state;
+  };
+  const editLive = (patch, position = state.livePosition) => {
+    const before = capture(position);
+    sessionPatch(clone(patch));
+    if (!transaction) checkpoint(before);
+    return state;
+  };
+  const restore = (snapshot) => {
+    const { position, ...patch } = clone(snapshot);
+    return update({ session: { ...state.session, ...patch }, livePosition: position });
+  };
   return {
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, getSnapshot: () => state,
     select: (id) => state.drafts[id] && update({ editingId: id }),
@@ -132,6 +157,23 @@ export function createSessionEditor(initial) {
       return update({ session: { ...state.session, sections }, drafts, editingId: state.editingId === id ? sections[0].id : state.editingId });
     },
     patch: sessionPatch,
-    columns(columns) { return sessionPatch({ columns: clone(columns) }); },
+    beginLiveEdit(position) { if (!transaction) transaction = capture(position); },
+    commitLiveEdit,
+    editLive,
+    columns(columns, position) { return editLive({ columns }, position); },
+    undoLive(position = state.livePosition) {
+      commitLiveEdit();
+      if (!state.liveUndo.length) return state;
+      const before = state.liveUndo.at(-1); const current = capture(position);
+      update({ liveUndo: state.liveUndo.slice(0, -1), liveRedo: [...state.liveRedo, current].slice(-UNDO_HISTORY_LIMIT) });
+      return restore(before);
+    },
+    redoLive(position = state.livePosition) {
+      commitLiveEdit();
+      if (!state.liveRedo.length) return state;
+      const after = state.liveRedo.at(-1); const current = capture(position);
+      update({ liveRedo: state.liveRedo.slice(0, -1), liveUndo: [...state.liveUndo, current].slice(-UNDO_HISTORY_LIMIT) });
+      return restore(after);
+    },
   };
 }

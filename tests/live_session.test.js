@@ -40,6 +40,12 @@ test('draft edits, slot bindings, saved sections and Live snapshots never alias'
   assert.deepEqual(editor.getSnapshot().session.columns[0].snapshot,copy);
   assert.ok(copy.matrix.drums.flat().some(Boolean)); assert.ok(initial.sections[0].selection.drums);
 });
+test('form edits undo and restored copies remain independent of mutated source', () => {
+  const editor = createSessionEditor(populated()); const before = structuredClone(editor.getSnapshot().session.columns);
+  editor.columns([]); assert.equal(editor.getSnapshot().session.columns.length,0); editor.undoLive();
+  assert.deepEqual(editor.getSnapshot().session.columns,before);
+  editor.add('transition'); const state = editor.getSnapshot(); assert.equal(state.drafts[state.editingId].kind,'transition');
+});
 test('explicitly emptied pad bindings survive refresh independently of saved sections', () => {
   const store = memory(); const session = populated();
   session.pads.drums[0] = null; writeSession(store,genre,profile,session);

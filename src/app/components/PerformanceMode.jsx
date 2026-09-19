@@ -18,7 +18,7 @@ const storage = () => { try { return window.localStorage; } catch { return null;
 
 export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack, hardwareInput }) {
   const [editor] = useState(() => createSessionEditor(readSession(storage(), genreId, profileId, initialBpm)));
-  const { session, drafts, editingId } = useSyncExternalStore(editor.subscribe, editor.getSnapshot);
+  const { session, drafts, editingId, liveUndo, liveRedo } = useSyncExternalStore(editor.subscribe, editor.getSnapshot);
   const [audio] = useState(() => createAudioEngine());
   const [status, setStatus] = useState({ mode: 'stopped', loading: false, playingId: null, pendingId: null });
   const [playback] = useState(() => createSessionPlayback(audio, setStatus));
@@ -35,9 +35,12 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const templates = useMemo(() => fixedPerformancePads(catalog), [catalog]);
   const persist = () => { if (!writeSession(storage(), genreId, profileId, editor.getSnapshot().session)) setMessage('浏览器未能保存，当前会话仍可继续使用。'); };
   const patch = (value) => {
-    editor.patch(value);
+    if (editingSection) editor.patch(value);
+    else editor.editLive(value, playback.getLivePosition());
     persist();
   };
+  const beginLiveEdit = () => editor.beginLiveEdit(playback.getLivePosition());
+  const commitLiveEdit = () => editor.commitLiveEdit();
   const columnChange = (columns) => {
     if (liveLocked) return;
     editor.columns(columns, playback.getLivePosition()); playback.syncLiveColumns(columns); persist();
@@ -46,8 +49,18 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     onSectionDrop: placeSection,
     onColumnDrop: (id, targetId, side) => columnChange(insertLiveColumn(editor.getSnapshot().session.columns, id, targetId, side)),
   });
+  const fieldHistory = { onFocus: beginLiveEdit, onBlur: commitLiveEdit, onKeyDown: (e) => { if (e.key === 'Enter') e.currentTarget.blur(); } };
+  function restoreHistory(direction) {
+    commitLiveEdit();
+    const before = editor.getSnapshot();
+    if (!(direction === 'undo' ? before.liveUndo : before.liveRedo).length) return;
+    playback.stop();
+    const restored = direction === 'undo' ? editor.undoLive(playback.getLivePosition()) : editor.redoLive(playback.getLivePosition());
+    playback.restoreLivePosition(restored.livePosition, restored.session.columns);
+    playback.setTempo(restored.session.bpm); persist(); setMessage('');
+  }
   function playLive(id) {
-    setMessage('');
+    commitLiveEdit(); setMessage('');
     if (!playback.live(editor.getSnapshot().session.columns, editor.getSnapshot().session.bpm, id)) setMessage('此处之后没有可播放段落');
   }
   function toggleLive() {
@@ -95,7 +108,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     setMessage('');
   }
   function openSectionEditor() {
-    resetPerformancePlayback();
+    commitLiveEdit(); resetPerformancePlayback();
     if (librarySelection) editor.select(librarySelection);
     drag.cancel();
     setEditorOpen(true);
@@ -159,6 +172,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       event.preventDefault();
       if (command === 'play') toggleLive();
       if (command === 'stop') playback.stop();
+      if (command === 'undo' || command === 'redo') restoreHistory(command);
     };
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
   });
@@ -166,16 +180,16 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
 
   return <><section className="performance-mode pw-workspace" hidden={!active || editorOpen} aria-label="Live 编排">
     <header className="performance-header">
-      <button onClick={() => { playback.stop(); onBack(); }}>← 创作模式</button>
+      <button onClick={() => { commitLiveEdit(); playback.stop(); onBack(); }}>← 创作模式</button>
       <div className="performance-title"><span className="performance-eyebrow">PROJECT ARRANGER / 0.4.0</span><h1>Live · 曲式编排</h1></div><button onClick={openSectionEditor}>Jam 段落编辑</button>
-      <label className="performance-tempo">BPM <input aria-label="演奏速度 BPM" type="number" min="40" max="240" value={session.bpm} onChange={(e) => changeBpm(e.target.value)} /></label>
+      <label className="performance-tempo">BPM <input aria-label="演奏速度 BPM" {...fieldHistory} type="number" min="40" max="240" value={session.bpm} onChange={(e) => changeBpm(e.target.value)} /></label>
       <button onClick={connectHardware}>{hardwareInput?.status === 'connected' ? 'Launchpad 已连接' : '连接 Launchpad'}</button>
     </header>
     <div className="pw-status" role="status">{status.error || message || (status.loading ? (previewing ? '正在准备试听…' : '正在准备声音…') : status.pendingId ? (previewing ? '待试听 · 下一小节切换' : '已排队 · 下一小节切换') : previewing ? '段落试听中' : status.mode === 'paused' ? '已暂停' : locked ? `播放中${status.cycle ? ` · 第 ${status.cycle} 次` : ''}` : '选择段落开始演奏')}
       {previewing && <button onClick={() => playback.stop()}>停止试听</button>}</div>
     <main className="pw-live">
-      <div className="pw-live-toolbar"><label>选择曲式 <select aria-label="选择曲式" disabled={liveLocked} value="" onChange={(e) => columnChange(createForm(e.target.value))}><option value="" disabled>选择曲式模板</option><option value="screenshot">完整曲式 · 截图模板</option><option value="blank">空白自定义</option></select></label><LiveTransport playback={playback} columns={session.columns} status={status}
-          onPlay={toggleLive} onStop={() => playback.stop()}
+      <div className="pw-live-toolbar"><label>选择曲式 <select aria-label="选择曲式" disabled={liveLocked} value="" onChange={(e) => columnChange(createForm(e.target.value))}><option value="" disabled>选择曲式模板</option><option value="screenshot">完整曲式 · 截图模板</option><option value="blank">空白自定义</option></select></label><LiveTransport playback={playback} columns={session.columns} status={status} canUndo={liveUndo.length > 0} canRedo={liveRedo.length > 0}
+          onUndo={() => restoreHistory('undo')} onRedo={() => restoreHistory('redo')} onPlay={toggleLive} onStop={() => playback.stop()}
           onRewind={() => { setMessage(''); playback.rewindLive(session.columns, session.bpm); }} />
 
       </div>
@@ -200,14 +214,14 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       <div className="pw-live-scroll" ref={setScrollElement}><div className="pw-columns">{session.columns.map((column, index) => <article key={column.id} className="pw-column" data-live-column-id={column.id} data-dragging={dragState?.kind === 'column' && dragState.id === column.id} data-drop-side={dragState?.targetId === column.id ? dragState.side : undefined} data-playing={status.playingId === column.id} data-pending={status.pendingId === column.id}
         onDragOver={(e) => { if (!liveLocked) e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); if (liveLocked) return; const s = e.dataTransfer.getData('application/arranger-section'); const c = e.dataTransfer.getData('application/arranger-column'); if (s) placeSection(column.id, s); if (c) moveColumn(c, column.id); }}>
         <header onPointerDown={(e) => drag.begin(e, 'column', column.id)} onPointerMove={drag.move} onPointerUp={drag.end} onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}><span className="pw-column-grip" aria-label={`拖动 ${column.name}`}>⠿</span>
-          <input aria-label={`曲式 ${index + 1} 名称`} disabled={liveLocked} value={column.name} onChange={(e) => columnChange(session.columns.map((c) => c.id === column.id ? { ...c, name: e.target.value } : c))} />
+          <input aria-label={`曲式 ${index + 1} 名称`} {...fieldHistory} disabled={liveLocked} value={column.name} onChange={(e) => columnChange(session.columns.map((c) => c.id === column.id ? { ...c, name: e.target.value } : c))} />
           <div><button aria-label={`左移 ${column.name}`} disabled={liveLocked || index === 0} onClick={() => moveColumn(column.id, session.columns[index - 1].id)}>←</button><button disabled={liveLocked} aria-label={`删除曲式 ${column.name}`} onClick={() => columnChange(session.columns.filter((c) => c.id !== column.id))}>×</button><button aria-label={`右移 ${column.name}`} disabled={liveLocked || index === session.columns.length - 1} onClick={() => moveColumn(column.id, session.columns[index + 1].id)}>→</button></div>
         </header>
         {TRACKS.map((t) => <button type="button" className="pw-live-cell" data-track={t} key={t} aria-label={`${column.name} · 选择${LABELS[t]}轨道`}
           aria-pressed={selectedLiveTrack === t} onPointerDown={(e) => drag.begin(e, 'column', column.id)} onPointerMove={drag.move} onPointerUp={drag.end} onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}
           onClick={(e) => clickColumn(e, column.id, t)}><strong>{column.snapshot?.phraseNames[t] ?? '拖入段落'}</strong><span>{column.snapshot ? `${column.snapshot.totalBars} 小节` : '空槽'}</span><Progress playback={playback} id={column.id} bars={column.snapshot?.phraseBars[t]} running={active && status.playingId === column.id} /></button>)}
         <footer><button disabled={!column.snapshot} onClick={() => playLive(column.id)}>▶ {column.snapshot?.name ?? '空列'}</button>
-          <div className="pw-repeat-count"><span>×</span><input aria-label={`${column.name}循环次数`} disabled={liveLocked || column.repeat === null} type="number" min="1" value={column.repeat ?? ''} placeholder="∞" onChange={(e) => { const n = Number(e.target.value); if (Number.isSafeInteger(n) && n > 0) columnChange(session.columns.map((c) => c.id === column.id ? { ...c, repeat: n } : c)); }} /><button aria-label={`${column.name}无限循环`} disabled={liveLocked} aria-pressed={column.repeat === null} onClick={() => columnChange(session.columns.map((c) => c.id === column.id ? { ...c, repeat: c.repeat === null ? 1 : null } : c))}>∞</button></div>
+          <div className="pw-repeat-count"><span>×</span><input aria-label={`${column.name}循环次数`} {...fieldHistory} disabled={liveLocked || column.repeat === null} type="number" min="1" value={column.repeat ?? ''} placeholder="∞" onChange={(e) => { const n = Number(e.target.value); if (Number.isSafeInteger(n) && n > 0) columnChange(session.columns.map((c) => c.id === column.id ? { ...c, repeat: n } : c)); }} /><button aria-label={`${column.name}无限循环`} disabled={liveLocked} aria-pressed={column.repeat === null} onClick={() => columnChange(session.columns.map((c) => c.id === column.id ? { ...c, repeat: c.repeat === null ? 1 : null } : c))}>∞</button></div>
           <button disabled={liveLocked || !librarySelection} onClick={() => placeSection(column.id, librarySelection)}>放入选中段落</button>
         </footer>
       </article>)}<button className="pw-add-column" aria-label="添加曲式列" disabled={liveLocked} onClick={() => columnChange([...session.columns, { id: crypto.randomUUID(), name: `段落 ${session.columns.length + 1}`, repeat: 1, snapshot: null }])}>＋</button></div></div>
@@ -215,6 +229,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         <h2>现场效果</h2><p className="pw-effect-target">当前轨道 · {LABELS[selectedLiveTrack]}</p>
         {TRACKS.map((track) => <div key={`${track}:${editingSection}:${active}`} hidden={selectedLiveTrack !== track}>
           <TrackControls live expanded track={track} session={session} audio={audio} changeMix={changeMix}
+            beginMixEdit={beginLiveEdit} commitMixEdit={commitLiveEdit}
             repeatEnabled={active && !editingSection && !status.loading && locked && selectedLiveTrack === track} />
         </div>)}
         <p className="pw-effect-hint">点击轨道头或格子选择轨道。滤波与重复器仅影响现场声音。</p>
