@@ -128,6 +128,9 @@
 
 .pw-library-section { position: relative; overflow: hidden; }
 .pw-workspace .pw-library-section[aria-pressed=true] { color: #ffe3b6; background: #493724; border-color: #ffe0a0; }
+.pw-workspace .pw-library-section[data-playing=true] { box-shadow: 0 0 0 2px #e8c28a,inset 0 0 20px #e5b15e20; }
+.pw-workspace .pw-library-section[data-pending=true] { outline: 2px dashed #ddc79e; outline-offset: 2px; }
+.pw-workspace .pw-library-section[data-preparing=true] { border-color: #ffe0a0; }
 
 .pw-live-transport { display: flex; align-items: center; gap: 14px; flex: 1; justify-content: center; min-width: 0; }
 .pw-history-controls,.pw-transport-controls { display: flex; gap: 5px; flex-shrink: 0; }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import AudioEngine from '../src/audio/AudioEngine.js';
 import {createDrumsCell} from '../src/domain/drumsCells.js';
 import {createSessionPlayback} from '../src/app/sessionPlayback.js';
-for (const mode of ['launch']) test(`real scheduler ${mode} switches before reading boundary notes, with local position zero and audible-time notification`,async()=>{
+for (const mode of ['launch', 'preview']) test(`real scheduler ${mode} switches before reading boundary notes, with local position zero and audible-time notification`,async()=>{
   let tick; const hits=[],draws=[]; let time=0;
   const Transport={bpm:{value:100},PPQ:192,position:'0:0:0',scheduleRepeat(fn){tick=fn;return 1;},clear(){},start(){},stop(){},getTicksAtTime:()=>time/.15*48};
   const tone={Transport,start:async()=>{},loaded:async()=>{},now:()=>time,getDraw:()=>({schedule(fn,at){draws.push({fn,at});}})};

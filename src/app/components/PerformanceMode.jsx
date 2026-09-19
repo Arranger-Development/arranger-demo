@@ -29,6 +29,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const editingSection = active && editorOpen;
   const locked = !['stopped', 'paused'].includes(status.mode);
   const liveLocked = status.mode === 'live';
+  const previewing = status.mode === 'preview';
   const draft = drafts[editingId];
   const catalog = useMemo(() => performanceTemplates(genreId, profileId), [genreId, profileId]);
   const templates = useMemo(() => fixedPerformancePads(catalog), [catalog]);
@@ -115,12 +116,14 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     if (drag.suppressClick(event)) return;
     setLibrarySelection(section.id);
     setMessage('');
+    playback.preview(snapshot(section), session.bpm);
   }
   function placeSection(columnId, sectionId) {
     if (liveLocked) return;
     const section = session.sections.find((s) => s.id === sectionId);
     const copy = section && snapshot(section);
     if (copy && session.columns.some((c) => c.id === columnId)) {
+      if (previewing) playback.stop();
       columnChange(session.columns.map((c) => c.id === columnId ? { ...c, snapshot: copy } : c));
     }
   }
@@ -168,21 +171,26 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       <label className="performance-tempo">BPM <input aria-label="演奏速度 BPM" type="number" min="40" max="240" value={session.bpm} onChange={(e) => changeBpm(e.target.value)} /></label>
       <button onClick={connectHardware}>{hardwareInput?.status === 'connected' ? 'Launchpad 已连接' : '连接 Launchpad'}</button>
     </header>
-    <div className="pw-status" role="status">{status.error || message || (status.loading ? '正在准备声音…' : status.pendingId ? '已排队 · 下一小节切换' : status.mode === 'paused' ? '已暂停' : locked ? `播放中${status.cycle ? ` · 第 ${status.cycle} 次` : ''}` : '选择段落开始演奏')}
-</div>
+    <div className="pw-status" role="status">{status.error || message || (status.loading ? (previewing ? '正在准备试听…' : '正在准备声音…') : status.pendingId ? (previewing ? '待试听 · 下一小节切换' : '已排队 · 下一小节切换') : previewing ? '段落试听中' : status.mode === 'paused' ? '已暂停' : locked ? `播放中${status.cycle ? ` · 第 ${status.cycle} 次` : ''}` : '选择段落开始演奏')}
+      {previewing && <button onClick={() => playback.stop()}>停止试听</button>}</div>
     <main className="pw-live">
       <div className="pw-live-toolbar"><label>选择曲式 <select aria-label="选择曲式" disabled={liveLocked} value="" onChange={(e) => columnChange(createForm(e.target.value))}><option value="" disabled>选择曲式模板</option><option value="screenshot">完整曲式 · 截图模板</option><option value="blank">空白自定义</option></select></label><LiveTransport playback={playback} columns={session.columns} status={status}
           onPlay={toggleLive} onStop={() => playback.stop()}
           onRewind={() => { setMessage(''); playback.rewindLive(session.columns, session.bpm); }} />
 
       </div>
-      <aside className="pw-library"><div className="pw-library-head"><h2>段落素材</h2><p>拖入曲式列，或选中后点击“放入”</p></div>{session.sections.map((s) => {
+      <aside className="pw-library"><div className="pw-library-head"><h2>段落素材</h2><p>点击试听，再点停止；拖入曲式列，或选中后点击“放入”</p></div>{session.sections.map((s) => {
+        const playing = previewing && status.playingId === s.id;
+        const pending = previewing && status.pendingId === s.id;
+        const preparing = previewing && !status.playingId && status.requestedId === s.id;
         return <button key={s.id} className="pw-library-section" disabled={!hasSelection(s.selection)}
           onPointerDown={(e) => drag.begin(e, 'section', s.id)} onPointerMove={drag.move} onPointerUp={drag.end}
           onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}
+          data-playing={playing} data-pending={pending} data-preparing={preparing}
           aria-pressed={librarySelection === s.id} onClick={(e) => previewSection(e, s)}>
           <small>{s.kind === 'transition' ? '转场' : '主段落'}</small><strong>{s.name}</strong>
-          <span>{hasSelection(s.selection) ? '已保存' : '空位'}</span>
+          <span>{pending ? '待试听' : preparing ? '准备中' : playing ? '试听中' : hasSelection(s.selection) ? '已保存' : '空位'}</span>
+          <Progress playback={playback} id={s.id} running={active && playing} />
         </button>;
       })}</aside>
       <div className="pw-live-trackheads"><div className="pw-column-spacer">轨道</div>{TRACKS.map((track) => <button type="button" key={track} className="pw-track-select" data-track={track}

@@ -49,7 +49,7 @@ export function createSessionPlayback(audio, notify = () => {}) {
     if (pending && absoluteStep >= pending.at) { const next = pending; pending = null; change(next, absoluteStep); }
     const length = current.snapshot.totalBars * 16;
     if (absoluteStep >= startStep + length * cycle) {
-      if (mode === 'jam') {
+      if (mode === 'jam' || mode === 'preview') {
         if (current.snapshot.kind === 'transition') {
           if (mode === 'jam' && returnMain) { const next = returnMain; returnMain = null; change(next, absoluteStep); }
           else return finish();
@@ -139,6 +139,14 @@ export function createSessionPlayback(audio, notify = () => {}) {
       if (!edit && current?.id === target.id && !pending) { stop(); return; }
       // Editing the same section replaces its queued snapshot rather than cancelling it.
       if (edit && pending?.id === target.id) { pending = { ...pending, ...target }; emit(); return; }
+      queue(target);
+    },
+    preview(snapshot, tempo) {
+      if (!snapshot) return;
+      const target = { id: snapshot.id, snapshot };
+      if (mode !== 'preview') { void start('preview', target, tempo); return; }
+      if (pending?.id === target.id) { pending = null; emit(); return; }
+      if (current?.id === target.id) { stop(); return; }
       queue(target);
     },
     live(nextColumns, tempo, id) {

@@ -40,6 +40,100 @@ test('stop invalidates late startup and audible callbacks; edits update the same
 });
 
 
+test('preview loops a main section and toggles off with effects released', async () => {
+  const f = fixture(); let resets = 0;
+  f.audio.resetPerformanceEffects = () => resets++;
+  f.controller.preview(segment('library-a', 1), 100); await f.ready();
+  f.tick(0); f.tick(16); f.tick(32);
+  assert.equal(f.notices.at(-1).mode, 'preview');
+  assert.equal(f.notices.at(-1).cycle, 3);
+  const before = resets;
+  f.controller.preview(segment('library-a', 1), 100);
+  assert.equal(f.controller.isActive(), false);
+  assert.equal(resets, before + 1);
+});
+
+test('preview switches at a bar boundary, cancels pending targets and preserves tempo alignment', async () => {
+  const f = fixture();
+  f.controller.preview(segment('a'), 100); await f.ready(); f.tick(0); f.tick(7);
+  f.controller.preview(segment('b'), 100);
+  assert.equal(f.notices.at(-1).pendingId, 'b');
+  f.controller.preview(segment('b'), 100);
+  assert.equal(f.notices.at(-1).pendingId, null);
+  f.controller.preview(segment('b'), 100); f.controller.preview(segment('c'), 100);
+  f.controller.setTempo(140);
+  assert.equal(f.tick(15).stepOffset, 0);
+  assert.equal(f.tick(16).stepOffset, 16);
+  assert.equal(f.notices.at(-1).playingId, 'c');
+  assert.equal(f.controller.getProgress().fraction, 0);
+  f.controller.preview(segment('b'), 140); f.controller.preview(segment('c'), 140);
+  assert.equal(f.notices.at(-1).mode, 'stopped', 'clicking the current preview stops even with a pending target');
+});
+
+test('preview transitions finish once without returning to the previous main', async () => {
+  const f = fixture();
+  f.controller.preview(segment('a'), 100); await f.ready(); f.tick(0); f.tick(3);
+  f.controller.preview(segment('fill', 1, 'transition'), 100);
+  assert.equal(f.tick(16).releaseVoices, true);
+  assert.equal(f.notices.at(-1).playingId, 'fill');
+  assert.equal(f.tick(32).done, true);
+  assert.equal(f.notices.at(-1).mode, 'stopped');
+  assert.equal(f.notices.at(-1).playingId, null);
+});
+
+test('Live and preview take exclusive ownership immediately and reject old audible callbacks', async () => {
+  const f = fixture();
+  const columns = [{ id: 'column-a', snapshot: segment('saved-a'), repeat: null }];
+  f.controller.live(columns, 100); await f.ready(); const oldLive = f.tick(0); f.tick(3);
+  f.controller.preview(segment('fill', 1, 'transition'), 100); await f.ready();
+  oldLive.onAudible(); assert.equal(f.notices.at(-1).mode, 'preview');
+  assert.equal(f.notices.at(-1).playingId, null);
+  f.tick(0); assert.equal(f.tick(16).done, true);
+  assert.equal(f.notices.at(-1).mode, 'stopped', 'does not resume the interrupted arrangement');
+  f.controller.preview(segment('b'), 100); await f.ready(); const oldPreview = f.tick(0);
+  f.controller.live(columns, 100); await f.ready(); oldPreview.onAudible(); f.tick(0);
+  assert.equal(f.notices.at(-1).mode, 'live');
+  assert.equal(f.notices.at(-1).playingId, 'column-a');
+  assert.equal(columns[0].snapshot.id, 'saved-a');
+});
+
+test('loading preview can be cancelled or replaced without a late restart', async () => {
+  const f = fixture(); const preparations = []; let plays = 0;
+  f.audio.preparePerformanceEffects = () => new Promise(resolve => preparations.push(resolve));
+  const play = f.audio.play; f.audio.play = async (o) => { plays++; return play(o); };
+  f.controller.preview(segment('a'), 100);
+  assert.equal(f.notices.at(-1).loading, true);
+  assert.equal(f.notices.at(-1).requestedId, 'a');
+  f.controller.preview(segment('a'), 100);
+  preparations.shift()(); await f.ready(); assert.equal(plays, 0);
+  f.controller.preview(segment('a'), 100);
+  f.controller.preview(segment('b'), 100); f.controller.preview(segment('c'), 100);
+  preparations.shift()(); await f.ready(); f.tick(0);
+  assert.equal(plays, 1); assert.equal(f.notices.at(-1).playingId, 'c');
+  const delayed = f.tick(1); f.controller.stop(); delayed.onAudible();
+  assert.equal(f.notices.at(-1).mode, 'stopped');
+});
+
+test('Live pause and stop preserve audible step and repeat; preview cannot overwrite that cursor', async () => {
+  const f = fixture();
+  const columns = [{id:'a', snapshot:segment('source',1), repeat:3}, {id:'b',snapshot:segment('other',1),repeat:1}];
+  f.controller.live(columns,100); await f.ready(); f.tick(0); f.tick(16); f.tick(21);
+  f.controller.pauseLive();
+  assert.equal(f.notices.at(-1).mode,'paused');
+  assert.deepEqual(f.controller.getLivePosition(),{id:'a',cycle:2,step:5});
+  f.controller.preview(segment('preview'),100); await f.ready(); f.tick(0); f.tick(9); f.controller.stop();
+  assert.deepEqual(f.controller.getLivePosition(),{id:'a',cycle:2,step:5});
+  f.controller.live(columns,100); await f.ready();
+  assert.equal(f.tick(5).stepOffset,-16);
+  assert.deepEqual(f.controller.getLivePosition(),{id:'a',cycle:2,step:5});
+  f.tick(16); assert.equal(f.notices.at(-1).cycle,3);
+  f.tick(32); assert.equal(f.notices.at(-1).playingId,'b');
+  f.tick(37); f.controller.stop(); assert.deepEqual(f.controller.getLivePosition(),{id:'b',cycle:1,step:5});
+  f.controller.live(columns,100); await f.ready(); f.tick(5); assert.equal(f.tick(16).done,true);
+  assert.equal(f.controller.getLivePosition(),null);
+  f.controller.live(columns,100); await f.ready(); f.tick(0); assert.equal(f.notices.at(-1).playingId,'a');
+});
+
 test('Live seeks immediately, restarts the current column, skips forwards from empties, and rewinds', async () => {
   const f = fixture();
   const columns = [{id:'a',snapshot:segment('a',1),repeat:null},{id:'empty',snapshot:null,repeat:1},{id:'b',snapshot:segment('b',1),repeat:2},{id:'end',snapshot:null,repeat:1}];
