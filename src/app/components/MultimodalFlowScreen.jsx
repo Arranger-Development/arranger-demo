@@ -422,12 +422,6 @@ function ResultsView({
           />
         </article>
 
-        <article className="results-advice-card results-harmony-card">
-          <h3>旋律和声</h3>
-          <p>C大调，流行音乐最常用的Doo-Wop和弦进行，听感和谐流畅；配合七和弦增加听觉色彩和张力</p>
-          <strong>Cmaj7 - Am7 - Fmaj7 - G7</strong>
-        </article>
-
         <button
           className="results-icon-action apply-recommendation"
           type="button"

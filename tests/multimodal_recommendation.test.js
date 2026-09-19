@@ -227,12 +227,12 @@ test('multimodal UI keeps the approved Notion analysis copy and interactive inst
     '中速偏慢 |',
     '4/4拍，节奏设计密集且律动感强',
     '乐器搭配',
-    '旋律和声',
-    'C大调，流行音乐最常用的Doo-Wop和弦进行，听感和谐流畅；配合七和弦增加听觉色彩和张力',
-    'Cmaj7 - Am7 - Fmaj7 - G7',
   ].forEach((copy) => assert.match(resultsViewSource, new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))));
 
   [
+    '旋律和声',
+    'Doo-Wop',
+    'Cmaj7 - Am7 - Fmaj7 - G7',
     'Chill · 雨夜街头',
     'AI 推荐这 4 条轨道',
     '画面分析完成',
@@ -264,7 +264,7 @@ test('multimodal UI keeps the approved Notion analysis copy and interactive inst
   assert.match(appSource, /tutorialPanelState === 'running'/);
   assert.match(css, /\.results-copy-overview\s*\{[^}]*grid-template-columns:\s*220px minmax\(0,\s*1fr\);/s);
   assert.match(css, /\.results-copy-media\s*\{[^}]*width:\s*220px;[^}]*height:\s*148px;/s);
-  assert.match(css, /\.results-advice-grid\s*\{[^}]*grid-template-columns:\s*280px minmax\(0,\s*1fr\);/s);
+  assert.match(css, /\.results-advice-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
   assert.match(css, /\.results-instrument-card\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*grid-row:\s*2;/s);
   assert.match(css, /\.results-tempo-line \.bpm-presets\s*\{[^}]*display:\s*none;/s);
   assert.match(css, /\.results-icon-action\s*\{[^}]*width:\s*36px;[^}]*height:\s*36px;/s);
