@@ -47,7 +47,7 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
   return <main className="performance-body jam-body">
     <div className="performance-intro"><span className="performance-eyebrow">四轨乐句 · JAM</span><span className="jam-zone-label">主乐句 × {MAIN_PHRASE_SLOTS} <span>转场 × {TRANSITION_PHRASE_SLOTS}</span></span>      <aside className="performance-save-panel jam-save-panel">
         <button type="button" className="performance-save" onClick={save}><Save size={14} /><span>{draft.kind === 'transition' ? '保存转场' : '保存段落'}</span></button>
-        <button type="button" className="performance-save" onClick={onComplete}><ArrowRightToLine size={14} /><span>返回编曲</span></button>
+        <button type="button" className="performance-save" onClick={onComplete}><ArrowRightToLine size={14} /><span>前往 Live</span></button>
         <details className="jam-manage"><summary className="performance-connect">段落管理</summary>
           <div className="jam-manage-panel">
             <label>编辑段落<select aria-label="编辑段落" value={editingId} onChange={(e) => editSection(e.target.value)}>{session.sections.map((s) => <option key={s.id} value={s.id}>{drafts[s.id].name}</option>)}</select></label>

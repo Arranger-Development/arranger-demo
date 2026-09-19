@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createSession, fixedPerformancePads, EXTRA_PHRASE_PLACEHOLDERS, createSessionEditor, readSession, writeSession, sessionKey} from '../src/app/performanceSession.js';
+import {createSession, fixedPerformancePads, EXTRA_PHRASE_PLACEHOLDERS, createSessionEditor, readSession, writeSession, sessionKey, createForm} from '../src/app/performanceSession.js';
 import { performanceStorageKey, performanceTemplates } from '../src/app/performanceModel.js';
 import { AI_PERFORMANCE_PROFILE_ID as profile } from '../src/data/aiPerformanceTemplates.js';
 const genre = 'chill';
@@ -10,6 +10,13 @@ function populated() {
   return s;
 }
 const memory = () => { const m = new Map(); return { getItem: k => m.get(k), setItem: (k,v) => m.set(k,v) }; };
+test('session starts with five independent main sections, fourteen visible slots, and no invented transitions', () => {
+  const s = createSession(genre,profile,100);
+  assert.equal(s.sections.length,5); assert.equal(new Set(s.sections.map(x=>x.id)).size,5);
+  for(const pads of Object.values(s.pads)) { assert.equal(pads.length,14); assert.deepEqual(pads.slice(10),[null,null,null,null]); }
+  assert.deepEqual(s.columns.map(c=>c.repeat),[2,2,2,1,2,1,null,4]);
+  assert.ok(s.columns.every(c=>!c.snapshot)); assert.deepEqual(createForm('blank'),[]);
+});
 test('legacy save migration preserves old bytes and exact phrase choices', () => {
   const store = memory(); const selection = populated().sections[0].selection;
   const old = JSON.stringify({version:1,bpm:132,saved:Array(5).fill(selection)});

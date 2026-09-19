@@ -14,6 +14,10 @@ export const TIMBRE_OPTIONS = {
 };
 export const defaultTimbres = () => Object.fromEntries(TRACKS.map((id) => [id, TIMBRE_OPTIONS[id][0]]));
 export const sessionKey = (genre, profile) => `arranger-performance:v4:${profile ?? genre}`;
+export function createForm(preset = 'screenshot') {
+  return (preset === 'blank' ? [] : [['前奏', 2], ['主歌1', 2], ['主歌2', 2], ['转场1', 1], ['副歌', 2], ['桥段', 1], ['副歌', null], ['结尾', 4]])
+    .map(([name, repeat]) => ({ id: uid(), name, repeat, snapshot: null }));
+}
 export function createSection(kind = 'main', number = 1, timbres = defaultTimbres()) {
   return { id: uid(), name: `${kind === 'transition' ? '转场' : '段落'} ${number}`, kind, selection: emptySelection(), timbres: { ...timbres } };
 }
@@ -39,7 +43,7 @@ export function createSession(genre, profile, bpm = 100) {
       catalog[track].filter((p) => (p.kind ?? 'main') === (i < MAIN_PHRASE_SLOTS ? 'main' : 'transition'))[i < MAIN_PHRASE_SLOTS ? i : i - MAIN_PHRASE_SLOTS]?.id ?? null
     ))])),
     sections: Array.from({ length: 5 }, (_, i) => createSection('main', i + 1, timbres)),
-    columns: [], volumes: Object.fromEntries(TRACKS.map((id) => [id, 0])),
+    columns: createForm(), volumes: Object.fromEntries(TRACKS.map((id) => [id, 0])),
     mutedTracks: Object.fromEntries(TRACKS.map((id) => [id, false])),
   };
 }
