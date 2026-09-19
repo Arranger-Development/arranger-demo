@@ -235,13 +235,13 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         const playing = previewing && status.playingId === s.id;
         const pending = previewing && status.pendingId === s.id;
         const preparing = previewing && !status.playingId && status.requestedId === s.id;
+        const previewState = pending ? '待试听' : preparing ? '准备中' : playing ? '试听中' : !hasSelection(s.selection) ? '空位' : undefined;
         return <button key={s.id} className="pw-library-section" disabled={!hasSelection(s.selection)}
           onPointerDown={(e) => drag.begin(e, 'section', s.id)} onPointerMove={drag.move} onPointerUp={drag.end}
           onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}
           data-playing={playing} data-pending={pending} data-preparing={preparing}
-          aria-pressed={librarySelection === s.id} onClick={(e) => previewSection(e, s)}>
+          aria-pressed={librarySelection === s.id} aria-description={previewState} title={previewState} onClick={(e) => previewSection(e, s)}>
           <small>{s.kind === 'transition' ? '转场' : '主段落'}</small><strong>{s.name}</strong>
-          <span>{pending ? '待试听' : preparing ? '准备中' : playing ? '试听中' : hasSelection(s.selection) ? '已保存' : '空位'}</span>
           <Progress playback={playback} id={s.id} running={active && playing} />
         </button>;
       })}</aside>
