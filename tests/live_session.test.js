@@ -32,6 +32,21 @@ test('explicitly emptied pad bindings survive refresh independently of saved sec
 });
 
 
+test('sections grow beyond five and main/transition numbering remains separate after deletion', () => {
+  const editor = createSessionEditor(populated());
+  editor.add('main');
+  assert.equal(editor.getSnapshot().drafts[editor.getSnapshot().editingId].name, '段落 6');
+  editor.remove(editor.getSnapshot().session.sections[1].id);
+  editor.add('main');
+  assert.equal(editor.getSnapshot().drafts[editor.getSnapshot().editingId].name, '段落 7');
+  editor.add('transition');
+  assert.equal(editor.getSnapshot().drafts[editor.getSnapshot().editingId].name, '转场 1');
+  editor.add('transition');
+  assert.equal(editor.getSnapshot().drafts[editor.getSnapshot().editingId].name, '转场 2');
+  assert.equal(editor.getSnapshot().session.sections.length, 8);
+});
+
+
 
 test('session drafts are isolated until an explicit save and stable IDs survive storage', () => {
   const initial=populated(); const editor=createSessionEditor(initial); const id=initial.sections[0].id;

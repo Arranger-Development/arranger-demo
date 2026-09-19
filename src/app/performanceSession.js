@@ -11,6 +11,13 @@ export const sessionKey = (genre, profile) => `arranger-performance:v4:${profile
 export function createSection(kind = 'main', number = 1, timbres = defaultTimbres()) {
   return { id: uid(), name: `${kind === 'transition' ? '转场' : '段落'} ${number}`, kind, selection: emptySelection(), timbres: { ...timbres } };
 }
+export function nextSectionNumber(sections, kind) {
+  const prefix = kind === 'transition' ? '转场' : '段落';
+  return Math.max(0, ...sections.filter((s) => s.kind === kind).map((s) => {
+    const match = s.name.match(new RegExp(`^${prefix}\\s*(\\d+)$`));
+    return match ? Number(match[1]) : 0;
+  })) + 1;
+}
 export function createSession(genre, profile, bpm = 100) {
   const catalog = performanceTemplates(genre, profile);
   const timbres = defaultTimbres();
@@ -93,6 +100,16 @@ export function createSessionEditor(initial) {
     select: (id) => state.drafts[id] && update({ editingId: id }),
     edit: (patch) => update({ drafts: { ...state.drafts, [state.editingId]: { ...state.drafts[state.editingId], ...patch } } }),
     save() { return sessionPatch({ sections: state.session.sections.map((s) => s.id === state.editingId ? clone(state.drafts[s.id]) : s) }); },
+    add(kind) {
+      const s = createSection(kind, nextSectionNumber(Object.values(state.drafts), kind), state.drafts[state.editingId]?.timbres);
+      return update({ session: { ...state.session, sections: [...state.session.sections, s] }, drafts: { ...state.drafts, [s.id]: clone(s) }, editingId: s.id });
+    },
+    remove(id) {
+      if (state.session.sections.length <= 1) return state;
+      const sections = state.session.sections.filter((s) => s.id !== id);
+      const drafts = { ...state.drafts }; delete drafts[id];
+      return update({ session: { ...state.session, sections }, drafts, editingId: state.editingId === id ? sections[0].id : state.editingId });
+    },
     patch: sessionPatch,
     columns(columns) { return sessionPatch({ columns: clone(columns) }); },
   };
