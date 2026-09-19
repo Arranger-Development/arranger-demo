@@ -1,3 +1,4 @@
+import { createPerformanceEffects } from './performanceEffects.js';
 import {
   DEFAULT_BPM,
   DRUMS_INSTRUMENT_IDS,
@@ -257,6 +258,28 @@ export default class AudioEngine {
     this.drumsPatternPreviewSession = null;
     this.chordClipPreviewRequestId = 0;
     this.chordClipPreviewSession = null;
+  }
+
+  async preparePerformanceEffects() {
+    if (!this.performanceEffectsPromise) {
+      this.performanceEffectsPromise = createPerformanceEffects(this).then((effects) => {
+        this.performanceEffects = effects;
+        for (const [track, values] of Object.entries(this.performanceEffectValues ?? {})) effects.set(track, values);
+        return effects;
+      }).catch((error) => { this.performanceEffectsPromise = null; throw error; });
+    }
+    return this.performanceEffectsPromise;
+  }
+
+  setPerformanceEffect(track, values) {
+    this.performanceEffectValues ??= {};
+    this.performanceEffectValues[track] = { ...this.performanceEffectValues[track], ...values };
+    this.performanceEffects?.set(track, values);
+  }
+
+  resetPerformanceEffects() {
+    for (const values of Object.values(this.performanceEffectValues ?? {})) values.held = false;
+    this.performanceEffects?.reset();
   }
 
   get transport() {
@@ -1696,6 +1719,7 @@ export default class AudioEngine {
       this.scheduleMatrixPlayback(options.matrixSource ?? this.matrixSource);
     }
 
+    this.performanceEffects?.route();
     this.getStartedTransport()?.start?.();
     this.transportRunning = true;
     return true;

@@ -37,7 +37,7 @@ export function createSessionPlayback(audio, notify = () => {}) {
   function stop() {
     livePosition = getLivePosition();
     generation++; mode = 'stopped'; loading = false; current = pending = returnMain = audible = null;
-    void audio.stop(); audio.stopAllVoices(); emit();
+    void audio.stop(); audio.stopAllVoices(); audio.resetPerformanceEffects?.(); emit();
   }
   function change(target, absoluteStep) {
     if (mode === 'jam' && target.snapshot.kind === 'transition' && current?.snapshot.kind !== 'transition') returnMain = current;
@@ -70,7 +70,7 @@ export function createSessionPlayback(audio, notify = () => {}) {
     return { done: true, onAudible: () => {
       if (request !== generation) return;
       if (mode === 'live') livePosition = null;
-      mode = 'stopped'; audible = current = pending = returnMain = null; emit();
+      mode = 'stopped'; audible = current = pending = returnMain = null; audio.resetPerformanceEffects?.(); emit();
     } };
   }
   async function start(nextMode, target, tempo, options = {}) {

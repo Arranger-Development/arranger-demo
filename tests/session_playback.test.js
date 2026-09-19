@@ -31,6 +31,15 @@ test('Live skips empty columns, repeats exactly, exits infinity manually and sto
   f.controller.live(columns,100);await f.ready();f.tick(0);f.tick(16);assert.equal(f.notices.at(-1).playingId,'a');f.tick(32);assert.equal(f.notices.at(-1).playingId,'b');f.tick(48);f.tick(64);assert.equal(f.notices.at(-1).playingId,'b');
   f.controller.live(columns,100,'c');await f.ready();f.tick(0);assert.equal(f.notices.at(-1).playingId,'c');assert.equal(f.tick(16).done,true);assert.equal(f.notices.at(-1).mode,'stopped');
 });
+test('stop invalidates late startup and audible callbacks; edits update the same queued snapshot',async()=>{
+  const f=fixture();f.controller.launch(segment('a'),100);await f.ready();const old=f.tick(0);f.tick(1);
+  f.controller.launch(segment('a',4),100,{edit:true});f.controller.launch(segment('a',1),100,{edit:true});assert.equal(f.tick(16).totalBars,1);
+  f.controller.stop();old.onAudible();assert.equal(f.notices.at(-1).mode,'stopped');
+  let finish;let plays=0;const audio={...f.audio,preparePerformanceEffects:()=>new Promise(r=>finish=r),play:()=>{plays++;return true;}};
+  const p=createSessionPlayback(audio);p.launch(segment('a'),100);p.stop();finish();await f.ready();assert.equal(plays,0);
+});
+
+
 test('Live seeks immediately, restarts the current column, skips forwards from empties, and rewinds', async () => {
   const f = fixture();
   const columns = [{id:'a',snapshot:segment('a',1),repeat:null},{id:'empty',snapshot:null,repeat:1},{id:'b',snapshot:segment('b',1),repeat:2},{id:'end',snapshot:null,repeat:1}];

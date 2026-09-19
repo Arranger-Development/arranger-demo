@@ -35,8 +35,8 @@ function SectionDial({ playback, section, playing, editing, pending, unsaved, on
   </button>;
 }
 
-export default function JamView({ active, session, drafts, editingId, draft, templates, status, message, playback,
-  triggerPad, selectSection, updateTimbre, save, onComplete, editSection, addSection, renameSection, removeSection }) {
+export default function JamView({ active, session, drafts, editingId, draft, templates, status, message, playback, audio,
+  triggerPad, selectSection, updateTimbre, changeMix, save, onComplete, editSection, addSection, renameSection, removeSection }) {
   const locked = status.mode !== 'stopped';
   const [newSectionKind, setNewSectionKind] = useState('main');
   const sectionsRef = useRef(null);
@@ -61,9 +61,9 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
         {TRACKS.map((track) => {
           const Icon = icons[track]; void Icon;
           return <div className="performance-row jam-row" data-track={track} key={track} role="group" aria-label={`${LABELS[track]}乐句`}>
-            <details className="jam-track-settings">
+            <details className="jam-track-settings" onToggle={(e) => { if (!e.currentTarget.open) audio.setPerformanceEffect(track, { held: false }); }}>
               <summary className="performance-track-label" aria-label={`${LABELS[track]}轨道设置`}><Icon size={22} /><strong>{LABELS[track]}</strong><Settings2 size={12} /></summary>
-              <div className="jam-track-popover"><TrackControls track={track} draft={draft} updateTimbre={updateTimbre} /></div>
+              <div className="jam-track-popover"><TrackControls track={track} session={session} draft={draft} updateTimbre={updateTimbre} changeMix={changeMix} audio={audio} /></div>
             </details>
             {[0, 1].map((group) => <div className={`jam-pad-group ${group ? 'jam-transitions' : ''}`} key={group}>
               {Array.from({ length: group ? TRANSITION_PHRASE_SLOTS : MAIN_PHRASE_SLOTS }, (_, n) => n + (group ? MAIN_PHRASE_SLOTS : 0)).map((index) => {

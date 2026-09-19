@@ -25,6 +25,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const [message, setMessage] = useState('');
   const [editorOpen, setEditorOpen] = useState(true);
   const [librarySelection, setLibrarySelection] = useState('');
+  const [selectedLiveTrack, setSelectedLiveTrack] = useState('drums');
   const editingSection = active && editorOpen;
   const locked = !['stopped', 'paused'].includes(status.mode);
   const liveLocked = status.mode === 'live';
@@ -51,9 +52,9 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   function toggleLive() {
     if (status.mode === 'live') playback.pauseLive(); else playLive();
   }
-  function clickColumn(event, columnId) {
+  function clickColumn(event, columnId, track) {
     if (drag.suppressClick(event)) return;
-    playLive(columnId);
+    selectLiveTrack(track); playLive(columnId);
   }
   const snapshot = (section) => snapshotSection(section, genreId, profileId);
   const launchDraft = (edit = false) => {
@@ -78,12 +79,18 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   }
   function selectSection(id) { editor.select(id); launchDraft(); }
   function save() { editor.save(); persist(); setMessage(`${draft.kind === 'transition' ? '转场' : '段落'}已保存，可拖入 Live。`); }
+  function changeMix(track, volume) {
+    const current = editor.getSnapshot().session;
+    patch({ volumes: { ...current.volumes, [track]: volume }, mutedTracks: { ...current.mutedTracks, [track]: false } });
+    audio.setPerformanceEffect(track, { volume, muted: false });
+  }
   function updateTimbre(track, value) {
     editor.edit({ timbres: { ...editor.getSnapshot().drafts[editingId].timbres, [track]: value } });
     if (locked) launchDraft(true);
   }
   function resetPerformancePlayback() {
     playback.stop();
+    for (const track of TRACKS) audio.setPerformanceEffect(track, { cutoff: 20000 });
     setMessage('');
   }
   function openSectionEditor() {
@@ -100,6 +107,10 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     const bpm = normalizePerformanceBpm(value); patch({ bpm }); playback.setTempo(bpm);
   }
   function connectHardware() { void audio.startAudio(); void hardwareInput?.onConnect(); }
+  function selectLiveTrack(track) {
+    if (track !== selectedLiveTrack) audio.setPerformanceEffect(selectedLiveTrack, { held: false });
+    setSelectedLiveTrack(track);
+  }
   function previewSection(event, section) {
     if (drag.suppressClick(event)) return;
     setLibrarySelection(section.id);
@@ -119,7 +130,14 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     columns.splice(to, 0, columns.splice(from, 1)[0]); columnChange(columns);
   }
 
-  useEffect(() => () => playback.stop(), [active, playback]);
+  useEffect(() => {
+    for (const track of TRACKS) audio.setPerformanceEffect(track, { volume: session.volumes[track], muted: session.mutedTracks[track] });
+  }, [audio, session.volumes, session.mutedTracks]);
+  useEffect(() => {
+    const release = () => audio.resetPerformanceEffects();
+    window.addEventListener('blur', release);
+    return () => { window.removeEventListener('blur', release); playback.stop(); for (const track of TRACKS) audio.setPerformanceEffect(track, { cutoff: 20000 }); };
+  }, [active, audio, playback]);
   useEffect(() => {
     if (!editingSection) return undefined;
     const key = (e) => {
@@ -168,7 +186,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         </button>;
       })}</aside>
       <div className="pw-live-trackheads"><div className="pw-column-spacer">轨道</div>{TRACKS.map((track) => <button type="button" key={track} className="pw-track-select" data-track={track}
-        aria-label={`选择${LABELS[track]}轨道`} >
+        aria-label={`选择${LABELS[track]}轨道`} aria-pressed={selectedLiveTrack === track} onClick={() => selectLiveTrack(track)}>
         <strong>{LABELS[track]}</strong><span>{session.mutedTracks[track] || session.volumes[track] <= -24 ? '静音' : `${session.volumes[track]} dB`}</span>
       </button>)}</div>
       <div className="pw-live-scroll" ref={setScrollElement}><div className="pw-columns">{session.columns.map((column, index) => <article key={column.id} className="pw-column" data-live-column-id={column.id} data-dragging={dragState?.kind === 'column' && dragState.id === column.id} data-drop-side={dragState?.targetId === column.id ? dragState.side : undefined} data-playing={status.playingId === column.id} data-pending={status.pendingId === column.id}
@@ -178,20 +196,28 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           <div><button aria-label={`左移 ${column.name}`} disabled={liveLocked || index === 0} onClick={() => moveColumn(column.id, session.columns[index - 1].id)}>←</button><button disabled={liveLocked} aria-label={`删除曲式 ${column.name}`} onClick={() => columnChange(session.columns.filter((c) => c.id !== column.id))}>×</button><button aria-label={`右移 ${column.name}`} disabled={liveLocked || index === session.columns.length - 1} onClick={() => moveColumn(column.id, session.columns[index + 1].id)}>→</button></div>
         </header>
         {TRACKS.map((t) => <button type="button" className="pw-live-cell" data-track={t} key={t} aria-label={`${column.name} · 选择${LABELS[t]}轨道`}
-          onPointerDown={(e) => drag.begin(e, 'column', column.id)} onPointerMove={drag.move} onPointerUp={drag.end} onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}
+          aria-pressed={selectedLiveTrack === t} onPointerDown={(e) => drag.begin(e, 'column', column.id)} onPointerMove={drag.move} onPointerUp={drag.end} onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}
           onClick={(e) => clickColumn(e, column.id, t)}><strong>{column.snapshot?.phraseNames[t] ?? '拖入段落'}</strong><span>{column.snapshot ? `${column.snapshot.totalBars} 小节` : '空槽'}</span><Progress playback={playback} id={column.id} bars={column.snapshot?.phraseBars[t]} running={active && status.playingId === column.id} /></button>)}
         <footer><button disabled={!column.snapshot} onClick={() => playLive(column.id)}>▶ {column.snapshot?.name ?? '空列'}</button>
           <div className="pw-repeat-count"><span>×</span><input aria-label={`${column.name}循环次数`} disabled={liveLocked || column.repeat === null} type="number" min="1" value={column.repeat ?? ''} placeholder="∞" onChange={(e) => { const n = Number(e.target.value); if (Number.isSafeInteger(n) && n > 0) columnChange(session.columns.map((c) => c.id === column.id ? { ...c, repeat: n } : c)); }} /><button aria-label={`${column.name}无限循环`} disabled={liveLocked} aria-pressed={column.repeat === null} onClick={() => columnChange(session.columns.map((c) => c.id === column.id ? { ...c, repeat: c.repeat === null ? 1 : null } : c))}>∞</button></div>
           <button disabled={liveLocked || !librarySelection} onClick={() => placeSection(column.id, librarySelection)}>放入选中段落</button>
         </footer>
       </article>)}<button className="pw-add-column" aria-label="添加曲式列" disabled={liveLocked} onClick={() => columnChange([...session.columns, { id: crypto.randomUUID(), name: `段落 ${session.columns.length + 1}`, repeat: 1, snapshot: null }])}>＋</button></div></div>
+      <aside className="pw-live-effects" aria-label="选中轨道效果器" data-track={selectedLiveTrack}>
+        <h2>现场效果</h2><p className="pw-effect-target">当前轨道 · {LABELS[selectedLiveTrack]}</p>
+        {TRACKS.map((track) => <div key={`${track}:${editingSection}:${active}`} hidden={selectedLiveTrack !== track}>
+          <TrackControls live expanded track={track} session={session} audio={audio} changeMix={changeMix}
+            repeatEnabled={active && !editingSection && !status.loading && locked && selectedLiveTrack === track} />
+        </div>)}
+        <p className="pw-effect-hint">点击轨道头或格子选择轨道。滤波与重复器仅影响现场声音。</p>
+      </aside>
     </main>
 
   </section>
     {editingSection && <section className="performance-mode jam-workspace"><header className="performance-header"><button onClick={() => { playback.stop(); onBack(); }}>返回编曲</button><h1>Jam · 段落编辑</h1><label className="performance-tempo">BPM <input aria-label="演奏速度 BPM" value={session.bpm} type="number" onChange={e => changeBpm(e.target.value)} /></label><button onClick={closeSectionEditor}>前往 Live</button></header>
       <JamView active={editingSection} session={session} drafts={drafts} editingId={editingId} draft={draft}
       templates={templates} status={status} message={message} playback={playback} audio={audio}
-      triggerPad={triggerPad} selectSection={selectSection} updateTimbre={updateTimbre}
+      triggerPad={triggerPad} selectSection={selectSection} updateTimbre={updateTimbre} changeMix={changeMix}
       save={save} onComplete={closeSectionEditor} editSection={(id) => editor.select(id)}
       addSection={(kind) => { editor.add(kind); persist(); }} renameSection={(name) => editor.edit({ name })}
       removeSection={(id) => { if (status.playingId === id || status.pendingId === id) playback.stop(); editor.remove(id); if (librarySelection === id) setLibrarySelection(''); persist(); }}
