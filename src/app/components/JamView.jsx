@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowRightToLine, Check, Drum, Guitar, Music2, Piano, Save, Settings2 } from 'lucide-react';
+import { ArrowRightToLine, Check, Save, Settings2 } from 'lucide-react';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, hasSelection } from '../performanceModel.js';
 import { EXTRA_PHRASE_PLACEHOLDERS, MAIN_PHRASE_SLOTS, TRANSITION_PHRASE_SLOTS } from '../performanceSession.js';
 import { performanceKeyLabel } from '../../input/performanceInput.js';
 import { Progress, TrackControls } from './PerformanceControls.jsx';
+import { PERFORMANCE_TRACK_ICONS } from './icons.js';
 
 void [ArrowRightToLine, Check, Save, Settings2, Progress, TrackControls, SectionDial];
-const icons = { drums: Drum, chord: Piano, bass: Guitar, melody: Music2 };
 
 function SectionDial({ playback, section, playing, editing, pending, unsaved, onSelect }) {
   const ring = useRef(null);
@@ -59,7 +59,7 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
     <div className="performance-workbench jam-workbench">
       <div className="performance-grid jam-grid" aria-label="四轨乐句" style={{ '--jam-main-slots': MAIN_PHRASE_SLOTS, '--jam-transition-slots': TRANSITION_PHRASE_SLOTS, '--jam-total-slots': MAIN_PHRASE_SLOTS + TRANSITION_PHRASE_SLOTS }}>
         {TRACKS.map((track) => {
-          const Icon = icons[track]; void Icon;
+          const Icon = PERFORMANCE_TRACK_ICONS[track]; void Icon;
           return <div className="performance-row jam-row" data-track={track} key={track} role="group" aria-label={`${LABELS[track]}乐句`}>
             <details className="jam-track-settings" onToggle={(e) => { if (!e.currentTarget.open) audio.setPerformanceEffect(track, { held: false }); }}>
               <summary className="performance-track-label" aria-label={`${LABELS[track]}轨道设置`}><Icon size={22} /><strong>{LABELS[track]}</strong><Settings2 size={12} /></summary>

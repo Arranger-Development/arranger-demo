@@ -6,6 +6,7 @@ import { createSessionPlayback } from '../sessionPlayback.js';
 import { mapPerformanceKeyboard } from '../../input/performanceInput.js';
 import { Progress, TrackControls } from './PerformanceControls.jsx';
 import LiveTransport from './LiveTransport.jsx';
+import { PERFORMANCE_TRACK_ICONS, renderIcon } from './icons.js';
 import useLiveDrag from './useLiveDrag.js';
 import { insertLiveColumn, liveKeyboardCommand } from '../liveInteraction.js';
 import JamView from './JamView.jsx';
@@ -245,7 +246,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       })}</aside>
       <div className="pw-live-trackheads"><div className="pw-column-spacer">轨道</div>{TRACKS.map((track) => <button type="button" key={track} className="pw-track-select" data-track={track}
         aria-label={`选择${LABELS[track]}轨道`} aria-pressed={selectedLiveTrack === track} onClick={() => selectLiveTrack(track)}>
-        <strong>{LABELS[track]}</strong><span>{session.mutedTracks[track] || session.volumes[track] <= -24 ? '静音' : `${session.volumes[track]} dB`}</span>
+        {renderIcon(PERFORMANCE_TRACK_ICONS[track], { size: 22 })}<strong>{LABELS[track]}</strong><span>{session.mutedTracks[track] || session.volumes[track] <= -24 ? '静音' : `${session.volumes[track]} dB`}</span>
       </button>)}</div>
       <div className="pw-live-scroll" ref={setScrollElement}><div className="pw-columns">{session.columns.map((column, index) => <article key={column.id} className="pw-column" data-live-column-id={column.id} data-dragging={dragState?.kind === 'column' && dragState.id === column.id} data-drop-side={dragState?.targetId === column.id ? dragState.side : undefined} data-playing={status.playingId === column.id} data-pending={status.pendingId === column.id}
         onDragOver={(e) => { if (!liveLocked) e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); if (liveLocked) return; const s = e.dataTransfer.getData('application/arranger-section'); const c = e.dataTransfer.getData('application/arranger-column'); if (s) placeSection(column.id, s); if (c) moveColumn(c, column.id); }}>

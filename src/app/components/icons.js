@@ -3,9 +3,11 @@ import {
   AudioLines,
   Disc3,
   Drum,
+  Guitar,
   KeyboardMusic,
   MicVocal,
   Music,
+  Music2,
   Piano,
 } from 'lucide-react';
 
@@ -19,8 +21,10 @@ const TRACK_ICONS = {
   vocal: MicVocal,
 };
 
+const PERFORMANCE_TRACK_ICONS = { drums: Drum, chord: Piano, bass: Guitar, melody: Music2 };
+
 function renderIcon(Icon, props = {}) {
   return createElement(Icon, { 'aria-hidden': 'true', ...props });
 }
 
-export { TRACK_ICONS, renderIcon };
+export { TRACK_ICONS, PERFORMANCE_TRACK_ICONS, renderIcon };

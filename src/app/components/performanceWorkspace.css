@@ -116,7 +116,8 @@
 
 /* Live's right-side effects always address the explicitly selected track. */
 .pw-live { grid-template-columns: 130px 60px minmax(0,1fr) 175px; column-gap: 12px; padding-inline: 12px; }
-.pw-live-trackheads .pw-track-select { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 5px; border-left: 3px solid var(--pw-track); }
+.pw-live-trackheads .pw-track-select { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 5px; border-left: 3px solid var(--pw-track); }
+.pw-track-select > svg { flex-shrink: 0; color: var(--pw-track); }
 .pw-track-select strong { color: var(--pw-track); font-size: 13px; }
 .pw-track-select span { font-size: 10px; color: #c7ae8a; }
 .pw-workspace :is(.pw-track-select,.pw-live-cell)[aria-pressed=true] { color: #eddfc9; border-color: var(--pw-track); background: linear-gradient(145deg,color-mix(in srgb,var(--pw-track) 20%,#30261d),#241b14); box-shadow: inset 0 0 0 1px var(--pw-track); }
