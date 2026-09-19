@@ -4,6 +4,7 @@ export function createSessionPlayback(audio, notify = () => {}) {
   let current = null;
   let pending = null;
   let returnMain = null;
+  let columns = [];
   let sourceSnapshot = null;
   let startStep = 0;
   let lastStep = -1;
@@ -34,6 +35,10 @@ export function createSessionPlayback(audio, notify = () => {}) {
           if (mode === 'jam' && returnMain) { const next = returnMain; returnMain = null; change(next, absoluteStep); }
           else return finish();
         } else cycle++;
+      } else if (current.repeat === null || cycle < current.repeat) cycle++;
+      else {
+        const next = columns[columns.findIndex((c) => c.id === current.id) + 1];
+        if (next) change(next, absoluteStep); else return finish();
       }
     }
     const scheduled = { id: current.id, startStep, totalSteps: current.snapshot.totalBars * 16, cycle, snapshot: current.snapshot };
@@ -48,13 +53,13 @@ export function createSessionPlayback(audio, notify = () => {}) {
       mode = 'stopped'; audible = current = pending = returnMain = null; emit();
     } };
   }
-  async function start(nextMode, target, tempo) {
+  async function start(nextMode, target, tempo, options = {}) {
     stop(); const request = ++generation;
     mode = nextMode; bpm = tempo; loading = true;
     const offset = 0;
     cycle = 1;
     lastStep = offset - 1; startStep = cycle > 1 ? -(cycle - 1) * target.snapshot.totalBars * 16 : 0;
-    current = target; sourceSnapshot = makeSource(); emit();
+    current = target; columns = options.columns ?? []; sourceSnapshot = makeSource(); emit();
     try {
       if (request !== generation) return;
       const started = await audio.play({ bpm, bar: Math.floor(offset / 16), step: offset % 16, totalBars: target.snapshot.totalBars,
@@ -85,6 +90,11 @@ export function createSessionPlayback(audio, notify = () => {}) {
       // Editing the same section replaces its queued snapshot rather than cancelling it.
       if (edit && pending?.id === target.id) { pending = { ...pending, ...target }; emit(); return; }
       queue(target);
+    },
+    live(nextColumns, tempo) {
+      const columns = nextColumns.filter(c => c.snapshot);
+      if (!columns.length) return false;
+      void start('live', columns[0], tempo, { columns }); return true;
     },
     getProgress() {
       if (!audible || !isRunning()) return null;

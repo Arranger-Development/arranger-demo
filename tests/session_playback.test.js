@@ -26,3 +26,8 @@ test('standalone transition ends, and selecting a main during a transition super
   const f=fixture();f.controller.launch(segment('fill',1,'transition'),100);await f.ready();f.tick(0);assert.equal(f.tick(16).done,true);assert.equal(f.controller.isActive(),false);
   f.controller.launch(segment('a'),100);await f.ready();f.tick(0);f.tick(1);f.controller.launch(segment('fill',2,'transition'),100);f.tick(16);f.tick(17);f.controller.launch(segment('b'),100);f.tick(32);f.tick(64);assert.equal(f.notices.at(-1).playingId,'b');
 });
+
+test('Live skips empty columns and advances finite repeat counts',async()=>{
+ const f=fixture();f.controller.live([{id:'empty',snapshot:null},{id:'a',snapshot:segment('a',1),repeat:2},{id:'b',snapshot:segment('b',1),repeat:1}],100);
+ await f.ready();f.tick(0);f.tick(16);assert.equal(f.notices.at(-1).playingId,'a');f.tick(32);assert.equal(f.notices.at(-1).playingId,'b');assert.equal(f.tick(48).done,true);
+});
