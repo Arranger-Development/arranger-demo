@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowRightToLine, Check, Save, Settings2 } from 'lucide-react';
+import { ArrowRightToLine, Check, ChevronDown, Save } from 'lucide-react';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, hasSelection } from '../performanceModel.js';
-import { EXTRA_PHRASE_PLACEHOLDERS, MAIN_PHRASE_SLOTS, TRANSITION_PHRASE_SLOTS } from '../performanceSession.js';
+import { EXTRA_PHRASE_PLACEHOLDERS, MAIN_PHRASE_SLOTS, TRANSITION_PHRASE_SLOTS, TIMBRE_OPTIONS } from '../performanceSession.js';
 import { performanceKeyLabel } from '../../input/performanceInput.js';
-import { Progress, TrackControls } from './PerformanceControls.jsx';
+import { Progress } from './PerformanceControls.jsx';
 import { PERFORMANCE_TRACK_ICONS } from './icons.js';
 
-void [ArrowRightToLine, Check, Save, Settings2, Progress, TrackControls, SectionDial];
+void [ArrowRightToLine, Check, ChevronDown, Save, Progress, SectionDial];
 
 function SectionDial({ playback, section, playing, editing, pending, unsaved, onSelect }) {
   const ring = useRef(null);
@@ -35,8 +35,8 @@ function SectionDial({ playback, section, playing, editing, pending, unsaved, on
   </button>;
 }
 
-export default function JamView({ active, session, drafts, editingId, draft, templates, status, message, playback, audio,
-  triggerPad, selectSection, updateTimbre, changeMix, save, onComplete, editSection, addSection, renameSection, removeSection }) {
+export default function JamView({ active, session, drafts, editingId, draft, templates, status, message, playback,
+  triggerPad, selectSection, updateTimbre, save, onComplete, editSection, addSection, renameSection, removeSection }) {
   const locked = status.mode !== 'stopped';
   const [newSectionKind, setNewSectionKind] = useState('main');
   const sectionsRef = useRef(null);
@@ -61,10 +61,12 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
         {TRACKS.map((track) => {
           const Icon = PERFORMANCE_TRACK_ICONS[track]; void Icon;
           return <div className="performance-row jam-row" data-track={track} key={track} role="group" aria-label={`${LABELS[track]}乐句`}>
-            <details className="jam-track-settings" onToggle={(e) => { if (!e.currentTarget.open) audio.setPerformanceEffect(track, { held: false }); }}>
-              <summary className="performance-track-label" aria-label={`${LABELS[track]}轨道设置`}><Icon size={22} /><strong>{LABELS[track]}</strong><Settings2 size={12} /></summary>
-              <div className="jam-track-popover"><TrackControls track={track} session={session} draft={draft} updateTimbre={updateTimbre} changeMix={changeMix} audio={audio} /></div>
-            </details>
+            <label className="performance-track-label jam-track-timbre" title={`切换${LABELS[track]}音色`}>
+              <Icon size={22} aria-hidden="true" /><strong>{LABELS[track]}</strong><ChevronDown size={12} aria-hidden="true" />
+              <select aria-label={`${LABELS[track]}音色`} value={draft.timbres[track]} onChange={(e) => updateTimbre(track, e.target.value)}>
+                {TIMBRE_OPTIONS[track].map((id, i) => <option key={id} value={id}>音色 {i + 1} · 占位</option>)}
+              </select>
+            </label>
             {[0, 1].map((group) => <div className={`jam-pad-group ${group ? 'jam-transitions' : ''}`} key={group}>
               {Array.from({ length: group ? TRANSITION_PHRASE_SLOTS : MAIN_PHRASE_SLOTS }, (_, n) => n + (group ? MAIN_PHRASE_SLOTS : 0)).map((index) => {
                 const phrase = templates[track][index]; const selected = phrase && draft.selection[track] === phrase.id;

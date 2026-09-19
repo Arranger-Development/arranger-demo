@@ -285,8 +285,8 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   </section>
     {editingSection && <SectionEditorDialog bpm={session.bpm} onBpmChange={changeBpm} onClose={closeSectionEditor} hardwareInput={hardwareInput} onConnect={connectHardware}>
       <JamView active={editingSection} session={session} drafts={drafts} editingId={editingId} draft={draft}
-      templates={templates} status={status} message={message} playback={playback} audio={audio}
-      triggerPad={triggerPad} selectSection={selectSection} updateTimbre={updateTimbre} changeMix={changeMix}
+      templates={templates} status={status} message={message} playback={playback}
+      triggerPad={triggerPad} selectSection={selectSection} updateTimbre={updateTimbre}
       save={save} onComplete={closeSectionEditor} editSection={(id) => editor.select(id)}
       addSection={(kind) => { editor.add(kind); persist(); }} renameSection={(name) => editor.edit({ name })}
       removeSection={(id) => { if (status.playingId === id || status.pendingId === id) playback.stop(); editor.remove(id); if (librarySelection === id) setLibrarySelection(''); persist(); }}

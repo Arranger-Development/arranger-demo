@@ -15,15 +15,11 @@
 .jam-pad-slot .performance-pad-top { font-size: clamp(9px,calc(var(--pad-size) * .115),12px); }
 .jam-pad-slot .pw-progress { bottom: 11%; left: 20%; right: 20%; height: 2px; }
 .jam-pad-replace { width: var(--pad-size); height: 20px; padding: 1px 3px; font-size: clamp(9px,calc(var(--pad-size) * .105),12px); font-family: inherit; color: var(--ink-2); border: 1px solid #8d704448; border-radius: 4px; background: #211a14; text-overflow: ellipsis; }
-.jam-track-settings { position: relative; }
-.jam-track-settings > summary { cursor: pointer; list-style: none; }
-.jam-track-settings > summary::-webkit-details-marker,.jam-manage > summary::-webkit-details-marker { display: none; }
-.jam-track-settings > summary:focus-visible,.jam-manage > summary:focus-visible { outline: 2px solid #ffe2a6; outline-offset: 3px; }
-.jam-track-popover { position: absolute; left: 45px; top: 0; z-index: 20; width: 220px; box-shadow: 0 10px 30px #000a; }
-.jam-row:nth-child(n+3) .jam-track-popover { top: auto; bottom: 0; }
-.jam-track-popover :is(select,button,input:not([type=range])),.jam-manage-panel :is(select,input) { color: var(--ink); background: #211a14; border: 1px solid #8d7044; border-radius: 4px; padding: 5px; font: inherit; max-width: 100%; }
-.jam-track-popover input[type=range] { width: 100%; accent-color: var(--pad-tone); }
-.jam-track-popover .pw-track-controls { border-color: var(--pad-tone); }
+.jam-track-timbre { position: relative; cursor: pointer; }
+.jam-track-timbre select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.jam-track-timbre:has(select:focus-visible),.jam-manage > summary:focus-visible { outline: 2px solid #ffe2a6; outline-offset: 3px; }
+.jam-manage > summary::-webkit-details-marker { display: none; }
+.jam-manage-panel :is(select,input) { color: var(--ink); background: #211a14; border: 1px solid #8d7044; border-radius: 4px; padding: 5px; font: inherit; max-width: 100%; }
 .jam-manage { position: relative; }
 .jam-manage > summary { cursor: pointer; list-style: none; }
 .jam-manage-panel { position: absolute; right: 0; top: calc(100% + 8px); z-index: 21; display: grid; gap: 9px; width: 220px; padding: 14px; border: 1px solid #8d7044; border-radius: 6px; background: var(--asset-metal) center / cover; box-shadow: 0 10px 30px #000c; }
