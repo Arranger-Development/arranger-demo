@@ -256,18 +256,11 @@ function AnalyzingView({
 }
 
 function TrackRecommendationPicker({
-  activeTrackId,
-  onTimbreChange,
-  onTrackFocus,
   onTrackToggle,
   selectedTrackIds,
   timbreByTrackId,
 }) {
   const primaryTracks = MULTIMODAL_RECOMMENDATION.tracks.slice(0, 4);
-  const activeTrack = primaryTracks.find(
-    (track) => track.id === activeTrackId,
-  ) ?? primaryTracks[0];
-  const activeTimbreId = timbreByTrackId[activeTrack.id] ?? activeTrack.timbres[0].id;
 
   return (
     <div className="track-recommendation compact-results-tracks">
@@ -275,7 +268,6 @@ function TrackRecommendationPicker({
         {primaryTracks.map((track) => {
           const Icon = TRACK_ICONS[track.id];
           const selected = selectedTrackIds.includes(track.id);
-          const active = track.id === activeTrack.id;
           const selectedTimbre = track.timbres.find(
             (timbre) => timbre.id === timbreByTrackId[track.id],
           ) ?? track.timbres[0];
@@ -284,7 +276,6 @@ function TrackRecommendationPicker({
           return (
             <div
               className="track-recommendation-row"
-              data-active={active ? 'true' : undefined}
               data-selected={selected ? 'true' : undefined}
               data-track={track.id}
               key={track.id}
@@ -307,41 +298,9 @@ function TrackRecommendationPicker({
                 <strong>{trackLabel}</strong>
                 <small>{getTrackTimbreLabel(track, selectedTimbre)}</small>
               </span>
-              <button
-                className="track-recommendation-change"
-                type="button"
-                aria-pressed={active}
-                aria-label={`${trackLabel}音色`}
-                onClick={() => onTrackFocus(track.id)}
-              >
-                音色
-              </button>
             </div>
           );
         })}
-      </div>
-
-      <div className="track-timbre-detail" data-track={activeTrack.id}>
-        <div
-          className="track-timbre-options"
-          role="radiogroup"
-          aria-label={`${getTrackRecommendationLabel(activeTrack)}音色`}
-        >
-          {activeTrack.timbres.map((timbre, index) => (
-            <button
-              className="track-timbre-option"
-              data-active={timbre.id === activeTimbreId ? 'true' : undefined}
-              key={timbre.id}
-              type="button"
-              role="radio"
-              aria-checked={timbre.id === activeTimbreId}
-              onClick={() => onTimbreChange(activeTrack.id, timbre.id)}
-            >
-              <span>{getTrackTimbreLabel(activeTrack, timbre)}</span>
-              {index === 0 ? <small>推荐</small> : null}
-            </button>
-          ))}
-        </div>
       </div>
     </div>
   );
@@ -354,8 +313,6 @@ function ResultsView({
   onApply,
   onBack,
   onBpmChange,
-  onRecommendationTimbreChange,
-  onRecommendationTrackFocus,
   onRecommendationTrackToggle,
   previewUrl,
   selections,
@@ -413,9 +370,6 @@ function ResultsView({
         <article className="results-advice-card results-instrument-card">
           <h3>乐器搭配</h3>
           <TrackRecommendationPicker
-            activeTrackId={selections.activeTrackId}
-            onTimbreChange={onRecommendationTimbreChange}
-            onTrackFocus={onRecommendationTrackFocus}
             onTrackToggle={onRecommendationTrackToggle}
             selectedTrackIds={selections.selectedTrackIds}
             timbreByTrackId={selections.timbreByTrackId}
@@ -442,8 +396,6 @@ function MultimodalFlowScreen({
   onCancelAnalysis,
   onFileSelect,
   onGenerate,
-  onRecommendationTimbreChange,
-  onRecommendationTrackFocus,
   onRecommendationTrackToggle,
   previewUrl,
   selections,
@@ -501,8 +453,6 @@ function MultimodalFlowScreen({
           onApply={onApply}
           onBack={onBack}
           onBpmChange={onBpmChange}
-          onRecommendationTimbreChange={onRecommendationTimbreChange}
-          onRecommendationTrackFocus={onRecommendationTrackFocus}
           onRecommendationTrackToggle={onRecommendationTrackToggle}
           previewUrl={previewUrl}
           selections={selections}

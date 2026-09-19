@@ -208,7 +208,7 @@ test('multimodal UI keeps the approved Notion analysis copy and interactive inst
   assert.match(screenSource, /function TrackRecommendationPicker/);
   assert.match(screenSource, /MULTIMODAL_RECOMMENDATION\.tracks\.slice\(0, 4\)/);
   assert.match(screenSource, /track-recommendation-list/);
-  assert.match(screenSource, /track-timbre-options/);
+  assert.doesNotMatch(screenSource, /track-timbre-options|track-recommendation-change/);
   assert.match(screenSource, /results-copy-only/);
   assert.match(screenSource, /showFallbackCopy=\{false\}/);
   assert.match(screenSource, /unit="bpm"/);
@@ -264,8 +264,8 @@ test('multimodal UI keeps the approved Notion analysis copy and interactive inst
   assert.match(appSource, /tutorialPanelState === 'running'/);
   assert.match(css, /\.results-copy-overview\s*\{[^}]*grid-template-columns:\s*220px minmax\(0,\s*1fr\);/s);
   assert.match(css, /\.results-copy-media\s*\{[^}]*width:\s*220px;[^}]*height:\s*148px;/s);
-  assert.match(css, /\.results-advice-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
-  assert.match(css, /\.results-instrument-card\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*grid-row:\s*2;/s);
+  assert.match(css, /\.results-advice-grid\s*\{[^}]*grid-template-columns:\s*minmax\(280px,\s*2fr\) minmax\(0,\s*3fr\);/s);
+  assert.match(css, /\.results-instrument-card\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*1;/s);
   assert.match(css, /\.results-tempo-line \.bpm-presets\s*\{[^}]*display:\s*none;/s);
   assert.match(css, /\.results-icon-action\s*\{[^}]*width:\s*36px;[^}]*height:\s*36px;/s);
   assert.match(css, /\.genre-hardware:has\(\.results-copy-only\) \.genre-brand-text,[\s\S]*visibility:\s*hidden;/s);

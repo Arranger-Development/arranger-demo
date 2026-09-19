@@ -14521,10 +14521,10 @@ body {
 
 .results-advice-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr);
   align-items: stretch;
   gap: 10px;
-  padding: 10px 56px 10px 10px;
+  padding: 10px;
 }
 
 .results-advice-card {
@@ -14576,8 +14576,8 @@ body {
 }
 
 .results-instrument-card {
-  grid-column: 1 / -1;
-  grid-row: 2;
+  grid-column: 2;
+  grid-row: 1;
   gap: 8px;
   padding-block: 10px;
 }
@@ -14586,16 +14586,14 @@ body {
   gap: 8px;
 }
 
+.results-instrument-card .track-recommendation-list {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
+}
+
 .results-instrument-card .track-recommendation-row {
-  min-height: 80px;
-}
-
-.results-instrument-card .track-timbre-detail {
-  padding: 5px 6px;
-}
-
-.results-instrument-card .track-timbre-option {
-  min-height: 30px;
+  width: auto;
+  min-height: 88px;
 }
 
 .results-advice-grid .apply-recommendation {
@@ -14895,7 +14893,7 @@ body {
 
   .results-advice-grid {
     grid-template-columns: minmax(0, 1fr);
-    padding-right: 56px;
+    padding-right: 10px;
   }
 
   .results-advice-grid .apply-recommendation {
@@ -14979,7 +14977,10 @@ body {
 
   .results-advice-grid {
     padding-right: 10px;
-    padding-bottom: 56px;
+  }
+
+  .results-instrument-card .track-recommendation-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .results-summary-media {
