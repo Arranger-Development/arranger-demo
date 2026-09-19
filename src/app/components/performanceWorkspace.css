@@ -125,6 +125,8 @@
 .pw-effect-hint { margin: 16px 0 0; font-size: 10px; line-height: 1.7; color: #b09e83; }
 @media(max-width:1000px) { .pw-live { grid-template-columns: 110px 55px minmax(130px,1fr) 155px; column-gap: 8px; padding-inline: 8px; } }
 
+.pw-library-head { position: sticky; top: -10px; z-index: 3; margin: -10px -10px 0; padding: 10px; background: #171310; }
+.pw-library .pw-library-edit { min-height: 44px; margin: 10px 0; padding: 8px 4px; align-items: center; justify-content: center; text-align: center; font-size: 11px; cursor: pointer; touch-action: auto; border-color: #b18a51; color: #ffe3b6; }
 
 .pw-library-section { position: relative; overflow: hidden; }
 .pw-workspace .pw-library-section[aria-pressed=true] { color: #ffe3b6; background: #493724; border-color: #ffe0a0; }

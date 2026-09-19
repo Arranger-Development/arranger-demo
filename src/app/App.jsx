@@ -211,13 +211,17 @@ void PerformanceMode;
 export default function App({
   genreId = 'pop',
   performanceProfileId = null,
+  initialView = 'creation',
+  recommendation = null,
 }) {
   const totalBars = useMusicStore((state) => getTotalBars(state));
   const timelineBars = getTimelineBars({ totalBars });
   const barNumbers = useMemo(() => Array.from({ length: timelineBars }, (_, index) => index + 1), [timelineBars]);
-  const [performanceActive, setPerformanceActive] = useState(false);
+  const [workspaceView, setWorkspaceView] = useState(initialView === 'jam' ? 'live' : initialView);
+  const performanceActive = workspaceView !== 'creation';
+  const setPerformanceActive = (value) => setWorkspaceView(value ? 'live' : 'creation');
   const performanceControlsRef = useRef(null);
-  const [performanceVisited, setPerformanceVisited] = useState(false);
+  const [performanceVisited, setPerformanceVisited] = useState(initialView !== 'creation');
   const bpm = useMusicStore((state) => state.bpm);
   const rootKey = useMusicStore((state) => state.rootKey);
   const scale = useMusicStore((state) => state.scale);
@@ -3397,6 +3401,7 @@ export default function App({
     {performanceVisited ? <PerformanceMode
       key={`${genreId}:${performanceProfileId ?? 'default'}`}
       active={performanceActive}
+      recommendation={recommendation}
       controlsRef={performanceControlsRef}
       hardwareInput={{ ...launchpadInput, onConnect: connectLaunchpad }}
       genreId={genreId}

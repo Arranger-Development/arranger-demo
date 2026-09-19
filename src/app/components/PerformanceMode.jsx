@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState, useSyncExternalStore} from 'react';
+import {useEffect, useMemo, useRef, useState, useSyncExternalStore} from 'react';
 import createAudioEngine from '../../audio/createAudioEngine.js';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, performanceTemplates, hasSelection, normalizePerformanceBpm } from '../performanceModel.js';
 import {createForm, MAIN_PHRASE_SLOTS, fixedPerformancePads, createSessionEditor, readSession, writeSession, snapshotSection} from '../performanceSession.js';
@@ -9,11 +9,12 @@ import LiveTransport from './LiveTransport.jsx';
 import useLiveDrag from './useLiveDrag.js';
 import { insertLiveColumn, liveKeyboardCommand } from '../liveInteraction.js';
 import JamView from './JamView.jsx';
+import SectionEditorDialog from './SectionEditorDialog.jsx';
 import './performance.css';
 import './performanceWorkspace.css';
 import './jamView.css';
 
-void [LiveTransport, Progress, TrackControls, JamView];
+void [LiveTransport, Progress, TrackControls, JamView, SectionEditorDialog];
 const storage = () => { try { return window.localStorage; } catch { return null; } };
 
 export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack, hardwareInput }) {
@@ -23,7 +24,8 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const [status, setStatus] = useState({ mode: 'stopped', loading: false, playingId: null, pendingId: null });
   const [playback] = useState(() => createSessionPlayback(audio, setStatus));
   const [message, setMessage] = useState('');
-  const [editorOpen, setEditorOpen] = useState(true);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const editorEntryRef = useRef(null);
   const [librarySelection, setLibrarySelection] = useState('');
   const [selectedLiveTrack, setSelectedLiveTrack] = useState('drums');
   const editingSection = active && editorOpen;
@@ -116,6 +118,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   function closeSectionEditor() {
     resetPerformancePlayback();
     setEditorOpen(false);
+    window.requestAnimationFrame(() => editorEntryRef.current?.focus({ preventScroll: true }));
   }
   function changeBpm(value) {
     const bpm = normalizePerformanceBpm(value); patch({ bpm }); playback.setTempo(bpm);
@@ -178,10 +181,10 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   });
 
 
-  return <><section className="performance-mode pw-workspace" hidden={!active || editorOpen} aria-label="Live 编排">
+  return <><section className="performance-mode pw-workspace" hidden={!active} inert={editingSection ? true : undefined} aria-label="Live 编排">
     <header className="performance-header">
       <button onClick={() => { commitLiveEdit(); playback.stop(); onBack(); }}>← 创作模式</button>
-      <div className="performance-title"><span className="performance-eyebrow">PROJECT ARRANGER / 0.4.0</span><h1>Live · 曲式编排</h1></div><button onClick={openSectionEditor}>Jam 段落编辑</button>
+      <div className="performance-title"><span className="performance-eyebrow">PROJECT ARRANGER / 0.4.0</span><h1>Live · 曲式编排</h1></div>
       <label className="performance-tempo">BPM <input aria-label="演奏速度 BPM" {...fieldHistory} type="number" min="40" max="240" value={session.bpm} onChange={(e) => changeBpm(e.target.value)} /></label>
       <button onClick={connectHardware}>{hardwareInput?.status === 'connected' ? 'Launchpad 已连接' : '连接 Launchpad'}</button>
     </header>
@@ -193,7 +196,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           onRewind={() => { setMessage(''); playback.rewindLive(session.columns, session.bpm); }} />
 
       </div>
-      <aside className="pw-library"><div className="pw-library-head"><h2>段落素材</h2><p>点击试听，再点停止；拖入曲式列，或选中后点击“放入”</p></div>{session.sections.map((s) => {
+      <aside className="pw-library"><div className="pw-library-head"><h2>段落素材</h2><button type="button" className="pw-library-edit" ref={editorEntryRef} onClick={openSectionEditor}>编辑／保存段落</button><p>点击试听，再点停止；拖入曲式列，或选中后点击“放入”</p></div>{session.sections.map((s) => {
         const playing = previewing && status.playingId === s.id;
         const pending = previewing && status.pendingId === s.id;
         const preparing = previewing && !status.playingId && status.requestedId === s.id;
@@ -237,7 +240,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     </main>
 
   </section>
-    {editingSection && <section className="performance-mode jam-workspace"><header className="performance-header"><button onClick={() => { playback.stop(); onBack(); }}>返回编曲</button><h1>Jam · 段落编辑</h1><label className="performance-tempo">BPM <input aria-label="演奏速度 BPM" value={session.bpm} type="number" onChange={e => changeBpm(e.target.value)} /></label><button onClick={closeSectionEditor}>前往 Live</button></header>
+    {editingSection && <SectionEditorDialog bpm={session.bpm} onBpmChange={changeBpm} onClose={closeSectionEditor} hardwareInput={hardwareInput} onConnect={connectHardware}>
       <JamView active={editingSection} session={session} drafts={drafts} editingId={editingId} draft={draft}
       templates={templates} status={status} message={message} playback={playback} audio={audio}
       triggerPad={triggerPad} selectSection={selectSection} updateTimbre={updateTimbre} changeMix={changeMix}
@@ -245,6 +248,6 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       addSection={(kind) => { editor.add(kind); persist(); }} renameSection={(name) => editor.edit({ name })}
       removeSection={(id) => { if (status.playingId === id || status.pendingId === id) playback.stop(); editor.remove(id); if (librarySelection === id) setLibrarySelection(''); persist(); }}
       />
-    </section>}
+    </SectionEditorDialog>}
   </>;
 }
