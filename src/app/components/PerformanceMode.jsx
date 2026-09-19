@@ -17,8 +17,8 @@ import './jamView.css';
 void [LiveTransport, Progress, TrackControls, JamView, SectionEditorDialog];
 const storage = () => { try { return window.localStorage; } catch { return null; } };
 
-export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack, hardwareInput }) {
-  const [editor] = useState(() => createSessionEditor(readSession(storage(), genreId, profileId, initialBpm)));
+export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, recommendation, onBack, hardwareInput }) {
+  const [editor] = useState(() => createSessionEditor(readSession(storage(), genreId, profileId, initialBpm, recommendation)));
   const { session, drafts, editingId, liveUndo, liveRedo } = useSyncExternalStore(editor.subscribe, editor.getSnapshot);
   const [audio] = useState(() => createAudioEngine());
   const [status, setStatus] = useState({ mode: 'stopped', loading: false, playingId: null, pendingId: null });

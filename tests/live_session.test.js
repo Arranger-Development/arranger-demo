@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {createSession, fixedPerformancePads, EXTRA_PHRASE_PLACEHOLDERS, createSessionEditor, readSession, writeSession, sessionKey, snapshotSection, createForm} from '../src/app/performanceSession.js';
 import { performanceStorageKey, performanceTemplates } from '../src/app/performanceModel.js';
 import { AI_PERFORMANCE_PROFILE_ID as profile } from '../src/data/aiPerformanceTemplates.js';
+import { createInitialRecommendationSelections, createMultimodalRecommendationAppState } from '../src/app/multimodalRecommendation.js';
 const genre = 'chill';
 function populated() {
   const s = createSession(genre,profile,100);
@@ -46,6 +47,14 @@ test('form edits undo and restored copies remain independent of mutated source',
   assert.deepEqual(editor.getSnapshot().session.columns,before);
   editor.add('transition'); const state = editor.getSnapshot(); assert.equal(state.drafts[state.editingId].kind,'transition');
 });
+test('AI recommendation branches share requested timbres, BPM and muted track selections', () => {
+  const selections = createInitialRecommendationSelections(); selections.selectedTrackIds=['drums']; selections.timbreByTrackId.chord='muted-rhodes';
+  const project = createMultimodalRecommendationAppState({bpm:119,selections});
+  const jam = createSession(genre,profile,119,selections);
+  assert.equal(jam.bpm,project.bpm); assert.deepEqual(jam.mutedTracks,project.mutedTracks);
+  assert.equal(project.matrix.chord.flat().find(Boolean).requestedTimbreId,jam.sections[0].timbres.chord);
+});
+
 test('explicitly emptied pad bindings survive refresh independently of saved sections', () => {
   const store = memory(); const session = populated();
   session.pads.drums[0] = null; writeSession(store,genre,profile,session);

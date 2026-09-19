@@ -163,7 +163,7 @@ function TopBar({
     >
       <div className="brand">
         <div className="name">Project Arranger</div>
-        <div className="project">v0.22</div>
+        <div className="project">v0.4.0</div>
       </div>
 
       <button className="btn-new" aria-label="New song" title="New song" type="button" onClick={onNewSong}>

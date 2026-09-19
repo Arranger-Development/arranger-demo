@@ -34,6 +34,7 @@ const ROOT_VIEWS = Object.freeze({
 
 function Root() {
   const [view, setView] = useState(ROOT_VIEWS.GENRE);
+  const [initialWorkspaceView, setInitialWorkspaceView] = useState('creation');
   const [genreId, setGenreId] = useState(CURRENT_GENRE_ID);
   const [mediaFile, setMediaFile] = useState(null);
   const [mediaKind, setMediaKind] = useState(null);
@@ -89,9 +90,10 @@ function Root() {
     setView(ROOT_VIEWS.ANALYZING);
   };
 
-  const handleApplyRecommendation = () => {
+  const handleApplyRecommendation = (destination = 'creation') => {
+    setInitialWorkspaceView(destination);
     setPerformanceProfileId(AI_PERFORMANCE_PROFILE_ID);
-    useMusicStore.setState(createMultimodalRecommendationAppState({ bpm }));
+    useMusicStore.setState(createMultimodalRecommendationAppState({ bpm, selections }));
     setGenreId(MULTIMODAL_DRUM_TEMPLATE_GENRE_ID);
     setView(ROOT_VIEWS.ARRANGER);
   };
@@ -137,7 +139,8 @@ function Root() {
     return createElement(GenreSelectScreen, {
       currentGenreId: genreId,
       onGenreEnter: handleGenreEnter,
-      options: GENRE_OPTIONS,
+      entryOnly: true,
+      options: GENRE_OPTIONS.filter((option) => option.id === MULTIMODAL_GENRE_ID),
     });
   }
 
@@ -172,6 +175,8 @@ function Root() {
   return createElement(App, {
     genreId,
     performanceProfileId,
+    initialView: initialWorkspaceView,
+    recommendation: selections,
   });
 }
 

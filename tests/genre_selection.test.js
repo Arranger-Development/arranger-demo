@@ -118,7 +118,7 @@ test('root owns the genre upload analysis results and arranger views', async () 
   assert.match(rootSource, /timers\.forEach\(\(timer\) => window\.clearTimeout\(timer\)\)/);
   assert.match(rootSource, /URL\.createObjectURL\(file\)/);
   assert.match(rootSource, /URL\.revokeObjectURL\(previewUrl\)/);
-  assert.match(rootSource, /createMultimodalRecommendationAppState\(\{ bpm \}\)/);
+  assert.match(rootSource, /createMultimodalRecommendationAppState\(\{ bpm, selections \}\)/);
   assert.doesNotMatch(rootSource, /localStorage|sessionStorage/);
 });
 

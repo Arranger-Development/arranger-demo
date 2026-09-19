@@ -9,12 +9,15 @@ function GenreSelectScreen({
   currentGenreId = CURRENT_GENRE_ID,
   onGenreEnter = () => {},
   options = GENRE_OPTIONS,
+  entryOnly = false,
 }) {
   const [selectedPreviewGenreId, setSelectedPreviewGenreId] = useState(currentGenreId);
 
   const handleGenreSelect = (genre) => {
     setSelectedPreviewGenreId(genre.id);
     if (genre.enabled) {
+      onGenreEnter(genre.id);
+    } else if (entryOnly && genre.entryType === 'multimodal') {
       onGenreEnter(genre.id);
     }
   };
@@ -28,10 +31,11 @@ function GenreSelectScreen({
 
   return (
     <HardwareFlowShell
-      ariaLabel="选择曲风"
+      screenClassName={entryOnly ? 'ai-entry-screen' : ''}
+      ariaLabel={entryOnly ? "AI 音乐创作" : "选择曲风"}
       consoleTitle="AETHER SYNTHESIZERS - GENRE SELECT"
-      kicker="GENRE SELECT"
-      title="选择曲风"
+      kicker={entryOnly ? "CREATE WITH AI" : "GENRE SELECT"}
+      title={entryOnly ? "AI 音乐创作" : "选择曲风"}
     >
       <div className="genre-grid" role="list" aria-label="曲风列表">
         {options.map((genre) => {

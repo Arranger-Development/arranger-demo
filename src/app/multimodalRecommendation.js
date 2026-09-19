@@ -229,8 +229,11 @@ function createMultimodalClips() {
   };
 }
 
-function createMultimodalRecommendationAppState({ bpm = RECOMMENDED_BPM } = {}) {
-  const matrix = createInitialMatrix();
+function createMultimodalRecommendationAppState({ bpm = RECOMMENDED_BPM, selections } = {}) {
+  const matrix = { ...createInitialMatrix(), ...createChillTutorialMatrix() };
+  for (const [track, bars] of Object.entries(matrix)) {
+    for (const bar of bars) for (const cell of bar) if (cell && selections?.timbreByTrackId?.[track]) cell.requestedTimbreId = selections.timbreByTrackId[track];
+  }
   return {
     ...createDefaultTrackState(),
     totalBars: TOTAL_BARS,
@@ -240,14 +243,11 @@ function createMultimodalRecommendationAppState({ bpm = RECOMMENDED_BPM } = {}) 
     currentBar: 0,
     currentStep: 0,
     isPlaying: false,
-    matrix: {
-      ...matrix,
-      ...createChillTutorialMatrix(),
-    },
+    matrix,
     melodyRhythmTemplateId: null,
     melodyScaleId: 'chinese',
     melodyTimbreId: 'piano',
-    mutedTracks: Object.fromEntries(CORE_TRACK_IDS.map((trackId) => [trackId, false])),
+    mutedTracks: Object.fromEntries(CORE_TRACK_IDS.map((trackId) => [trackId, selections ? !selections.selectedTrackIds.includes(trackId) : false])),
     rootKey: ROOT_KEY,
     scale: SCALE,
     seekBar: 0,

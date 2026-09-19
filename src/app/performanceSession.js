@@ -35,9 +35,9 @@ export function fixedPerformancePads(catalog) {
   ))]));
 }
 export const EXTRA_PHRASE_PLACEHOLDERS = Array.from({ length: 10 }, (_, i) => ({ id: `placeholder-${i + 1}`, name: `Placeholder ${i + 1}` }));
-export function createSession(genre, profile, bpm = 100) {
+export function createSession(genre, profile, bpm = 100, recommendation) {
   const catalog = performanceTemplates(genre, profile);
-  const timbres = defaultTimbres();
+  const timbres = { ...defaultTimbres(), ...recommendation?.timbreByTrackId };
   return {
     version: SESSION_VERSION, bpm: normalizePerformanceBpm(bpm),
     pads: Object.fromEntries(TRACKS.map((track) => [track, Array.from({ length: MAIN_PHRASE_SLOTS + TRANSITION_PHRASE_SLOTS }, (_, i) => (
@@ -45,11 +45,11 @@ export function createSession(genre, profile, bpm = 100) {
     ))])),
     sections: Array.from({ length: 5 }, (_, i) => createSection('main', i + 1, timbres)),
     columns: createForm(), volumes: Object.fromEntries(TRACKS.map((id) => [id, 0])),
-    mutedTracks: Object.fromEntries(TRACKS.map((id) => [id, false])),
+    mutedTracks: Object.fromEntries(TRACKS.map((id) => [id, recommendation ? !recommendation.selectedTrackIds.includes(id) : false])),
   };
 }
-export function readSession(storage, genre, profile, bpm) {
-  const base = createSession(genre, profile, bpm);
+export function readSession(storage, genre, profile, bpm, recommendation) {
+  const base = createSession(genre, profile, bpm, recommendation);
   try {
     const value = JSON.parse(storage?.getItem(sessionKey(genre, profile)) ?? 'null');
     if (value?.version === SESSION_VERSION && Array.isArray(value.sections) && value.sections.length && Array.isArray(value.columns)) {

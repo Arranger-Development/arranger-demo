@@ -198,7 +198,7 @@ function UploadView({
       <div className="multimodal-actions">
         <button className="hardware-flow-button ghost" type="button" onClick={onBack}>
           <span aria-hidden="true">{renderIcon(ArrowLeft)}</span>
-          返回曲风
+          返回首页
         </button>
         <button
           className="hardware-flow-button primary"
@@ -422,15 +422,11 @@ function ResultsView({
           />
         </article>
 
-        <button
-          className="results-icon-action apply-recommendation"
-          type="button"
-          aria-label="进入编曲界面"
-          onClick={onApply}
-        >
-          <span aria-hidden="true">{renderIcon(Sparkles)}</span>
-        </button>
       </section>
+      <div className="results-continue-actions">
+        <button type="button" onClick={() => onApply('live')}>在演出模式继续</button>
+        <button type="button" onClick={() => onApply('creation')}>在创作模式继续</button>
+      </div>
     </div>
   );
 }
