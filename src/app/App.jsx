@@ -3255,8 +3255,6 @@ export default function App({
             totalBars: timelineBars,
             activeTutorialTarget,
             activeTrackId,
-            currentBar,
-            currentStep,
             onAddClip: handleAddClip,
             onMoveClip: handleMoveClip,
             onOpenClip: handleOpenClip,

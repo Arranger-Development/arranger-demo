@@ -1,4 +1,3 @@
-import { findClipForTrackBar } from '../store/slices/clipsSlice.js';
 import { getChordBarDisplayLabel } from './chordActions.js';
 import { hasClipContent } from './trackContent.js';
 import { createTrackVolumeView } from './trackVolumeViewModels.js';
@@ -32,9 +31,10 @@ function createTimelineTracks({
   trackUi,
   volumes,
 }) {
+  const clipIndex = new Map((clips?.ids ?? []).map((id) => clips.byId[id]).filter(Boolean).map((clip) => [`${clip.trackId}:${clip.bar}`, clip]));
   return trackUi.map((track) => {
     const clipsByBar = barNumbers.map((_, barIndex) => (
-      findClipForTrackBar(clips, track.id, barIndex)
+      clipIndex.get(`${track.id}:${barIndex}`) ?? null
     ));
     const bars = barNumbers.map((barNumber, barIndex) => {
       const clip = clipsByBar[barIndex];
@@ -50,7 +50,7 @@ function createTimelineTracks({
     return {
       ...track,
       clip: createClipView(
-        findClipForTrackBar(clips, track.id, selectedBar),
+        clipIndex.get(`${track.id}:${selectedBar}`) ?? null,
         matrix,
         track.type,
       ),

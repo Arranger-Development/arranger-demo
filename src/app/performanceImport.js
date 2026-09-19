@@ -13,7 +13,7 @@ export function createPerformanceImport({ saved, bpm, genreId, profileId = null 
   const selections = saved.map((value) => normalizeSelection(value, genreId, profileId));
   const sequence = createPerformanceSequence(selections, genreId, profileId);
   if (!sequence.indices.length) throw new Error('请先保存一段 Loop。');
-  if (sequence.totalBars > MAX_PROJECT_BARS) throw new Error('编曲最多支持 20 小节。');
+  if (sequence.totalBars > MAX_PROJECT_BARS) throw new Error(`编曲最多支持 ${MAX_PROJECT_BARS} 小节。`);
   const templates = performanceTemplates(genreId, profileId);
   const matrix = structuredClone(sequence.matrix);
   const records = sequence.segments.flatMap(({ loopIndex, startStep, totalSteps }) => (

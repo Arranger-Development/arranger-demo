@@ -1,9 +1,11 @@
+import useMusicStore from '../../store/useMusicStore.js';
 import {
   Plus,
 } from 'lucide-react';
 import {
   createElement,
   forwardRef,
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -203,11 +205,21 @@ function Clip({
   );
 }
 
-const Timeline = forwardRef(function Timeline(
+void TimelinePlayhead;
+function TimelinePlayhead({ className, totalBars, onMouseDown }) {
+  const currentBar = useMusicStore((state) => state.currentBar);
+  const currentStep = useMusicStore((state) => state.currentStep);
+  const flatStep = currentBar * STEPS_PER_BAR + currentStep;
+  const playheadLeft = `${(flatStep / (totalBars * STEPS_PER_BAR)) * 100}%`;
+  return <div className={className} style={{ left: playheadLeft }}><div
+    aria-label="Drag transport playhead" aria-valuemax={totalBars * STEPS_PER_BAR - 1}
+    aria-valuemin={0} aria-valuenow={flatStep} className="playhead-hit"
+    onMouseDown={onMouseDown} role="slider" tabIndex={0} /></div>;
+}
+
+const Timeline = memo(forwardRef(function Timeline(
   {
     activeTrackId,
-    currentBar,
-    currentStep,
     totalBars = TOTAL_BARS,
     onAddClip,
     onMoveClip,
@@ -244,8 +256,6 @@ const Timeline = forwardRef(function Timeline(
     displayedTimelineSelection,
     trackIds,
   );
-  const flatStep = currentBar * STEPS_PER_BAR + currentStep;
-  const playheadLeft = `${(flatStep / (totalBars * STEPS_PER_BAR)) * 100}%`;
   const tutorialPlayheadRole = tutorialTargets?.playhead?.role ?? null;
   const getPlayheadTutorialClass = (baseClass) => [
     baseClass,
@@ -254,7 +264,6 @@ const Timeline = forwardRef(function Timeline(
   ].filter(Boolean).join(' ');
   const playheadLineClass = getPlayheadTutorialClass('ruler-playhead');
   const playheadGridClass = getPlayheadTutorialClass('playhead');
-  const playheadHitClass = 'playhead-hit';
   const tutorialTimelineBars = new Set(
     (tutorialTargets?.timelineBars ?? []).map((target) => target.bar),
   );
@@ -615,18 +624,7 @@ const Timeline = forwardRef(function Timeline(
             {barNumber}
           </div>
         ))}
-        <div className={playheadLineClass} style={{ left: playheadLeft }}>
-          <div
-            aria-label="Drag transport playhead"
-            aria-valuemax={totalBars * STEPS_PER_BAR - 1}
-            aria-valuemin={0}
-            aria-valuenow={flatStep}
-            className={playheadHitClass}
-            onMouseDown={handlePlayheadMouseDown}
-            role="slider"
-            tabIndex={0}
-          />
-        </div>
+        <TimelinePlayhead className={playheadLineClass} totalBars={totalBars} onMouseDown={handlePlayheadMouseDown} />
       </div>
 
       <div
@@ -757,21 +755,10 @@ const Timeline = forwardRef(function Timeline(
           />
         ) : null}
 
-        <div className={playheadGridClass} style={{ left: playheadLeft }}>
-          <div
-            aria-label="Drag transport playhead"
-            aria-valuemax={totalBars * STEPS_PER_BAR - 1}
-            aria-valuemin={0}
-            aria-valuenow={flatStep}
-            className={playheadHitClass}
-            onMouseDown={handlePlayheadMouseDown}
-            role="slider"
-            tabIndex={0}
-          />
-        </div>
+        <TimelinePlayhead className={playheadGridClass} totalBars={totalBars} onMouseDown={handlePlayheadMouseDown} />
       </div>
     </section>
   );
-});
+}));
 
 export { Timeline };
