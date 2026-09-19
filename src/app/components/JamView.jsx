@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRightToLine, Check, Drum, Guitar, Music2, Piano, Save, Settings2 } from 'lucide-react';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, hasSelection } from '../performanceModel.js';
-import {MAIN_PHRASE_SLOTS, TRANSITION_PHRASE_SLOTS} from '../performanceSession.js';
+import { EXTRA_PHRASE_PLACEHOLDERS, MAIN_PHRASE_SLOTS, TRANSITION_PHRASE_SLOTS } from '../performanceSession.js';
 import { performanceKeyLabel } from '../../input/performanceInput.js';
 
 void [ArrowRightToLine, Check, Save, Settings2, SectionDial];
@@ -55,6 +55,10 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
                     <span className="performance-pad-top"><span className="performance-key-hint" aria-hidden="true">{key}</span>{selected ? <Check size={16} /> : <Icon size={16} />}</span>
                     <strong>{phrase?.name ?? '空位'}</strong>
                   </button>
+                  <select className="jam-pad-replace" aria-label={`${LABELS[track]}${group ? '转场' : '主乐句'} ${group ? index - MAIN_PHRASE_SLOTS + 1 : index + 1} 更多模板`}
+                    defaultValue="">
+                    <option value="" disabled>更多模板</option>{EXTRA_PHRASE_PLACEHOLDERS.map((p) => <option key={p.id} value={p.id} disabled>{p.name} · 待提供</option>)}
+                  </select>
                 </div>;
               })}
             </div>)}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createSession, createSessionEditor, readSession, writeSession, sessionKey} from '../src/app/performanceSession.js';
+import {createSession, fixedPerformancePads, EXTRA_PHRASE_PLACEHOLDERS, createSessionEditor, readSession, writeSession, sessionKey} from '../src/app/performanceSession.js';
 import { performanceStorageKey, performanceTemplates } from '../src/app/performanceModel.js';
 import { AI_PERFORMANCE_PROFILE_ID as profile } from '../src/data/aiPerformanceTemplates.js';
 const genre = 'chill';
@@ -47,6 +47,20 @@ test('sections grow beyond five and main/transition numbering remains separate a
 });
 
 
+test('visible pads retain supplied catalog order and extra choices are ten non-musical placeholders', () => {
+  const catalog = performanceTemplates(genre,profile);
+  const before = structuredClone(catalog);
+  const pads = fixedPerformancePads(catalog);
+  assert.deepEqual(pads.drums.slice(0,5).map(p=>p.name), ['悸动节奏','摇摆行进','街头舞步','放慢脚步','凝神屏气']);
+  for (const track of Object.keys(catalog)) {
+    assert.deepEqual(pads[track].slice(0,10).filter(Boolean),catalog[track].slice(0,10));
+    assert.deepEqual(pads[track].slice(10),[null,null,null,null]);
+  }
+  assert.equal(EXTRA_PHRASE_PLACEHOLDERS.length,10);
+  assert.equal(new Set(EXTRA_PHRASE_PLACEHOLDERS.map(p=>p.id)).size,10);
+  assert.ok(EXTRA_PHRASE_PLACEHOLDERS.every(p=>p.bars===undefined));
+  assert.deepEqual(catalog,before);
+});
 
 test('session drafts are isolated until an explicit save and stable IDs survive storage', () => {
   const initial=populated(); const editor=createSessionEditor(initial); const id=initial.sections[0].id;

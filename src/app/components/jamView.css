@@ -13,6 +13,7 @@
 .jam-pad-slot .performance-pad { position: relative; }
 .jam-pad-slot .performance-pad strong { font-size: clamp(10px,calc(var(--pad-size) * .15),16px); }
 .jam-pad-slot .performance-pad-top { font-size: clamp(9px,calc(var(--pad-size) * .115),12px); }
+.jam-pad-replace { width: var(--pad-size); height: 20px; padding: 1px 3px; font-size: clamp(9px,calc(var(--pad-size) * .105),12px); font-family: inherit; color: var(--ink-2); border: 1px solid #8d704448; border-radius: 4px; background: #211a14; text-overflow: ellipsis; }
 .jam-manage { position: relative; }
 .jam-manage > summary { cursor: pointer; list-style: none; }
 .jam-manage-panel { position: absolute; right: 0; top: calc(100% + 8px); z-index: 21; display: grid; gap: 9px; width: 220px; padding: 14px; border: 1px solid #8d7044; border-radius: 6px; background: var(--asset-metal) center / cover; box-shadow: 0 10px 30px #000c; }
@@ -53,6 +54,7 @@
   .jam-save-panel { flex-direction: row; gap: 8px; }
   .jam-manage-panel { top: auto; bottom: calc(100% + 8px); }
   .jam-loops { grid-auto-columns: 105px; }
+  .jam-pad-replace { font-size: 8px; }
 }
 
 .jam-sequence { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 12px; }

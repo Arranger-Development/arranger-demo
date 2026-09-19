@@ -23,6 +23,7 @@ export function fixedPerformancePads(catalog) {
     catalog[track].filter((p) => (p.kind ?? 'main') === (i < MAIN_PHRASE_SLOTS ? 'main' : 'transition'))[i < MAIN_PHRASE_SLOTS ? i : i - MAIN_PHRASE_SLOTS] ?? null
   ))]));
 }
+export const EXTRA_PHRASE_PLACEHOLDERS = Array.from({ length: 10 }, (_, i) => ({ id: `placeholder-${i + 1}`, name: `Placeholder ${i + 1}` }));
 export function createSession(genre, profile, bpm = 100) {
   const catalog = performanceTemplates(genre, profile);
   const timbres = defaultTimbres();
