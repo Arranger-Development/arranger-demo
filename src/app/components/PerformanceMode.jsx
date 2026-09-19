@@ -259,12 +259,14 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         {TRACKS.map((t) => <div className="pw-live-slot" data-track={t} key={t}><button type="button" className="pw-live-cell" data-track={t} aria-label={`${column.name} · 选择${LABELS[t]}轨道`}
           aria-pressed={selectedLiveTrack === t} onPointerDown={(e) => drag.begin(e, 'column', column.id)} onPointerMove={drag.move} onPointerUp={drag.end} onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}
           onClick={(e) => clickColumn(e, column.id, t)}><strong>{column.snapshot?.phraseNames[t] ?? '拖入或选择'}</strong><span>{column.snapshot ? `${column.snapshot.totalBars} 小节` : '空槽'}</span><Progress playback={playback} id={column.id} bars={column.snapshot?.phraseBars[t]} running={active && status.playingId === column.id} /></button>
+          <label className="pw-live-replace-control" title="替换乐句" data-disabled={liveLocked}>
+          {renderIcon(ChevronDown, { size: 14 })}
           <select className="pw-live-replace" aria-label={`曲式 ${index + 1} ${LABELS[t]}替换乐句`} disabled={liveLocked} value=""
             onChange={(e) => replaceTrack(column.id, t, e.target.value)}>
             <option value="" disabled>替换乐句</option>
             <optgroup label="已有模板">{catalog[t].map((phrase) => <option key={phrase.id} value={phrase.id}>{phrase.name}</option>)}</optgroup>
             <optgroup label="待提供">{EXTRA_PHRASE_PLACEHOLDERS.map((phrase) => <option key={phrase.id} value={phrase.id} disabled>{phrase.name} · 待提供</option>)}</optgroup>
-          </select>
+          </select></label>
         </div>)}
         <footer><button disabled={!column.snapshot} onClick={() => playLive(column.id)}>▶ {column.snapshot?.name ?? '空列'}</button>
           <div className="pw-repeat-count"><span>×</span><input aria-label={`${column.name}循环次数`} {...fieldHistory} disabled={liveLocked || column.repeat === null} type="number" min="1" value={column.repeat ?? ''} placeholder="∞" onChange={(e) => { const n = Number(e.target.value); if (Number.isSafeInteger(n) && n > 0) columnChange(session.columns.map((c) => c.id === column.id ? { ...c, repeat: n } : c)); }} /><button aria-label={`${column.name}无限循环`} disabled={liveLocked} aria-pressed={column.repeat === null} onClick={() => columnChange(session.columns.map((c) => c.id === column.id ? { ...c, repeat: c.repeat === null ? 1 : null } : c))}>∞</button></div>
