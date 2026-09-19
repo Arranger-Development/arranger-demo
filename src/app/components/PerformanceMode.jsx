@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import createAudioEngine from '../../audio/createAudioEngine.js';
-import {performanceTemplates, normalizePerformanceBpm} from '../performanceModel.js';
-import {createSessionEditor, readSession, writeSession, snapshotSection, fixedPerformancePads} from '../performanceSession.js';
+import {PERFORMANCE_TRACKS as TRACKS, performanceTemplates, normalizePerformanceBpm} from '../performanceModel.js';
+import {createSessionEditor, readSession, writeSession, snapshotSection, fixedPerformancePads, MAIN_PHRASE_SLOTS} from '../performanceSession.js';
 import { createSessionPlayback } from '../sessionPlayback.js';
-import { createPerformanceImport } from '../performanceImport.js';
 import JamView from './JamView.jsx';
 import './performance.css';
 import './jamView.css';
 const storage = () => { try { return window.localStorage; } catch { return null; } };
 void JamView;
-export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack, onImport }) {
+export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack }) {
   const [editor] = useState(() => createSessionEditor(readSession(storage(), genreId, profileId, initialBpm)));
   const { session, drafts, editingId } = useSyncExternalStore(editor.subscribe, editor.getSnapshot);
   const [audio] = useState(() => createAudioEngine());
@@ -24,11 +23,14 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   function triggerPad(track, index) {
     const current = editor.getSnapshot(); const phrase = templates[track][index]; if (!phrase) return;
     const editing = current.drafts[current.editingId];
-    
+    if (index >= MAIN_PHRASE_SLOTS && editing.kind !== 'transition') {
+      const selection = Object.fromEntries(TRACKS.map(t => [t, t === track ? phrase.id : null]));
+      playback.launch(snapshotSection({ ...editing, id: `${editing.id}:transition:${track}:${index}`, kind: 'transition', selection }, genreId, profileId), current.session.bpm); return;
+    }
     const selection = { ...editing.selection, [track]: editing.selection[track] === phrase.id ? null : phrase.id };
     editor.edit({ selection }); launchDraft(true);
   }
-  function selectSection(id) { editor.select(id); playback.stop(); }
+  function selectSection(id) { editor.select(id); launchDraft(); }
   function save() { editor.save(); persist(); setMessage('段落已保存'); }
   function updateTimbre(track, value) { editor.edit({ timbres: { ...draft.timbres, [track]: value } }); if (playback.isActive()) launchDraft(true); }
   function changeBpm(value) { const bpm = normalizePerformanceBpm(value); editor.patch({ bpm }); playback.setTempo(bpm); persist(); }
@@ -36,7 +38,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   return <section className="performance-mode jam-workspace" hidden={!active} aria-label="演奏模式">
     <header className="performance-header"><button onClick={() => { playback.stop(); onBack(); }}>返回编曲</button><h1>演奏模式</h1>
       <label className="performance-tempo">BPM <input aria-label="演奏速度 BPM" type="number" value={session.bpm} onChange={(e) => changeBpm(e.target.value)} /></label>
-      <button onClick={() => launchDraft()}>播放／停止</button><button onClick={() => { try { playback.stop(); onImport(createPerformanceImport({ bpm: session.bpm, saved: session.sections.map(s => s.selection), genreId, profileId })); } catch (error) { setMessage(error.message); } }}>导入编曲</button>
+      
     </header>
     <JamView active={active} session={session} drafts={drafts} editingId={editingId} draft={draft}
       templates={templates} status={status} message={message} playback={playback} audio={audio}

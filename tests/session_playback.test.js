@@ -15,3 +15,10 @@ test('single source startup cancellation rejects obsolete audible callbacks', as
   f.controller.stop(); old.onAudible(); assert.equal(f.notices.at(-1).mode,'stopped');
   f.controller.launch(segment('b'),110); await f.ready(); f.tick(0); assert.equal(f.notices.at(-1).playingId,'b');
 });
+
+test('transition plays once and returns to the original main at its start',async()=>{
+ const f=fixture();f.controller.launch(segment('a',4),100);await f.ready();f.tick(0);f.tick(5);
+ f.controller.launch(segment('fill',1,'transition'),100);assert.equal(f.tick(5).releaseVoices,true);
+ assert.equal(f.tick(21).stepOffset,21);assert.equal(f.notices.at(-1).playingId,'a');
+ f.controller.stop();f.controller.launch(segment('only',1,'transition'),100);await f.ready();f.tick(0);assert.equal(f.tick(16).done,true);
+});

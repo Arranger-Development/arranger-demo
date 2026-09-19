@@ -95,7 +95,7 @@ export function snapshotSection(section, genre, profile) {
   const selected = TRACKS.map((t) => catalog[t].find((p) => p.id === section.selection[t]));
   if (!selected.some(Boolean)) return null;
   let matrix = createPerformanceMatrix(section.selection, genre, profile);
-  const totalBars = Math.max(2, ...selected.map((p) => p?.barCount ?? (p ? 2 : 0)));
+  const totalBars = Math.max(section.kind === 'transition' ? 1 : 2, ...selected.map((p) => p?.barCount ?? (p ? 2 : 0)));
   matrix = Object.fromEntries(TRACKS.map((t) => [t, Array.from({ length: totalBars }, (_, b) => clone(matrix[t][b % matrix[t].length]))]));
   for (const t of TRACKS) for (const bar of matrix[t]) for (const cell of bar) {
     if (!cell) continue;

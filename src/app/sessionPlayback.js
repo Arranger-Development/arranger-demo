@@ -2,6 +2,7 @@
 export function createSessionPlayback(audio, notify = () => {}) {
   let generation = 0;
   let current = null;
+  let returnMain = null;
   let sourceSnapshot = null;
   let startStep = 0;
   let cycle = 1;
@@ -13,14 +14,35 @@ export function createSessionPlayback(audio, notify = () => {}) {
   const emit = (extra = {}) => notify({ mode, loading, requestedId: current?.id ?? null, playingId: audible?.id ?? null, pendingId: null, ...extra });
   const makeSource = () => ({ matrix: current.snapshot.matrix, totalBars: current.snapshot.totalBars, stepOffset: startStep, releaseVoices: true });
   function stop() {
-    generation++; mode = 'stopped'; loading = false; current = audible = null;
+    generation++; mode = 'stopped'; loading = false; current = returnMain = audible = null;
     void audio.stop(); audio.stopAllVoices(); emit();
   }
+  function change(target, absoluteStep) {
+    if (mode === 'jam' && target.snapshot.kind === 'transition' && current?.snapshot.kind !== 'transition') returnMain = current;
+    if (mode === 'jam' && target.snapshot.kind !== 'transition') returnMain = null;
+    current = target; startStep = absoluteStep; cycle = 1; sourceSnapshot = makeSource();
+  }
   function source(absoluteStep) {
+    const length = current.snapshot.totalBars * 16;
+    if (absoluteStep >= startStep + length * cycle) {
+      if (mode === 'jam') {
+        if (current.snapshot.kind === 'transition') {
+          if (mode === 'jam' && returnMain) { const next = returnMain; returnMain = null; change(next, absoluteStep); }
+          else return finish();
+        } else cycle++;
+      }
+    }
     const scheduled = { id: current.id, startStep, totalSteps: current.snapshot.totalBars * 16, cycle, snapshot: current.snapshot };
     const request = generation;
     return { ...sourceSnapshot, releaseVoices: absoluteStep === startStep,
       onAudible: () => { if (request !== generation) return; audible = scheduled; loading = false; emit({ cycle: scheduled.cycle }); } };
+  }
+  function finish() {
+    const request = generation;
+    return { done: true, onAudible: () => {
+      if (request !== generation) return;
+      mode = 'stopped'; audible = current = returnMain = null; emit();
+    } };
   }
   async function start(nextMode, target, tempo) {
     stop(); const request = ++generation;
@@ -51,7 +73,8 @@ export function createSessionPlayback(audio, notify = () => {}) {
       if (!snapshot) return;
       if (!edit && current?.id === snapshot.id) { stop(); return; }
       const target = { id: snapshot.id, snapshot };
-      void start('jam', target, tempo);
+      if (isRunning()) { change(target, Math.ceil(audio.getAbsolutePlaybackStep?.() ?? 0)); emit(); }
+      else void start('jam', target, tempo);
     },
     getProgress() {
       if (!audible || !isRunning()) return null;
