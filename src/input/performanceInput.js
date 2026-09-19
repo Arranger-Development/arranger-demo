@@ -2,13 +2,14 @@ import { PERFORMANCE_TRACKS } from '../app/performanceModel.js';
 import { parseLaunchpadXMessage } from './launchpadXProtocol.js';
 
 export const PERFORMANCE_KEYS = {
-  drums: ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'],
-  chord: ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY'],
-  bass: ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH'],
-  melody: ['KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyB', 'KeyN'],
+  drums: ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'],
+  chord: ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU', 'KeyI', 'KeyO', 'KeyP'],
+  bass: ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon'],
+  melody: ['KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyB', 'KeyN', 'KeyM', 'Comma', 'Period', 'Slash'],
 };
 export function performanceKeyLabel(trackId, index) {
-  return PERFORMANCE_KEYS[trackId]?.[index]?.replace(/^(Key|Digit)/, '') ?? '';
+  const code = PERFORMANCE_KEYS[trackId]?.[index];
+  return ({ Semicolon: ';', Comma: ',', Period: '.', Slash: '/' })[code] ?? code?.replace(/^(Key|Digit)/, '') ?? '';
 }
 function templateCommand(templates, trackId, index) {
   const template = templates?.[trackId]?.[index];
@@ -41,10 +42,11 @@ export function createPerformanceMidiInput() {
       held.add(message.number);
       const row = 8 - Math.floor(message.number / 10);
       const column = message.number % 10 - 1;
-      if (row >= 0 && row < 4 && column >= 0 && column < 6) {
+      if (row >= 0 && row < 4 && column >= 0 && column < 7) {
         return templateCommand(templates, PERFORMANCE_TRACKS[row], column);
       }
       if (message.number >= 11 && message.number <= 15) return { type: 'loop', index: message.number - 11 };
+      if (message.number === 31 || message.number === 32) return { type: 'page', delta: message.number === 31 ? -1 : 1 };
       if (message.number === 17) return { type: 'save' };
       if (message.number === 18) return { type: 'togglePlayback' };
       return null;

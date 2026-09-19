@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useRef, useState, useSyncExternalStore} from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import createAudioEngine from '../../audio/createAudioEngine.js';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, performanceTemplates, hasSelection, normalizePerformanceBpm } from '../performanceModel.js';
 import { createForm, MAIN_PHRASE_SLOTS, fixedPerformancePads, createSessionEditor, readSession, writeSession, snapshotSection, createLiveImport, liveExportLength } from '../performanceSession.js';
@@ -17,7 +17,7 @@ import './jamView.css';
 void [LiveTransport, Progress, TrackControls, JamView, SectionEditorDialog];
 const storage = () => { try { return window.localStorage; } catch { return null; } };
 
-export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, recommendation, onBack, onImport, hardwareInput }) {
+export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, recommendation, onBack, onImport, controlsRef, hardwareInput }) {
   const [editor] = useState(() => createSessionEditor(readSession(storage(), genreId, profileId, initialBpm, recommendation)));
   const { session, drafts, editingId, liveUndo, liveRedo } = useSyncExternalStore(editor.subscribe, editor.getSnapshot);
   const [audio] = useState(() => createAudioEngine());
@@ -28,6 +28,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const [editorOpen, setEditorOpen] = useState(false);
   const editorEntryRef = useRef(null);
   const [counts, setCounts] = useState({});
+  const [page, setPage] = useState(0);
   const [librarySelection, setLibrarySelection] = useState('');
   const [selectedLiveTrack, setSelectedLiveTrack] = useState('drums');
   const editingSection = active && editorOpen;
@@ -181,7 +182,22 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     };
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
   });
-
+  useLayoutEffect(() => {
+    if (!controlsRef || !editingSection) return undefined;
+    const controls = {
+      templates,
+      dispatch(command) {
+        if (command.type === 'template') triggerPad(command.trackId, templates[command.trackId].findIndex((p) => p?.id === command.templateId));
+        if (command.type === 'loop') { const s = session.sections[page * 5 + command.index]; if (s) selectSection(s.id); }
+        if (command.type === 'save') save();
+        if (command.type === 'togglePlayback' || command.type === 'stop') playback.stop();
+        if (command.type === 'page') setPage(Math.max(0, Math.min(Math.ceil(session.sections.length / 5) - 1, page + command.delta)));
+      },
+      getSurface: () => ({ version: 4, templates, sections: session.sections, drafts, editingId, page, status, progress: playback.getProgress(), beatPhase: playback.getBeatPhase() }),
+    };
+    controlsRef.current = controls;
+    return () => { if (controlsRef.current === controls) controlsRef.current = null; };
+  });
 
   let exportLength = 0; let exportError = '';
   try { exportLength = liveExportLength(session.columns, counts); } catch (error) { exportError = error.message; }

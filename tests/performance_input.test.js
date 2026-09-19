@@ -19,7 +19,7 @@ test('four keyboard rows follow actual template order in AI and every ordinary g
         const expected = group[trackId][index];
         assert.deepEqual(mapPerformanceKeyboard(key(code), group), expected
           ? { type: 'template', trackId, templateId: expected.id } : null);
-        assert.equal(performanceKeyLabel(trackId, index), code.replace(/^(Key|Digit)/, ''));
+        assert.equal(performanceKeyLabel(trackId, index), ({ Semicolon: ';', Comma: ',', Period: '.', Slash: '/' })[code] ?? code.replace(/^(Key|Digit)/, ''));
       });
     }
   }
@@ -58,7 +58,9 @@ test('Launchpad maps physical top rows and bottom controls; repeat/release/press
   assert.deepEqual(input.handle([0x90, 18, 100], templates), { type: 'togglePlayback' });
   assert.equal(input.handle([0x90, 18, 0], templates), null);
   assert.deepEqual(input.handle([0x90, 18, 100], templates), { type: 'togglePlayback' });
-  for (const data of [[0xb0, 98, 127], [0xb0, 49, 127], [0x91, 81, 127], [0x90, 16, 127], [0x90, 21, 127], [0x90, 31, 127], [0x90, 41, 127]]) assert.equal(input.handle(data, templates), null);
+  for (const data of [[0xb0, 98, 127], [0xb0, 49, 127], [0x91, 81, 127], [0x90, 16, 127], [0x90, 21, 127], [0x90, 41, 127]]) assert.equal(input.handle(data, templates), null);
+  assert.deepEqual(input.handle([0x90, 31, 127], templates), { type: 'page', delta: -1 });
+  assert.deepEqual(input.handle([0x90, 32, 127], templates), { type: 'page', delta: 1 });
   input.reset();
   assert.deepEqual(input.handle([0x90, 18, 100], templates), { type: 'togglePlayback' });
 });
@@ -189,4 +191,17 @@ test('beat indication uses audio position across BPM changes, variable segments,
   assert.equal(playback.getBeatPhase(), 0);
   assert.equal(playback.getProgress(), null);
   assert.equal(playback.isActive(), false);
+});
+
+
+test('ten keyboard slots remain reachable without overflowing Launchpad rows', () => {
+  const slots = Object.fromEntries(PERFORMANCE_TRACKS.map(track => [track, Array.from({length:10}, (_, i) => ({id:`${track}-${i}`}))]));
+  for (const track of PERFORMANCE_TRACKS) {
+    assert.equal(PERFORMANCE_KEYS[track].length,10);
+    PERFORMANCE_KEYS[track].forEach((code,i) => assert.deepEqual(mapPerformanceKeyboard(key(code),slots), {type:'template',trackId:track,templateId:`${track}-${i}`}));
+  }
+  const frame = createLaunchpadXPerformanceLedFrame({version:4,templates:slots,sections:[],drafts:{draft:{selection:{}}},editingId:'draft',page:0,status:{mode:'stopped'},progress:null,beatPhase:0});
+  assert.equal(light(frame,88),0);
+  assert.equal(light(frame,48),0);
+  assert.ok(light(frame,87)>0);
 });

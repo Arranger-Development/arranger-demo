@@ -4,6 +4,7 @@ const TRACK_COLORS = { drums: [19, 18, 17], chord: [11, 10, 9], bass: [43, 42, 4
 const LOOP_COLORS = [TRACK_COLORS.bass, TRACK_COLORS.drums, [15, 14, 13], TRACK_COLORS.chord, TRACK_COLORS.melody];
 
 export function createLaunchpadXPerformanceLedFrame(surface = {}, now = 0) {
+  if (surface.version === 4) return createSessionFrame(surface);
   const { templates = {}, drafts = [], saved = [], selectedLoop = 0,
     status = {}, progress = null, sequenceIndices = [], beatPhase = 0,
     saveFeedback = false, storageError = false } = surface;
@@ -53,4 +54,20 @@ export function createLedFrameSender() {
       }
     },
   };
+}
+
+function createSessionFrame({ templates, sections, drafts, editingId, page, status, progress, beatPhase }) {
+  const lights = new Map();
+  PERFORMANCE_TRACKS.forEach((track, row) => templates[track]?.slice(0, 7).forEach((p, index) => {
+    if (p) lights.set((8-row)*10+index+1, TRACK_COLORS[track][drafts[editingId]?.selection[track] === p.id ? 2 : 0]);
+  }));
+  sections.slice(page*5,page*5+5).forEach((section,index) => lights.set(11+index,
+    section.id === status.pendingId ? (beatPhase < .5 ? 13 : 0) : section.id === status.playingId ? (beatPhase < .5 ? 15 : 13) : section.id === editingId ? 15 : hasSelection(section.selection) ? 13 : 1));
+  lights.set(17, 9); lights.set(18, status.mode !== 'stopped' ? 5 : 1);
+  lights.set(31, page > 0 ? 13 : 0); lights.set(32, (page+1)*5 < sections.length ? 13 : 0);
+  if (progress) for (let i=0;i<Math.floor(progress.fraction*8)+1;i++) lights.set(21+i,13);
+  const frame = [];
+  for(let row=8;row>=1;row--) for(let col=1;col<=8;col++) frame.push([0x90,row*10+col,lights.get(row*10+col) ?? 0]);
+  for(const cc of [91,92,93,94,95,96,97,98,89,79,69,59,49,39,29,19]) frame.push([0xb0,cc,0]);
+  return frame;
 }
