@@ -1,9 +1,9 @@
-import {useEffect, useMemo, useState, useSyncExternalStore} from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import createAudioEngine from '../../audio/createAudioEngine.js';
 import {performanceTemplates, normalizePerformanceBpm} from '../performanceModel.js';
 import {createSessionEditor, readSession, writeSession, snapshotSection, fixedPerformancePads} from '../performanceSession.js';
-import {createSessionPlayback} from '../sessionPlayback.js';
-import {createPerformanceImport} from '../performanceImport.js';
+import { createSessionPlayback } from '../sessionPlayback.js';
+import { createPerformanceImport } from '../performanceImport.js';
 import JamView from './JamView.jsx';
 import './performance.css';
 import './jamView.css';

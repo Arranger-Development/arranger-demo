@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createSession, createSessionEditor, readSession, writeSession, sessionKey} from '../src/app/performanceSession.js';
-import {performanceStorageKey, performanceTemplates} from '../src/app/performanceModel.js';
-import {AI_PERFORMANCE_PROFILE_ID as profile} from '../src/data/aiPerformanceTemplates.js';
+import { performanceStorageKey, performanceTemplates } from '../src/app/performanceModel.js';
+import { AI_PERFORMANCE_PROFILE_ID as profile } from '../src/data/aiPerformanceTemplates.js';
 const genre = 'chill';
 function populated() {
   const s = createSession(genre,profile,100);

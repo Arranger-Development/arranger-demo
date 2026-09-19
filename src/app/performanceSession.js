@@ -1,5 +1,5 @@
-import {PERFORMANCE_TRACKS as TRACKS, emptySelection, performanceTemplates, createPerformanceMatrix, normalizePerformanceBpm, performanceStorageKey} from './performanceModel.js';
-import {MAX_PROJECT_BARS} from '../domain/projectLength.js';
+import { PERFORMANCE_TRACKS as TRACKS, emptySelection, performanceTemplates, createPerformanceMatrix, normalizePerformanceBpm, performanceStorageKey } from './performanceModel.js';
+import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
 
 export const SESSION_VERSION = 4;
 export const MAIN_PHRASE_SLOTS = 10;

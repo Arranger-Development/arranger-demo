@@ -1,15 +1,15 @@
-import {useEffect, useRef, useState} from 'react';
-import {ArrowRightToLine, Check, Drum, Guitar, Music2, Piano, Save, Settings2} from 'lucide-react';
-import {PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, hasSelection} from '../performanceModel.js';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowRightToLine, Check, Drum, Guitar, Music2, Piano, Save, Settings2 } from 'lucide-react';
+import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, hasSelection } from '../performanceModel.js';
 import {MAIN_PHRASE_SLOTS, TRANSITION_PHRASE_SLOTS} from '../performanceSession.js';
-import {performanceKeyLabel} from '../../input/performanceInput.js';
+import { performanceKeyLabel } from '../../input/performanceInput.js';
 
 void [ArrowRightToLine, Check, Save, Settings2, SectionDial];
 const icons = { drums: Drum, chord: Piano, bass: Guitar, melody: Music2 };
 
 function SectionDial({ section, playing, editing, pending, unsaved, onSelect }) {
   return <button type="button" onClick={onSelect} data-section-id={section.id} aria-pressed={editing}
-    className={`performance-loop ${editing ? 'is-editing' : ''} ${playing ? 'is-playing' : ''} ${pending ? 'is-editing' : ''}`}>
+    className={`performance-loop ${editing ? 'is-editing' : ''} ${playing ? 'is-playing' : ''} ${pending ? 'is-pending' : ''}`}>
     <span className="performance-loop-dial">
       <span className="performance-loop-circle">{section.kind === 'transition' ? '单次' : '∞'}</span>
     </span>

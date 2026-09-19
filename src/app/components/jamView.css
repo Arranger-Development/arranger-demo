@@ -19,13 +19,15 @@
 .jam-manage-panel label { display: grid; gap: 5px; font-size: 11px; color: var(--ink-2); }
 .jam-sequence { display: block; min-width: 0; padding-top: 7px; }
 .jam-loops { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(110px,1fr); grid-template-columns: none; overflow-x: auto; padding: 2px 4px 4px; scrollbar-color: #947044 #211a14; }
-.jam-loops .performance-loop { display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center; }
+.jam-loops .performance-loop { --loop-tone: var(--hardware-amber); display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center; }
 .jam-loops .performance-loop-dial { width: 44px; height: 44px; }
 .jam-loops .performance-loop-circle { width: 34px; height: 34px; font-size: 10px; }
 .jam-loops .performance-loop.is-editing .performance-loop-circle::after { bottom: 4px; width: 3px; height: 3px; }
 .jam-loops .performance-loop strong { text-align: center; font-size: 11px; }
 .jam-loops .performance-loop small { text-align: center; font-size: 9px; }
 .jam-loops .performance-loop strong { min-height: 1.4em; }
+.jam-loops .performance-loop.is-pending .performance-loop-circle { border-style: dashed; box-shadow: 0 0 10px #ffdfa244; }
+.jam-loops .performance-loop.is-pending small { color: #ffe3b6; }
 .jam-footer { display: flex; align-items: center; justify-content: space-between; min-height: 22px; }
 @media(max-width:900px) {
   .jam-workspace .performance-header { gap: 10px; padding-inline: 10px; }
