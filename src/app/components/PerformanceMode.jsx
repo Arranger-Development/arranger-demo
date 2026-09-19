@@ -40,7 +40,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     editor.columns(columns); persist();
   };
   const { drag: dragState, setScrollElement, ...drag } = useLiveDrag({ disabled: liveLocked,
-    onSectionDrop: () => {},
+    onSectionDrop: placeSection,
     onColumnDrop: (id, targetId, side) => columnChange(insertLiveColumn(editor.getSnapshot().session.columns, id, targetId, side)),
   });
   const snapshot = (section) => snapshotSection(section, genreId, profileId);
@@ -93,6 +93,14 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     setLibrarySelection(section.id);
     setMessage('');
   }
+  function placeSection(columnId, sectionId) {
+    if (liveLocked) return;
+    const section = session.sections.find((s) => s.id === sectionId);
+    const copy = section && snapshot(section);
+    if (copy && session.columns.some((c) => c.id === columnId)) {
+      columnChange(session.columns.map((c) => c.id === columnId ? { ...c, snapshot: copy } : c));
+    }
+  }
   function moveColumn(id, targetId) {
     const columns = [...session.columns]; const from = columns.findIndex((c) => c.id === id); const to = columns.findIndex((c) => c.id === targetId);
     if (from < 0 || to < 0 || from === to) return;
@@ -126,8 +134,10 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       <div className="pw-live-toolbar"><label>选择曲式 <select aria-label="选择曲式" disabled={liveLocked} value="" onChange={(e) => columnChange(createForm(e.target.value))}><option value="" disabled>选择曲式模板</option><option value="screenshot">完整曲式 · 截图模板</option><option value="blank">空白自定义</option></select></label>
 
       </div>
-      <aside className="pw-library"><div className="pw-library-head"><h2>段落素材</h2><p>已保存的段落素材</p></div>{session.sections.map((s) => {
+      <aside className="pw-library"><div className="pw-library-head"><h2>段落素材</h2><p>拖入曲式列，或选中后点击“放入”</p></div>{session.sections.map((s) => {
         return <button key={s.id} className="pw-library-section" disabled={!hasSelection(s.selection)}
+          onPointerDown={(e) => drag.begin(e, 'section', s.id)} onPointerMove={drag.move} onPointerUp={drag.end}
+          onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}
           aria-pressed={librarySelection === s.id} onClick={(e) => previewSection(e, s)}>
           <small>{s.kind === 'transition' ? '转场' : '主段落'}</small><strong>{s.name}</strong>
           <span>{hasSelection(s.selection) ? '已保存' : '空位'}</span>
@@ -138,7 +148,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         <strong>{LABELS[track]}</strong><span>{session.mutedTracks[track] || session.volumes[track] <= -24 ? '静音' : `${session.volumes[track]} dB`}</span>
       </button>)}</div>
       <div className="pw-live-scroll" ref={setScrollElement}><div className="pw-columns">{session.columns.map((column, index) => <article key={column.id} className="pw-column" data-live-column-id={column.id} data-dragging={dragState?.kind === 'column' && dragState.id === column.id} data-drop-side={dragState?.targetId === column.id ? dragState.side : undefined} data-playing={status.playingId === column.id} data-pending={status.pendingId === column.id}
-        onDragOver={(e) => { if (!liveLocked) e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); if (liveLocked) return; const c = e.dataTransfer.getData('application/arranger-column'); if (c) moveColumn(c, column.id); }}>
+        onDragOver={(e) => { if (!liveLocked) e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); if (liveLocked) return; const s = e.dataTransfer.getData('application/arranger-section'); const c = e.dataTransfer.getData('application/arranger-column'); if (s) placeSection(column.id, s); if (c) moveColumn(c, column.id); }}>
         <header onPointerDown={(e) => drag.begin(e, 'column', column.id)} onPointerMove={drag.move} onPointerUp={drag.end} onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}><span className="pw-column-grip" aria-label={`拖动 ${column.name}`}>⠿</span>
           <input aria-label={`曲式 ${index + 1} 名称`} disabled={liveLocked} value={column.name} onChange={(e) => columnChange(session.columns.map((c) => c.id === column.id ? { ...c, name: e.target.value } : c))} />
           <div><button aria-label={`左移 ${column.name}`} disabled={liveLocked || index === 0} onClick={() => moveColumn(column.id, session.columns[index - 1].id)}>←</button><button disabled={liveLocked} aria-label={`删除曲式 ${column.name}`} onClick={() => columnChange(session.columns.filter((c) => c.id !== column.id))}>×</button><button aria-label={`右移 ${column.name}`} disabled={liveLocked || index === session.columns.length - 1} onClick={() => moveColumn(column.id, session.columns[index + 1].id)}>→</button></div>
@@ -148,7 +158,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           ><strong>{column.snapshot?.phraseNames[t] ?? '拖入段落'}</strong><span>{column.snapshot ? `${column.snapshot.totalBars} 小节` : '空槽'}</span><Progress playback={playback} id={column.id} bars={column.snapshot?.phraseBars[t]} running={active && status.playingId === column.id} /></button>)}
         <footer>
 
-
+          <button disabled={liveLocked || !librarySelection} onClick={() => placeSection(column.id, librarySelection)}>放入选中段落</button>
         </footer>
       </article>)}<button className="pw-add-column" aria-label="添加曲式列" disabled={liveLocked} onClick={() => columnChange([...session.columns, { id: crypto.randomUUID(), name: `段落 ${session.columns.length + 1}`, repeat: 1, snapshot: null }])}>＋</button></div></div>
     </main>

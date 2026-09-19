@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createSession, fixedPerformancePads, EXTRA_PHRASE_PLACEHOLDERS, createSessionEditor, readSession, writeSession, sessionKey, createForm} from '../src/app/performanceSession.js';
+import {createSession, fixedPerformancePads, EXTRA_PHRASE_PLACEHOLDERS, createSessionEditor, readSession, writeSession, sessionKey, snapshotSection, createForm} from '../src/app/performanceSession.js';
 import { performanceStorageKey, performanceTemplates } from '../src/app/performanceModel.js';
 import { AI_PERFORMANCE_PROFILE_ID as profile } from '../src/data/aiPerformanceTemplates.js';
 const genre = 'chill';
@@ -29,6 +29,16 @@ test('legacy save migration preserves old bytes and exact phrase choices', () =>
   store.setItem(sessionKey(genre,profile),'broken');
   const fallback = readSession(store,genre,profile,100);
   assert.equal(fallback.bpm,132); assert.deepEqual(fallback.sections[0].selection,selection);
+});
+test('draft edits, slot bindings, saved sections and Live snapshots never alias', () => {
+  const initial = populated(); const editor = createSessionEditor(initial); const id = initial.sections[0].id;
+  const copy = snapshotSection(initial.sections[0],genre,profile);
+  editor.columns([{id:'column',name:'主歌',repeat:2,snapshot:copy}]);
+  editor.edit({name:'改名',selection:{...initial.sections[0].selection,drums:null}});
+  assert.notEqual(editor.getSnapshot().session.sections[0].name,'改名'); editor.save();
+  editor.patch({pads:{...initial.pads,drums:Array(7).fill(null)}}); editor.remove(id);
+  assert.deepEqual(editor.getSnapshot().session.columns[0].snapshot,copy);
+  assert.ok(copy.matrix.drums.flat().some(Boolean)); assert.ok(initial.sections[0].selection.drums);
 });
 test('explicitly emptied pad bindings survive refresh independently of saved sections', () => {
   const store = memory(); const session = populated();
@@ -67,12 +77,4 @@ test('visible pads retain supplied catalog order and extra choices are ten non-m
   assert.equal(new Set(EXTRA_PHRASE_PLACEHOLDERS.map(p=>p.id)).size,10);
   assert.ok(EXTRA_PHRASE_PLACEHOLDERS.every(p=>p.bars===undefined));
   assert.deepEqual(catalog,before);
-});
-
-test('session drafts are isolated until an explicit save and stable IDs survive storage', () => {
-  const initial=populated(); const editor=createSessionEditor(initial); const id=initial.sections[0].id;
-  editor.edit({selection:{...initial.sections[0].selection,drums:null}});
-  assert.ok(editor.getSnapshot().session.sections[0].selection.drums);
-  editor.save(); assert.equal(editor.getSnapshot().session.sections[0].selection.drums,null);
-  assert.equal(editor.getSnapshot().session.sections[0].id,id);
 });
