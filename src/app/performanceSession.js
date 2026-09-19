@@ -6,7 +6,13 @@ export const MAIN_PHRASE_SLOTS = 10;
 export const TRANSITION_PHRASE_SLOTS = 4;
 export const clone = (value) => structuredClone(value);
 const uid = () => globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-export const defaultTimbres = () => Object.fromEntries(TRACKS.map((id) => [id, ({ drums: 'soft-electronic-kit', chord: 'warm-electric-piano', bass: 'round-electric-bass', melody: 'airy-synth-lead' })[id]]));
+export const TIMBRE_OPTIONS = {
+  drums: ['soft-electronic-kit', 'dusty-tape-kit', 'clean-digital-kit'],
+  chord: ['warm-electric-piano', 'muted-rhodes', 'glass-electric-keys'],
+  bass: ['round-electric-bass', 'soft-sub-bass', 'fm-round-bass'],
+  melody: ['airy-synth-lead', 'hazy-bell-lead', 'soft-pluck-lead'],
+};
+export const defaultTimbres = () => Object.fromEntries(TRACKS.map((id) => [id, TIMBRE_OPTIONS[id][0]]));
 export const sessionKey = (genre, profile) => `arranger-performance:v4:${profile ?? genre}`;
 export function createSection(kind = 'main', number = 1, timbres = defaultTimbres()) {
   return { id: uid(), name: `${kind === 'transition' ? '转场' : '段落'} ${number}`, kind, selection: emptySelection(), timbres: { ...timbres } };
@@ -91,6 +97,11 @@ export function snapshotSection(section, genre, profile) {
   let matrix = createPerformanceMatrix(section.selection, genre, profile);
   const totalBars = Math.max(2, ...selected.map((p) => p?.barCount ?? (p ? 2 : 0)));
   matrix = Object.fromEntries(TRACKS.map((t) => [t, Array.from({ length: totalBars }, (_, b) => clone(matrix[t][b % matrix[t].length]))]));
+  for (const t of TRACKS) for (const bar of matrix[t]) for (const cell of bar) {
+    if (!cell) continue;
+    cell.requestedTimbreId = section.timbres[t];
+    // Placeholder choice stays intact; real sample banks can be bound later.
+  }
   return { id: section.id, name: section.name, kind: section.kind, matrix, totalBars, timbres: { ...section.timbres },
     phraseNames: Object.fromEntries(TRACKS.map((t, i) => [t, selected[i]?.name ?? '静音'])),
     phraseBars: Object.fromEntries(TRACKS.map((t, i) => [t, selected[i]?.barCount ?? 2])),

@@ -3,8 +3,9 @@ import { ArrowRightToLine, Check, Drum, Guitar, Music2, Piano, Save, Settings2 }
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, hasSelection } from '../performanceModel.js';
 import { EXTRA_PHRASE_PLACEHOLDERS, MAIN_PHRASE_SLOTS, TRANSITION_PHRASE_SLOTS } from '../performanceSession.js';
 import { performanceKeyLabel } from '../../input/performanceInput.js';
+import { TrackControls } from './PerformanceControls.jsx';
 
-void [ArrowRightToLine, Check, Save, Settings2, SectionDial];
+void [ArrowRightToLine, Check, Save, Settings2, TrackControls, SectionDial];
 const icons = { drums: Drum, chord: Piano, bass: Guitar, melody: Music2 };
 
 function SectionDial({ section, playing, editing, pending, unsaved, onSelect }) {
@@ -18,7 +19,8 @@ function SectionDial({ section, playing, editing, pending, unsaved, onSelect }) 
   </button>;
 }
 
-export default function JamView({ active, session, drafts, editingId, draft, templates, status, message, playback,   triggerPad, selectSection, save, onComplete, editSection, addSection, renameSection, removeSection }) {
+export default function JamView({ active, session, drafts, editingId, draft, templates, status, message, playback,
+  triggerPad, selectSection, updateTimbre, save, onComplete, editSection, addSection, renameSection, removeSection }) {
   const locked = status.mode !== 'stopped';
   const [newSectionKind, setNewSectionKind] = useState('main');
   const sectionsRef = useRef(null);
@@ -43,7 +45,10 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
         {TRACKS.map((track) => {
           const Icon = icons[track]; void Icon;
           return <div className="performance-row jam-row" data-track={track} key={track} role="group" aria-label={`${LABELS[track]}乐句`}>
-            <div className="performance-track-label"><Icon size={22} /><strong>{LABELS[track]}</strong></div>
+            <details className="jam-track-settings">
+              <summary className="performance-track-label" aria-label={`${LABELS[track]}轨道设置`}><Icon size={22} /><strong>{LABELS[track]}</strong><Settings2 size={12} /></summary>
+              <div className="jam-track-popover"><TrackControls track={track} draft={draft} updateTimbre={updateTimbre} /></div>
+            </details>
             {[0, 1].map((group) => <div className={`jam-pad-group ${group ? 'jam-transitions' : ''}`} key={group}>
               {Array.from({ length: group ? TRANSITION_PHRASE_SLOTS : MAIN_PHRASE_SLOTS }, (_, n) => n + (group ? MAIN_PHRASE_SLOTS : 0)).map((index) => {
                 const phrase = templates[track][index]; const selected = phrase && draft.selection[track] === phrase.id;

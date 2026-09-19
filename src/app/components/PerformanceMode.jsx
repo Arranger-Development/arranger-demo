@@ -30,6 +30,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   }
   function selectSection(id) { editor.select(id); playback.stop(); }
   function save() { editor.save(); persist(); setMessage('段落已保存'); }
+  function updateTimbre(track, value) { editor.edit({ timbres: { ...draft.timbres, [track]: value } }); if (playback.isActive()) launchDraft(true); }
   function changeBpm(value) { const bpm = normalizePerformanceBpm(value); editor.patch({ bpm }); playback.setTempo(bpm); persist(); }
   useEffect(() => () => playback.stop(), [active, playback]);
   return <section className="performance-mode jam-workspace" hidden={!active} aria-label="演奏模式">
@@ -39,7 +40,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     </header>
     <JamView active={active} session={session} drafts={drafts} editingId={editingId} draft={draft}
       templates={templates} status={status} message={message} playback={playback} audio={audio}
-      triggerPad={triggerPad} selectSection={selectSection}
+      triggerPad={triggerPad} selectSection={selectSection} updateTimbre={updateTimbre}
       save={save} onComplete={onBack} editSection={(id) => editor.select(id)}
       addSection={(kind) => { editor.add(kind); persist(); }} renameSection={(name) => editor.edit({ name })}
       removeSection={(id) => { playback.stop(); editor.remove(id); persist(); }} />
