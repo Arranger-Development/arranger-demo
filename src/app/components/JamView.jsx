@@ -3,15 +3,31 @@ import { ArrowRightToLine, Check, Drum, Guitar, Music2, Piano, Save, Settings2 }
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, hasSelection } from '../performanceModel.js';
 import { EXTRA_PHRASE_PLACEHOLDERS, MAIN_PHRASE_SLOTS, TRANSITION_PHRASE_SLOTS } from '../performanceSession.js';
 import { performanceKeyLabel } from '../../input/performanceInput.js';
-import { TrackControls } from './PerformanceControls.jsx';
+import { Progress, TrackControls } from './PerformanceControls.jsx';
 
-void [ArrowRightToLine, Check, Save, Settings2, TrackControls, SectionDial];
+void [ArrowRightToLine, Check, Save, Settings2, Progress, TrackControls, SectionDial];
 const icons = { drums: Drum, chord: Piano, bass: Guitar, melody: Music2 };
 
-function SectionDial({ section, playing, editing, pending, unsaved, onSelect }) {
+function SectionDial({ playback, section, playing, editing, pending, unsaved, onSelect }) {
+  const ring = useRef(null);
+  useEffect(() => {
+    if (!playing) { ring.current?.setAttribute('stroke-dashoffset', '100'); return undefined; }
+    let frame;
+    const tick = () => {
+      const progress = playback.getProgress();
+      ring.current?.setAttribute('stroke-dashoffset', String(progress?.id === section.id ? 100 * (1 - progress.fraction) : 100));
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [playback, section.id, playing]);
   return <button type="button" onClick={onSelect} data-section-id={section.id} aria-pressed={editing}
     className={`performance-loop ${editing ? 'is-editing' : ''} ${playing ? 'is-playing' : ''} ${pending ? 'is-pending' : ''}`}>
     <span className="performance-loop-dial">
+      <svg className="performance-loop-progress" viewBox="0 0 64 64" aria-hidden="true">
+        <circle className="performance-loop-rail" cx="32" cy="32" r="29" />
+        <circle ref={ring} className="performance-loop-elapsed" cx="32" cy="32" r="29" pathLength="100" strokeDasharray="100" strokeDashoffset="100" />
+      </svg>
       <span className="performance-loop-circle">{section.kind === 'transition' ? '单次' : '∞'}</span>
     </span>
     <strong>{section.name}</strong>
@@ -59,6 +75,7 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
                     title={phrase ? `${phrase.name} · ${phrase.barCount ?? 2} 小节 · ${key}` : '待提供素材'} onClick={() => triggerPad(track, index)}>
                     <span className="performance-pad-top"><span className="performance-key-hint" aria-hidden="true">{key}</span>{selected ? <Check size={16} /> : <Icon size={16} />}</span>
                     <strong>{phrase?.name ?? '空位'}</strong>
+                    {selected && <Progress playback={playback} id={editingId} bars={phrase.barCount ?? 2} running={active && status.playingId === editingId} />}
                   </button>
                   <select className="jam-pad-replace" aria-label={`${LABELS[track]}${group ? '转场' : '主乐句'} ${group ? index - MAIN_PHRASE_SLOTS + 1 : index + 1} 更多模板`}
                     defaultValue="">
@@ -73,7 +90,7 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
 
     </div>
     <section className="performance-sequence jam-sequence" aria-label="保存的段落"><div ref={sectionsRef} className="performance-loops jam-loops">
-      {session.sections.map((s) => <SectionDial key={s.id} section={{ ...s, name: drafts[s.id].name }}
+      {session.sections.map((s) => <SectionDial key={s.id} playback={playback} section={{ ...s, name: drafts[s.id].name }}
         playing={active && status.playingId === s.id} pending={status.pendingId === s.id} editing={editingId === s.id}
         unsaved={JSON.stringify(drafts[s.id]) !== JSON.stringify(s)} onSelect={() => selectSection(s.id)} />)}
     </div><div className="jam-add-section">

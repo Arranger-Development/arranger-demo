@@ -1,0 +1,2 @@
+.pw-progress { display: block; height: 3px; position: absolute; bottom: 0; left: 0; right: 0; overflow: hidden; background: #ffffff0d; }
+.pw-progress > span { display: block; height: 100%; transform-origin: left; transform: scaleX(0); background: var(--pw-track,#e9bd78); }

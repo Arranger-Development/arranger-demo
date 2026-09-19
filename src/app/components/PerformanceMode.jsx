@@ -6,6 +6,7 @@ import { createSessionPlayback } from '../sessionPlayback.js';
 import JamView from './JamView.jsx';
 import './performance.css';
 import './jamView.css';
+import './performanceWorkspace.css';
 const storage = () => { try { return window.localStorage; } catch { return null; } };
 void JamView;
 export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack }) {
