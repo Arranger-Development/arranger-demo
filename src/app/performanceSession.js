@@ -114,6 +114,36 @@ export function snapshotSection(section, genre, profile) {
     phraseBars: Object.fromEntries(TRACKS.map((t, i) => [t, selected[i]?.barCount ?? 2])),
   };
 }
+
+export function replaceLiveColumnTrack(column, track, templateId, genre, profile) {
+  if (!TRACKS.includes(track) || !performanceTemplates(genre, profile)[track].some((p) => p.id === templateId)) return column;
+  const previous = validSnapshot(column.snapshot) ? column.snapshot : null;
+  const replacement = snapshotSection({
+    id: previous?.id ?? column.id, name: previous?.name ?? column.name,
+    kind: previous?.kind ?? 'main', timbres: { ...defaultTimbres(), ...previous?.timbres },
+    selection: { ...emptySelection(), [track]: templateId },
+  }, genre, profile);
+  const next = clone(previous ?? replacement);
+  next.matrix[track] = replacement.matrix[track];
+  next.phraseNames[track] = replacement.phraseNames[track];
+  next.phraseBars[track] = replacement.phraseBars[track];
+  next.timbres[track] = replacement.timbres[track];
+
+  // Keep each untouched track's stored notes, including rests and timbre metadata.
+  // Only repeat/crop its existing phrase when the longest phrase changes the cycle.
+  const lengths = Object.fromEntries(TRACKS.map((t) => [t,
+    Math.min(next.matrix[t].length, Math.max(1, next.phraseBars[t] ?? next.matrix[t].length)),
+  ]));
+  next.totalBars = Math.max(next.kind === 'transition' ? 1 : 2, ...TRACKS.map((t) => (
+    next.matrix[t].some((bar) => bar.some(Boolean)) ? lengths[t] : 0
+  )));
+  next.matrix = Object.fromEntries(TRACKS.map((t) => [t,
+    Array.from({ length: next.totalBars }, (_, bar) => clone(next.matrix[t][bar % lengths[t]])),
+  ]));
+  const result = { ...column, snapshot: next };
+  return JSON.stringify(result) === JSON.stringify(column) ? column : result;
+}
+
 export function resolveLiveColumns(columns, counts = {}) {
   return columns.filter((c) => validSnapshot(c.snapshot)).map((c) => {
     const repeat = c.repeat === null ? Number(counts[c.id]) : c.repeat;

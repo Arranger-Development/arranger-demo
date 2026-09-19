@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import createAudioEngine from '../../audio/createAudioEngine.js';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, performanceTemplates, hasSelection, normalizePerformanceBpm } from '../performanceModel.js';
-import { createForm, MAIN_PHRASE_SLOTS, fixedPerformancePads, createSessionEditor, readSession, writeSession, snapshotSection, createLiveImport, liveExportLength } from '../performanceSession.js';
+import { createForm, MAIN_PHRASE_SLOTS, EXTRA_PHRASE_PLACEHOLDERS, fixedPerformancePads, createSessionEditor, readSession, writeSession, snapshotSection, replaceLiveColumnTrack, createLiveImport, liveExportLength } from '../performanceSession.js';
 import { createSessionPlayback } from '../sessionPlayback.js';
 import { mapPerformanceKeyboard } from '../../input/performanceInput.js';
 import { Progress, TrackControls } from './PerformanceControls.jsx';
@@ -146,6 +146,19 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       columnChange(session.columns.map((c) => c.id === columnId ? { ...c, snapshot: copy } : c));
     }
   }
+  function replaceTrack(columnId, track, templateId) {
+    if (liveLocked) return;
+    const columns = editor.getSnapshot().session.columns;
+    const column = columns.find((c) => c.id === columnId);
+    if (!column) return;
+    const replacement = replaceLiveColumnTrack(column, track, templateId, genreId, profileId);
+    if (replacement === column) return;
+    commitLiveEdit();
+    if (previewing) playback.stop();
+    selectLiveTrack(track);
+    columnChange(columns.map((c) => c.id === columnId ? replacement : c));
+    setMessage(`${column.name} · ${LABELS[track]}已替换`);
+  }
   function moveColumn(id, targetId) {
     const columns = [...session.columns]; const from = columns.findIndex((c) => c.id === id); const to = columns.findIndex((c) => c.id === targetId);
     if (from < 0 || to < 0 || from === to) return;
@@ -240,9 +253,16 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           <input aria-label={`曲式 ${index + 1} 名称`} {...fieldHistory} disabled={liveLocked} value={column.name} onChange={(e) => columnChange(session.columns.map((c) => c.id === column.id ? { ...c, name: e.target.value } : c))} />
           <div><button aria-label={`左移 ${column.name}`} disabled={liveLocked || index === 0} onClick={() => moveColumn(column.id, session.columns[index - 1].id)}>←</button><button disabled={liveLocked} aria-label={`删除曲式 ${column.name}`} onClick={() => columnChange(session.columns.filter((c) => c.id !== column.id))}>×</button><button aria-label={`右移 ${column.name}`} disabled={liveLocked || index === session.columns.length - 1} onClick={() => moveColumn(column.id, session.columns[index + 1].id)}>→</button></div>
         </header>
-        {TRACKS.map((t) => <button type="button" className="pw-live-cell" data-track={t} key={t} aria-label={`${column.name} · 选择${LABELS[t]}轨道`}
+        {TRACKS.map((t) => <div className="pw-live-slot" data-track={t} key={t}><button type="button" className="pw-live-cell" data-track={t} aria-label={`${column.name} · 选择${LABELS[t]}轨道`}
           aria-pressed={selectedLiveTrack === t} onPointerDown={(e) => drag.begin(e, 'column', column.id)} onPointerMove={drag.move} onPointerUp={drag.end} onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}
-          onClick={(e) => clickColumn(e, column.id, t)}><strong>{column.snapshot?.phraseNames[t] ?? '拖入段落'}</strong><span>{column.snapshot ? `${column.snapshot.totalBars} 小节` : '空槽'}</span><Progress playback={playback} id={column.id} bars={column.snapshot?.phraseBars[t]} running={active && status.playingId === column.id} /></button>)}
+          onClick={(e) => clickColumn(e, column.id, t)}><strong>{column.snapshot?.phraseNames[t] ?? '拖入或选择'}</strong><span>{column.snapshot ? `${column.snapshot.totalBars} 小节` : '空槽'}</span><Progress playback={playback} id={column.id} bars={column.snapshot?.phraseBars[t]} running={active && status.playingId === column.id} /></button>
+          <select className="pw-live-replace" aria-label={`曲式 ${index + 1} ${LABELS[t]}替换乐句`} disabled={liveLocked} value=""
+            onChange={(e) => replaceTrack(column.id, t, e.target.value)}>
+            <option value="" disabled>替换乐句</option>
+            <optgroup label="已有模板">{catalog[t].map((phrase) => <option key={phrase.id} value={phrase.id}>{phrase.name}</option>)}</optgroup>
+            <optgroup label="待提供">{EXTRA_PHRASE_PLACEHOLDERS.map((phrase) => <option key={phrase.id} value={phrase.id} disabled>{phrase.name} · 待提供</option>)}</optgroup>
+          </select>
+        </div>)}
         <footer><button disabled={!column.snapshot} onClick={() => playLive(column.id)}>▶ {column.snapshot?.name ?? '空列'}</button>
           <div className="pw-repeat-count"><span>×</span><input aria-label={`${column.name}循环次数`} {...fieldHistory} disabled={liveLocked || column.repeat === null} type="number" min="1" value={column.repeat ?? ''} placeholder="∞" onChange={(e) => { const n = Number(e.target.value); if (Number.isSafeInteger(n) && n > 0) columnChange(session.columns.map((c) => c.id === column.id ? { ...c, repeat: n } : c)); }} /><button aria-label={`${column.name}无限循环`} disabled={liveLocked} aria-pressed={column.repeat === null} onClick={() => columnChange(session.columns.map((c) => c.id === column.id ? { ...c, repeat: c.repeat === null ? 1 : null } : c))}>∞</button></div>
           <button disabled={liveLocked || !librarySelection} onClick={() => placeSection(column.id, librarySelection)}>放入选中段落</button>

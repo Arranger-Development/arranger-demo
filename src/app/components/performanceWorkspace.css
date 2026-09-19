@@ -59,6 +59,11 @@
 .pw-live-scroll { overflow: auto; padding: 3px; }
 .pw-columns { display: flex; gap: 12px; width: max-content; min-width: 100%; }
 .pw-column { width: 115px; flex: 0 0 115px; display: grid; grid-template-rows: 62px repeat(4,155px) auto; gap: 10px; border-radius: 6px; padding: 0 3px 10px; }
+.pw-live-slot { display: grid; grid-template-rows: minmax(0,1fr) 29px; gap: 4px; min-width: 0; }
+.pw-workspace .pw-live-slot .pw-live-cell { min-height: 0; width: 100%; padding: 3px 4px; gap: 2px; line-height: 1.15; overflow: hidden; }
+.pw-workspace .pw-live-replace { width: 100%; padding: 3px 5px; font-size: 10px; }
+.pw-live-replace:disabled { opacity: .45; }
+.pw-live-replace:focus-visible { outline: 2px solid var(--pw-track); outline-offset: 1px; }
 .pw-column header { display: flex; flex-direction: column; gap: 5px; }
 .pw-column header input { width: 100%; text-align: center; border: 0; background: transparent; font-size: 13px; font-weight: 700; padding: 5px; }
 .pw-column header > div { display: flex; justify-content: center; gap: 5px; }
