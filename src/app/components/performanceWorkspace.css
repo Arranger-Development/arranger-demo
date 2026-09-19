@@ -116,11 +116,18 @@
 
 /* Live's right-side effects always address the explicitly selected track. */
 .pw-live { grid-template-columns: 130px 60px minmax(0,1fr) 175px; column-gap: 12px; padding-inline: 12px; }
-.pw-live-trackheads .pw-track-select { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 5px; border-left: 3px solid var(--pw-track); }
-.pw-track-select > svg { flex-shrink: 0; color: var(--pw-track); }
-.pw-track-select strong { color: var(--pw-track); font-size: 13px; }
-.pw-track-select span { font-size: 10px; color: #c7ae8a; }
-.pw-workspace :is(.pw-track-select,.pw-live-cell)[aria-pressed=true] { color: #eddfc9; border-color: var(--pw-track); background: linear-gradient(145deg,color-mix(in srgb,var(--pw-track) 20%,#30261d),#241b14); box-shadow: inset 0 0 0 1px var(--pw-track); }
+.pw-workspace .pw-live-trackheads .pw-track-select { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 5px; color: var(--ink-2); border: 0; background: transparent; box-shadow: none; }
+.pw-track-select[data-track=drums] { --pw-head-tone: var(--c-drums); }
+.pw-track-select[data-track=chord] { --pw-head-tone: var(--c-chord); }
+.pw-track-select[data-track=bass] { --pw-head-tone: var(--c-bass); }
+.pw-track-select[data-track=melody] { --pw-head-tone: var(--c-melody); }
+.pw-track-select > svg { flex-shrink: 0; color: var(--pw-head-tone); filter: drop-shadow(0 1px 2px #000); }
+.pw-track-select strong { color: var(--ink-2); font-size: 13px; }
+.pw-workspace .pw-live-trackheads .pw-track-select:is(:hover,[aria-pressed=true]) { background: transparent; border: 0; box-shadow: none; }
+.pw-track-select:is(:hover,[aria-pressed=true]) > svg { filter: drop-shadow(0 0 4px var(--pw-head-tone)); }
+.pw-track-select:is(:hover,[aria-pressed=true]) strong { color: var(--ink); }
+.pw-track-select:focus-visible { outline: 2px solid var(--pw-head-tone); outline-offset: 2px; }
+.pw-workspace .pw-live-cell[aria-pressed=true] { color: #eddfc9; border-color: var(--pw-track); background: linear-gradient(145deg,color-mix(in srgb,var(--pw-track) 20%,#30261d),#241b14); box-shadow: inset 0 0 0 1px var(--pw-track); }
 .pw-workspace .pw-live-cell { background: linear-gradient(145deg,#433629,#241b14); border-color: color-mix(in srgb,var(--pw-track),#413324 40%); padding: 14px 6px; }
 .pw-workspace .pw-live-cell[aria-pressed=true] { border-color: var(--pw-track); }
 .pw-live-effects { align-self: start; min-width: 0; padding: 12px 8px; border: 1px solid #66533f; border-top: 3px solid var(--pw-track); border-radius: 6px; background: #171310; }
