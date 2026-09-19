@@ -1,18 +1,15 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { ArrowLeft, ArrowRightToLine, Check, Drum, Guitar, Music2, Piano, Play, Save, Square } from 'lucide-react';
+import {readSession, writeSession} from '../performanceSession.js';
+import {useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore} from 'react';
+import {ArrowLeft, ArrowRightToLine, Check, Drum, Guitar, Music2, Piano, Play, Save, Square} from 'lucide-react';
 import createAudioEngine from '../../audio/createAudioEngine.js';
-import { getDrumTemplateGenre } from '../../data/drumStyleTemplates.js';
-import { AI_PERFORMANCE_PROFILE_ID } from '../../data/aiPerformanceTemplates.js';
-import {
-  PERFORMANCE_LABELS, PERFORMANCE_TRACKS, createPerformanceMatrix, createPerformanceSequence,
-  hasSelection, normalizePerformanceBpm, performanceTemplates, readPerformanceSession,
-  sameSelection, selectionSummary, writePerformanceSession,
-} from '../performanceModel.js';
-import { createPerformancePlayback } from '../performancePlayback.js';
+import {getDrumTemplateGenre} from '../../data/drumStyleTemplates.js';
+import {AI_PERFORMANCE_PROFILE_ID} from '../../data/aiPerformanceTemplates.js';
+import {PERFORMANCE_LABELS, PERFORMANCE_TRACKS, createPerformanceMatrix, createPerformanceSequence, hasSelection, normalizePerformanceBpm, performanceTemplates, sameSelection, selectionSummary} from '../performanceModel.js';
+import {createPerformancePlayback} from '../performancePlayback.js';
 import './performance.css';
-import { createPerformanceEditor } from '../performanceEditor.js';
-import { mapPerformanceKeyboard, performanceKeyLabel } from '../../input/performanceInput.js';
-import { createPerformanceImport } from '../performanceImport.js';
+import {createPerformanceEditor} from '../performanceEditor.js';
+import {mapPerformanceKeyboard, performanceKeyLabel} from '../../input/performanceInput.js';
+import {createPerformanceImport} from '../performanceImport.js';
 
 // This repository's lint parser does not count JSX component names as reads.
 void [ArrowRightToLine, ArrowLeft, ArrowRightToLine, Check, Play, Save, Square, PerformanceLoops];
@@ -61,7 +58,8 @@ function PerformanceLoops({ active, playback, status, sequenceIndices, selectedL
 
 export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack, onImport, controlsRef, hardwareInput }) {
   const aiTemplates = profileId === AI_PERFORMANCE_PROFILE_ID;
-  const [editor] = useState(() => createPerformanceEditor(readPerformanceSession(browserStorage(), genreId, initialBpm, profileId)));
+  const [sessionSeed] = useState(() => readSession(browserStorage(), genreId, profileId, initialBpm));
+  const [editor] = useState(() => createPerformanceEditor({ bpm: sessionSeed.bpm, saved: sessionSeed.sections.map(s => s.selection) }));
   const { session, drafts, selectedLoop } = useSyncExternalStore(editor.subscribe, editor.getSnapshot);
   const [status, setStatus] = useState({ mode: 'stopped', loading: false, bar: 0, step: 0, error: '' });
   const [message, setMessage] = useState('');
@@ -88,7 +86,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   }, [active, playback]);
 
   function persist(next) {
-    const stored = writePerformanceSession(browserStorage(), genreId, next, profileId);
+    const stored = writeSession(browserStorage(), genreId, profileId, { ...sessionSeed, bpm: next.bpm, sections: sessionSeed.sections.map((s, i) => ({ ...s, selection: next.saved[i] })) });
     setStorageError(!stored);
     return stored;
   }
