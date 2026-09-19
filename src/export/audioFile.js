@@ -190,8 +190,8 @@ function scheduleFallbackTone(context, destination, time, duration, noteMidi, is
   oscillator.stop(time + Math.min(duration, isDrum ? 0.2 : 0.5));
 }
 
-function scheduleSample(context, destination, buffer, selection, event, state, bpm) {
-  const time = getEventTime(event, bpm);
+function scheduleSample(context, destination, buffer, selection, event, state, bpm, windowStart = 0) {
+  const time = Math.max(0, getEventTime(event, bpm) - windowStart);
   const source = context.createBufferSource();
   const gain = context.createGain();
   const duration = event.type === 'chord' && !event.timbreId
@@ -258,7 +258,7 @@ function audioBufferToWavBlob(buffer) {
   return new Blob([data], { type: 'audio/wav' });
 }
 
-async function renderProjectToWav(state, options = {}) {
+async function renderWholeProjectToWav(state, options = {}) {
   if (!state?.matrix) throw new TypeError('A project matrix is required to render audio.');
   const OfflineContext = getOfflineAudioContext();
   if (!OfflineContext) {
@@ -308,6 +308,67 @@ async function renderProjectToWav(state, options = {}) {
     blob: audioBufferToWavBlob(renderedBuffer),
     durationSeconds: projectDuration,
   };
+}
+
+
+// Render with preroll long enough to reproduce every voice that crosses a chunk
+// boundary. Only trimmed PCM chunks survive each iteration, never a full-song float buffer.
+async function renderProjectToWav(state, options = {}) {
+  const bpm = Number.isFinite(state?.bpm) && state.bpm > 0 ? state.bpm : DEFAULT_BPM;
+  const duration = getTotalBars(state) * BEATS_PER_BAR * 60 / bpm;
+  const chunkSeconds = options.chunkSeconds ?? 30;
+  if (duration + TAIL_SECONDS <= (options.chunkSeconds ?? 120)) return renderWholeProjectToWav(state, options);
+  if (!state?.matrix) throw new TypeError('A project matrix is required to render audio.');
+  const OfflineContext = getOfflineAudioContext();
+  if (!OfflineContext) throw new Error('这个浏览器不支持离线音频渲染，无法导出 WAV。');
+  if (!Number.isFinite(chunkSeconds) || chunkSeconds <= 0) throw new Error('Invalid audio chunk length');
+  const events = collectProjectEvents(state, options);
+  const selections = events.map((event) => ({ event, selections: getSampleSelections(event, state.melodyTimbreId) }));
+  const decodeContext = new OfflineContext(2, 1, SAMPLE_RATE);
+  const buffers = await loadSampleBuffers(decodeContext, new Set(selections.flatMap((s) => s.selections.map((i) => i.file))));
+  let longestTail = 3;
+  for (const { event, selections: items } of selections) for (const item of items) {
+    const rate = Number.isInteger(item.noteMidi) ? 2 ** ((item.noteMidi-item.sampleMidi)/12) : 1;
+    const natural = buffers.get(item.file)?.duration / rate || 0.5;
+    const gated = event.playbackMode !== 'natural' && event.type !== 'drums' && !(event.type === 'melody' && !event.timbreId);
+    const duration = event.type === 'chord' && !event.timbreId ? 2 : getDurationSeconds(event,bpm);
+    longestTail = Math.max(longestTail, gated ? Math.min(natural, duration + .1) : natural);
+  }
+  const frameCount = Math.ceil((duration + TAIL_SECONDS) * SAMPLE_RATE);
+  const chunkFrames = Math.max(1, Math.floor(chunkSeconds * SAMPLE_RATE));
+  const preroll = Math.ceil(longestTail * SAMPLE_RATE) + 1;
+  const header = new ArrayBuffer(44); const view = new DataView(header);
+  const text = (at, value) => [...value].forEach((c,i) => view.setUint8(at+i,c.charCodeAt(0)));
+  text(0,'RIFF'); view.setUint32(4,36+frameCount*4,true); text(8,'WAVE'); text(12,'fmt ');
+  view.setUint32(16,16,true); view.setUint16(20,1,true); view.setUint16(22,2,true); view.setUint32(24,SAMPLE_RATE,true);
+  view.setUint32(28,SAMPLE_RATE*4,true); view.setUint16(32,4,true); view.setUint16(34,16,true); text(36,'data'); view.setUint32(40,frameCount*4,true);
+  const parts = [header];
+  for (let first=0;first<frameCount;first+=chunkFrames) {
+    if (options.signal?.aborted) throw new DOMException('导出已取消','AbortError');
+    const end = Math.min(frameCount,first+chunkFrames); const renderFirst = Math.max(0,first-preroll);
+    const offset = renderFirst/SAMPLE_RATE;
+    const context = new OfflineContext(2,end-renderFirst,SAMPLE_RATE);
+    const master = context.createGain(); master.gain.value = MASTER_GAIN; master.connect(context.destination);
+    for (const { event, selections: items } of selections) {
+      const time = getEventTime(event,bpm);
+      if (time < offset || time >= end/SAMPLE_RATE) continue;
+      for (const item of items) {
+        const buffer = buffers.get(item.file);
+        if (buffer) scheduleSample(context,master,buffer,item,event,state,bpm,offset);
+        else scheduleFallbackTone(context,master,time-offset,getDurationSeconds(event,bpm),item.noteMidi,event.type==='drums',getEventVolume(state,event));
+      }
+    }
+    const rendered = await context.startRendering();
+    const pcm = new ArrayBuffer((end-first)*4); const data = new DataView(pcm);
+    const channels = [rendered.getChannelData(0),rendered.getChannelData(1)];
+    for(let frame=first;frame<end;frame++) for(let ch=0;ch<2;ch++) {
+      const sample = Math.max(-1,Math.min(1,channels[ch][frame-renderFirst]));
+      data.setInt16((frame-first)*4+ch*2,Math.round(sample*0x7fff),true);
+    }
+    parts.push(new Blob([pcm]));
+    options.onProgress?.(end/frameCount);
+  }
+  return { blob: new Blob(parts,{ type:'audio/wav' }), durationSeconds: duration };
 }
 
 export {
