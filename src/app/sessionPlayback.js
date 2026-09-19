@@ -13,10 +13,29 @@ export function createSessionPlayback(audio, notify = () => {}) {
   let loading = false;
   let bpm = 100;
   let audible = null;
+  let livePosition = null;
+  let liveColumns = [];
   const isRunning = () => !['stopped', 'paused'].includes(mode);
-  const emit = (extra = {}) => notify({ mode, loading, requestedId: current?.id ?? null, playingId: audible?.id ?? null, pendingId: pending?.id ?? null, ...extra });
+  function getLivePosition() {
+    if (mode === 'live') {
+      const absolute = audio.getAbsolutePlaybackStep?.();
+      if (audible && Number.isFinite(absolute)) {
+        const local = Math.max(0, Math.floor(absolute - audible.startStep));
+        return { id: audible.id, cycle: Math.floor(local / audible.totalSteps) + 1, step: local % audible.totalSteps };
+      }
+    }
+    return livePosition && { ...livePosition };
+  }
+  function normalizePosition(position, nextColumns) {
+    const target = nextColumns.find(c => c.id === position?.id && c.snapshot);
+    if (!target) return null;
+    return { id: target.id, cycle: Math.max(1, Math.min(position.cycle || 1, target.repeat ?? Infinity)),
+      step: Math.max(0, Math.min(position.step || 0, target.snapshot.totalBars * 16 - 1)) };
+  }
+  const emit = (extra = {}) => notify({ mode, loading, livePosition: getLivePosition(), requestedId: current?.id ?? null, playingId: audible?.id ?? null, pendingId: pending?.id ?? null, ...extra });
   const makeSource = () => ({ matrix: current.snapshot.matrix, totalBars: current.snapshot.totalBars, stepOffset: startStep, releaseVoices: true });
   function stop() {
+    livePosition = getLivePosition();
     generation++; mode = 'stopped'; loading = false; current = pending = returnMain = audible = null;
     void audio.stop(); audio.stopAllVoices(); emit();
   }
@@ -50,17 +69,20 @@ export function createSessionPlayback(audio, notify = () => {}) {
     const request = generation;
     return { done: true, onAudible: () => {
       if (request !== generation) return;
+      if (mode === 'live') livePosition = null;
       mode = 'stopped'; audible = current = pending = returnMain = null; emit();
     } };
   }
   async function start(nextMode, target, tempo, options = {}) {
     stop(); const request = ++generation;
     mode = nextMode; bpm = tempo; loading = true;
-    const offset = 0;
-    cycle = 1;
+    const offset = options.position?.step ?? 0;
+    cycle = options.position?.cycle ?? 1;
     lastStep = offset - 1; startStep = cycle > 1 ? -(cycle - 1) * target.snapshot.totalBars * 16 : 0;
+    if (nextMode === 'live') livePosition = { id: target.id, cycle, step: offset };
     current = target; columns = options.columns ?? []; sourceSnapshot = makeSource(); emit();
     try {
+      await audio.preparePerformanceEffects?.();
       if (request !== generation) return;
       const started = await audio.play({ bpm, bar: Math.floor(offset / 16), step: offset % 16, totalBars: target.snapshot.totalBars,
         matrixSource: () => current?.snapshot.matrix ?? target.snapshot.matrix,
@@ -81,6 +103,34 @@ export function createSessionPlayback(audio, notify = () => {}) {
   }
   return {
     stop, isActive: isRunning,
+    getLivePosition,
+    restoreLivePosition(position, nextColumns) {
+      liveColumns = nextColumns;
+      livePosition = normalizePosition(position, nextColumns);
+      emit();
+    },
+    syncLiveColumns(nextColumns) {
+      const previousIndex = liveColumns.findIndex(c => c.id === livePosition?.id);
+      const normalized = normalizePosition(livePosition, nextColumns);
+      if (livePosition && !normalized) {
+        const target = nextColumns.slice(Math.max(0, previousIndex)).find(c => c.snapshot) ?? nextColumns.find(c => c.snapshot);
+        livePosition = target ? { id: target.id, cycle: 1, step: 0 } : null;
+      } else livePosition = normalized;
+      liveColumns = nextColumns;
+      emit();
+    },
+    pauseLive() {
+      if (mode !== 'live') return;
+      stop(); mode = 'paused'; emit();
+    },
+    rewindLive(nextColumns, tempo) {
+      const running = mode === 'live';
+      stop(); liveColumns = nextColumns;
+      const target = nextColumns.find(c => c.snapshot);
+      livePosition = target ? { id: target.id, cycle: 1, step: 0 } : null;
+      if (running && target) void start('live', target, tempo, { columns: nextColumns.filter(c => c.snapshot) });
+      else emit();
+    },
     setTempo(value) { bpm = value; audio.setTempo(value); },
     launch(snapshot, tempo, { edit = false } = {}) {
       if (!snapshot) return;
@@ -91,10 +141,17 @@ export function createSessionPlayback(audio, notify = () => {}) {
       if (edit && pending?.id === target.id) { pending = { ...pending, ...target }; emit(); return; }
       queue(target);
     },
-    live(nextColumns, tempo) {
-      const columns = nextColumns.filter(c => c.snapshot);
-      if (!columns.length) return false;
-      void start('live', columns[0], tempo, { columns }); return true;
+    live(nextColumns, tempo, id) {
+      const position = normalizePosition(getLivePosition(), nextColumns);
+      const index = id === undefined ? -1 : nextColumns.findIndex(c => c.id === id);
+      const target = id === undefined
+        ? nextColumns.find(c => c.id === position?.id && c.snapshot) ?? nextColumns.find(c => c.snapshot)
+        : index < 0 ? null : nextColumns.slice(index).find(c => c.snapshot);
+      if (!target) return false;
+      liveColumns = nextColumns;
+      void start('live', target, tempo, { columns: nextColumns.filter(c => c.snapshot),
+        position: id === undefined && position?.id === target.id ? position : null });
+      return true;
     },
     getProgress() {
       if (!audible || !isRunning()) return null;

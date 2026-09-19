@@ -8,3 +8,13 @@ export function insertLiveColumn(columns, id, targetId, side = 'before') {
   return next;
 }
 
+export function liveKeyboardCommand(event) {
+  if (event.repeat || event.defaultPrevented || event.target?.isContentEditable
+    || /^(INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName ?? '')) return null;
+  const key = event.key?.toLowerCase();
+  if (event.metaKey || event.ctrlKey || event.altKey) return null;
+  // Effect buttons consume their own Space event before it reaches this handler.
+  if (key === ' ') return 'play';
+  if (key === 'escape') return 'stop';
+  return null;
+}

@@ -5,14 +5,15 @@ import {createForm, MAIN_PHRASE_SLOTS, fixedPerformancePads, createSessionEditor
 import { createSessionPlayback } from '../sessionPlayback.js';
 import { mapPerformanceKeyboard } from '../../input/performanceInput.js';
 import { Progress, TrackControls } from './PerformanceControls.jsx';
+import LiveTransport from './LiveTransport.jsx';
 import useLiveDrag from './useLiveDrag.js';
-import {insertLiveColumn} from '../liveInteraction.js';
+import { insertLiveColumn, liveKeyboardCommand } from '../liveInteraction.js';
 import JamView from './JamView.jsx';
 import './performance.css';
 import './performanceWorkspace.css';
 import './jamView.css';
 
-void [Progress, TrackControls, JamView];
+void [LiveTransport, Progress, TrackControls, JamView];
 const storage = () => { try { return window.localStorage; } catch { return null; } };
 
 export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack, hardwareInput }) {
@@ -37,13 +38,23 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   };
   const columnChange = (columns) => {
     if (liveLocked) return;
-    editor.columns(columns); persist();
+    editor.columns(columns, playback.getLivePosition()); playback.syncLiveColumns(columns); persist();
   };
   const { drag: dragState, setScrollElement, ...drag } = useLiveDrag({ disabled: liveLocked,
     onSectionDrop: placeSection,
     onColumnDrop: (id, targetId, side) => columnChange(insertLiveColumn(editor.getSnapshot().session.columns, id, targetId, side)),
   });
-  function playLive() { setMessage(''); if (!playback.live(editor.getSnapshot().session.columns, editor.getSnapshot().session.bpm)) setMessage('此处之后没有可播放段落'); }
+  function playLive(id) {
+    setMessage('');
+    if (!playback.live(editor.getSnapshot().session.columns, editor.getSnapshot().session.bpm, id)) setMessage('此处之后没有可播放段落');
+  }
+  function toggleLive() {
+    if (status.mode === 'live') playback.pauseLive(); else playLive();
+  }
+  function clickColumn(event, columnId) {
+    if (drag.suppressClick(event)) return;
+    playLive(columnId);
+  }
   const snapshot = (section) => snapshotSection(section, genreId, profileId);
   const launchDraft = (edit = false) => {
     setMessage('');
@@ -119,7 +130,17 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   });
-
+  useEffect(() => {
+    if (!active || editingSection) return undefined;
+    const key = (event) => {
+      if (event.key === 'Escape' && dragState) { event.preventDefault(); drag.cancel(); return; }
+      const command = liveKeyboardCommand(event); if (!command) return;
+      event.preventDefault();
+      if (command === 'play') toggleLive();
+      if (command === 'stop') playback.stop();
+    };
+    window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
+  });
 
 
   return <><section className="performance-mode pw-workspace" hidden={!active || editorOpen} aria-label="Live 编排">
@@ -132,7 +153,9 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     <div className="pw-status" role="status">{status.error || message || (status.loading ? '正在准备声音…' : status.pendingId ? '已排队 · 下一小节切换' : status.mode === 'paused' ? '已暂停' : locked ? `播放中${status.cycle ? ` · 第 ${status.cycle} 次` : ''}` : '选择段落开始演奏')}
 </div>
     <main className="pw-live">
-      <div className="pw-live-toolbar"><label>选择曲式 <select aria-label="选择曲式" disabled={liveLocked} value="" onChange={(e) => columnChange(createForm(e.target.value))}><option value="" disabled>选择曲式模板</option><option value="screenshot">完整曲式 · 截图模板</option><option value="blank">空白自定义</option></select></label><button disabled={liveLocked || !session.columns.some(c => c.snapshot)} onClick={playLive}>播放曲式</button><button onClick={() => playback.stop()}>停止</button>
+      <div className="pw-live-toolbar"><label>选择曲式 <select aria-label="选择曲式" disabled={liveLocked} value="" onChange={(e) => columnChange(createForm(e.target.value))}><option value="" disabled>选择曲式模板</option><option value="screenshot">完整曲式 · 截图模板</option><option value="blank">空白自定义</option></select></label><LiveTransport playback={playback} columns={session.columns} status={status}
+          onPlay={toggleLive} onStop={() => playback.stop()}
+          onRewind={() => { setMessage(''); playback.rewindLive(session.columns, session.bpm); }} />
 
       </div>
       <aside className="pw-library"><div className="pw-library-head"><h2>段落素材</h2><p>拖入曲式列，或选中后点击“放入”</p></div>{session.sections.map((s) => {
@@ -156,7 +179,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         </header>
         {TRACKS.map((t) => <button type="button" className="pw-live-cell" data-track={t} key={t} aria-label={`${column.name} · 选择${LABELS[t]}轨道`}
           onPointerDown={(e) => drag.begin(e, 'column', column.id)} onPointerMove={drag.move} onPointerUp={drag.end} onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}
-          ><strong>{column.snapshot?.phraseNames[t] ?? '拖入段落'}</strong><span>{column.snapshot ? `${column.snapshot.totalBars} 小节` : '空槽'}</span><Progress playback={playback} id={column.id} bars={column.snapshot?.phraseBars[t]} running={active && status.playingId === column.id} /></button>)}
+          onClick={(e) => clickColumn(e, column.id, t)}><strong>{column.snapshot?.phraseNames[t] ?? '拖入段落'}</strong><span>{column.snapshot ? `${column.snapshot.totalBars} 小节` : '空槽'}</span><Progress playback={playback} id={column.id} bars={column.snapshot?.phraseBars[t]} running={active && status.playingId === column.id} /></button>)}
         <footer><button disabled={!column.snapshot} onClick={() => playLive(column.id)}>▶ {column.snapshot?.name ?? '空列'}</button>
           <div className="pw-repeat-count"><span>×</span><input aria-label={`${column.name}循环次数`} disabled={liveLocked || column.repeat === null} type="number" min="1" value={column.repeat ?? ''} placeholder="∞" onChange={(e) => { const n = Number(e.target.value); if (Number.isSafeInteger(n) && n > 0) columnChange(session.columns.map((c) => c.id === column.id ? { ...c, repeat: n } : c)); }} /><button aria-label={`${column.name}无限循环`} disabled={liveLocked} aria-pressed={column.repeat === null} onClick={() => columnChange(session.columns.map((c) => c.id === column.id ? { ...c, repeat: c.repeat === null ? 1 : null } : c))}>∞</button></div>
           <button disabled={liveLocked || !librarySelection} onClick={() => placeSection(column.id, librarySelection)}>放入选中段落</button>
