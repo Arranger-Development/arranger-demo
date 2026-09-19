@@ -22,8 +22,9 @@ export default function useLiveDrag({ disabled, onSectionDrop, onColumnDrop }) {
     const g = gesture.current; const scroll = scrollRef.current;
     if (!g?.moving || !scroll) return;
     const bounds = scroll.getBoundingClientRect();
+    const left = scroll.querySelector('.pw-live-trackheads')?.getBoundingClientRect().right ?? bounds.left;
     let targetId = null; let side = null;
-    if (g.y >= bounds.top && g.y <= bounds.bottom && g.x >= bounds.left && g.x <= bounds.right) {
+    if (g.y >= bounds.top && g.y <= bounds.bottom && g.x >= left && g.x <= bounds.right) {
       const columns = [...scroll.querySelectorAll('[data-live-column-id]')];
       const target = columns.find(el => el.getBoundingClientRect().right >= g.x) ?? columns.at(-1);
       if (target) {
@@ -39,8 +40,9 @@ export default function useLiveDrag({ disabled, onSectionDrop, onColumnDrop }) {
     const g = gesture.current; const scroll = scrollRef.current;
     if (!g?.moving || !scroll) return;
     const r = scroll.getBoundingClientRect();
+    const left = scroll.querySelector('.pw-live-trackheads')?.getBoundingClientRect().right ?? r.left;
     if (g.y >= r.top && g.y <= r.bottom) {
-      const speed = g.x < r.left + 44 ? -12 : g.x > r.right - 44 ? 12 : 0;
+      const speed = g.x < left + 44 ? -12 : g.x > r.right - 44 ? 12 : 0;
       if (speed) scroll.scrollLeft += speed;
     }
     updateTarget(); frame.current = requestAnimationFrame(tick);

@@ -245,11 +245,12 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           <Progress playback={playback} id={s.id} running={active && playing} />
         </button>;
       })}</aside>
+      <div className="pw-live-scroll" ref={setScrollElement}><div className="pw-live-content">
       <div className="pw-live-trackheads"><div className="pw-column-spacer">轨道</div>{TRACKS.map((track) => <button type="button" key={track} className="pw-track-select" data-track={track}
         aria-label={`选择${LABELS[track]}轨道`} aria-pressed={selectedLiveTrack === track} onClick={() => selectLiveTrack(track)}>
         {renderIcon(PERFORMANCE_TRACK_ICONS[track], { size: 26 })}<strong>{LABELS[track]}</strong>{renderIcon(ChevronDown, { size: 12 })}
       </button>)}</div>
-      <div className="pw-live-scroll" ref={setScrollElement}><div className="pw-columns">{session.columns.map((column, index) => <article key={column.id} className="pw-column" data-live-column-id={column.id} data-dragging={dragState?.kind === 'column' && dragState.id === column.id} data-drop-side={dragState?.targetId === column.id ? dragState.side : undefined} data-playing={status.playingId === column.id} data-pending={status.pendingId === column.id}
+      <div className="pw-columns">{session.columns.map((column, index) => <article key={column.id} className="pw-column" data-live-column-id={column.id} data-dragging={dragState?.kind === 'column' && dragState.id === column.id} data-drop-side={dragState?.targetId === column.id ? dragState.side : undefined} data-playing={status.playingId === column.id} data-pending={status.pendingId === column.id}
         onDragOver={(e) => { if (!liveLocked) e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); if (liveLocked) return; const s = e.dataTransfer.getData('application/arranger-section'); const c = e.dataTransfer.getData('application/arranger-column'); if (s) placeSection(column.id, s); if (c) moveColumn(c, column.id); }}>
         <header onPointerDown={(e) => drag.begin(e, 'column', column.id)} onPointerMove={drag.move} onPointerUp={drag.end} onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}><span className="pw-column-grip" aria-label={`拖动 ${column.name}`}>⠿</span>
           <input aria-label={`曲式 ${index + 1} 名称`} {...fieldHistory} disabled={liveLocked} value={column.name} onChange={(e) => columnChange(session.columns.map((c) => c.id === column.id ? { ...c, name: e.target.value } : c))} />
@@ -269,7 +270,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           <div className="pw-repeat-count"><span>×</span><input aria-label={`${column.name}循环次数`} {...fieldHistory} disabled={liveLocked || column.repeat === null} type="number" min="1" value={column.repeat ?? ''} placeholder="∞" onChange={(e) => { const n = Number(e.target.value); if (Number.isSafeInteger(n) && n > 0) columnChange(session.columns.map((c) => c.id === column.id ? { ...c, repeat: n } : c)); }} /><button aria-label={`${column.name}无限循环`} disabled={liveLocked} aria-pressed={column.repeat === null} onClick={() => columnChange(session.columns.map((c) => c.id === column.id ? { ...c, repeat: c.repeat === null ? 1 : null } : c))}>∞</button></div>
           <button disabled={liveLocked || !librarySelection} onClick={() => placeSection(column.id, librarySelection)}>放入选中段落</button>
         </footer>
-      </article>)}<button className="pw-add-column" aria-label="添加曲式列" disabled={liveLocked} onClick={() => columnChange([...session.columns, { id: crypto.randomUUID(), name: `段落 ${session.columns.length + 1}`, repeat: 1, snapshot: null }])}>＋</button></div></div>
+      </article>)}<button className="pw-add-column" aria-label="添加曲式列" disabled={liveLocked} onClick={() => columnChange([...session.columns, { id: crypto.randomUUID(), name: `段落 ${session.columns.length + 1}`, repeat: 1, snapshot: null }])}>＋</button></div></div></div>
       <aside className="pw-live-effects" aria-label="选中轨道效果器" data-track={selectedLiveTrack}>
         <h2>现场效果</h2><p className="pw-effect-target">当前轨道 · {LABELS[selectedLiveTrack]}</p>
         {TRACKS.map((track) => <div key={`${track}:${editingSection}:${active}`} hidden={selectedLiveTrack !== track}>
