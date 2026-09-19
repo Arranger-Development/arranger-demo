@@ -223,7 +223,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       <label className="performance-tempo">BPM <input aria-label="演奏速度 BPM" {...fieldHistory} type="number" min="40" max="240" value={session.bpm} onChange={(e) => changeBpm(e.target.value)} /></label>
       <button onClick={connectHardware}>{hardwareInput?.status === 'connected' ? 'Launchpad 已连接' : '连接 Launchpad'}</button>
     </header>
-    <div className="pw-status" role="status">{status.error || message || (status.loading ? (previewing ? '正在准备试听…' : '正在准备声音…') : status.pendingId ? (previewing ? '待试听 · 下一小节切换' : '已排队 · 下一小节切换') : previewing ? '段落试听中' : status.mode === 'paused' ? '已暂停' : locked ? `播放中${status.cycle ? ` · 第 ${status.cycle} 次` : ''}` : '选择段落开始演奏')}
+    <div className="pw-status" role="status">{status.error || message || (status.loading ? (previewing ? '正在准备试听…' : '正在准备声音…') : status.pendingId ? (previewing ? '待试听 · 下一小节切换' : '已排队 · 下一小节切换') : previewing ? '段落试听中' : status.mode === 'paused' ? '已暂停' : locked ? `播放中${status.cycle ? ` · 第 ${status.cycle} 次` : ''}` : '')}
       {previewing && <button onClick={() => playback.stop()}>停止试听</button>}</div>
     <main className="pw-live">
       <div className="pw-live-toolbar"><label>选择曲式 <select aria-label="选择曲式" disabled={liveLocked} value="" onChange={(e) => columnChange(createForm(e.target.value))}><option value="" disabled>选择曲式模板</option><option value="screenshot">完整曲式 · 截图模板</option><option value="blank">空白自定义</option></select></label><LiveTransport playback={playback} columns={session.columns} status={status} canUndo={liveUndo.length > 0} canRedo={liveRedo.length > 0}
