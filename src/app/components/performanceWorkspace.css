@@ -77,7 +77,7 @@
 .pw-live-cell strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; color: var(--pw-track); }.pw-live-cell > span:not(.pw-progress) { font-size: 10px; color: #bba485; }
 .pw-column footer { display: grid; gap: 8px; padding-top: 4px; font-size: 10px; }
 .pw-column footer > button { padding: 6px 2px; }
-.pw-repeat-count { display: flex; align-items: center; gap: 3px; }.pw-repeat-count input { width: 45px; padding: 5px!important; }.pw-repeat-count button { padding: 4px 8px; font-size: 20px; }
+.pw-repeat-count { display: flex; align-items: center; gap: 3px; }
 .pw-add-column { align-self: center; margin: 0 15px; width: 50px; height: 50px; font-size: 25px!important; transform: rotate(0); }
 .pw-dialog-backdrop { position: fixed; inset: 0; background: #000a; z-index: 300; display: grid; place-items: center; }
 .pw-dialog { background: #30261d; color: #f2dfc0; border: 1px solid #b79764; border-radius: 12px; padding: 28px; width: min(460px,90vw); box-shadow: 0 20px 80px #000a; }
@@ -94,8 +94,8 @@
 .pw-columns { gap: 10px; }
 .pw-column header > div { gap: 3px; }
 .pw-column header button { padding-inline: 5px; }
-.pw-repeat-count input { width: 33px; }
-.pw-repeat-count button { padding: 3px 5px; }
+.pw-workspace .pw-repeat-count :is(input,button) { box-sizing: border-box; width: 33px; height: 33px; min-width: 0; flex: 0 0 33px; padding: 0; text-align: center; }
+.pw-workspace .pw-repeat-count button { display: inline-flex; align-items: center; justify-content: center; font-size: 20px; line-height: 1; }
 .pw-column footer { gap: 5px; }
 .pw-column footer > button { font-size: 9px; padding: 4px 1px; }
 .pw-add-column { margin-inline: 8px; width: 42px; height: 42px; }
