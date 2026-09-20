@@ -1,0 +1,34 @@
+/* Only Live music cells share the editor's gem material; layout stays compact. */
+.pw-live-slot[data-track=drums] { --pad-tone: var(--c-drums); --live-gem: var(--asset-gem-green); }
+.pw-live-slot[data-track=chord] { --pad-tone: var(--c-chord); --live-gem: var(--asset-gem-amber); }
+.pw-live-slot[data-track=bass] { --pad-tone: var(--c-bass); --live-gem: var(--asset-gem-blue); }
+.pw-live-slot[data-track=melody] { --pad-tone: var(--c-melody); --live-gem: var(--asset-gem-purple); }
+.pw-live-slot { --live-cell-material: var(--asset-drum-step-off); }
+.pw-live-slot[data-filled=true] { --live-cell-material: var(--live-gem); }
+.pw-workspace .pw-live-slot .pw-live-cell,
+.pw-workspace .pw-live-slot .pw-live-cell:hover:not(:disabled),
+.pw-workspace .pw-live-slot .pw-live-cell[aria-pressed=true] {
+  background: var(--live-cell-material) center / 100% 100% no-repeat;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  box-shadow: none;
+  padding: 18px 9px 8px;
+  color: #fff6df;
+  text-shadow: 0 1px 2px #000, 0 0 4px #000;
+  transition: filter .12s;
+}
+.pw-workspace .pw-live-slot .pw-live-cell[aria-pressed=true] {
+  border-color: color-mix(in srgb, var(--pad-tone) 75%, transparent);
+}
+.pw-workspace .pw-live-slot .pw-live-cell:hover:not(:disabled) { filter: brightness(1.12); }
+.pw-workspace .pw-column[data-playing=true] .pw-live-slot[data-filled=true] .pw-live-cell {
+  filter: brightness(1.14);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--pad-tone) 30%, transparent);
+}
+.pw-workspace .pw-live-slot .pw-live-cell:active { filter: brightness(.95); }
+.pw-live-slot .pw-live-cell strong { color: #fff6df; font-weight: 600; }
+.pw-live-slot .pw-live-cell > span { color: #eddfc9; }
+.pw-live-slot[data-filled=false] .pw-live-cell strong { color: #d2c4ae; }
+.pw-live-slot .pw-live-cell > .pw-phrase-perimeter { inset: 7%; width: 86%; height: 86%; overflow: visible; }
+.pw-live-slot .pw-live-replace-control { color: #fff6df; text-shadow: 0 1px 3px #000; }
+.pw-live-slot .pw-live-replace-control > svg { filter: drop-shadow(0 1px 2px #000); }

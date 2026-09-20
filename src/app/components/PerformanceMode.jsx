@@ -16,6 +16,7 @@ import SectionEditorDialog from './SectionEditorDialog.jsx';
 import './performance.css';
 import './performanceWorkspace.css';
 import './jamView.css';
+import './liveGems.css';
 
 void [LiveTransport, PhrasePerimeterProgress, Progress, TrackControls, JamView, SectionEditorDialog];
 const storage = () => { try { return window.localStorage; } catch { return null; } };
@@ -262,9 +263,11 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           <input aria-label={`曲式 ${index + 1} 名称`} {...fieldHistory} disabled={liveLocked} value={column.name} onChange={(e) => columnChange(session.columns.map((c) => c.id === column.id ? { ...c, name: e.target.value } : c))} />
           <div><button aria-label={`左移 ${column.name}`} disabled={liveLocked || index === 0} onClick={() => moveColumn(column.id, session.columns[index - 1].id)}>←</button><button disabled={liveLocked} aria-label={`删除曲式 ${column.name}`} onClick={() => columnChange(session.columns.filter((c) => c.id !== column.id))}>×</button><button aria-label={`右移 ${column.name}`} disabled={liveLocked || index === session.columns.length - 1} onClick={() => moveColumn(column.id, session.columns[index + 1].id)}>→</button></div>
         </header>
-        {TRACKS.map((t) => <div className="pw-live-slot" data-track={t} key={t}><button type="button" className="pw-live-cell" data-track={t} aria-label={`${column.name} · 选择${LABELS[t]}轨道`}
+        {TRACKS.map((t) => {
+          const filled = Boolean(column.snapshot?.matrix[t]?.some((bar) => bar.some(Boolean)));
+          return <div className="pw-live-slot" data-track={t} data-filled={filled} key={t}><button type="button" className="pw-live-cell" data-track={t} aria-label={`${column.name} · 选择${LABELS[t]}轨道`}
           aria-pressed={selectedLiveTrack === t} onPointerDown={(e) => drag.begin(e, 'column', column.id)} onPointerMove={drag.move} onPointerUp={drag.end} onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}
-          onClick={(e) => clickColumn(e, column.id, t)}><strong title={column.snapshot?.phraseNames[t]}>{column.snapshot?.phraseNames[t] ?? '拖入或选择'}</strong><span>{column.snapshot ? `${column.snapshot.totalBars} 小节` : '空槽'}</span><PhrasePerimeterProgress playback={playback} id={column.id} bars={column.snapshot?.phraseBars[t]} running={active && status.playingId === column.id} /></button>
+          onClick={(e) => clickColumn(e, column.id, t)}><strong title={column.snapshot?.phraseNames[t]}>{column.snapshot?.phraseNames[t] ?? '拖入或选择'}</strong><span>{column.snapshot ? `${column.snapshot.totalBars} 小节` : '空槽'}</span><PhrasePerimeterProgress playback={playback} id={column.id} bars={column.snapshot?.phraseBars[t]} inset={0} radius={9} running={filled && active && status.playingId === column.id} /></button>
           <label className="pw-live-replace-control" title="替换乐句" data-disabled={liveLocked}>
           {renderIcon(ChevronDown, { size: 14 })}
           <select className="pw-live-replace" aria-label={`曲式 ${index + 1} ${LABELS[t]}替换乐句`} disabled={liveLocked} value=""
@@ -273,7 +276,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
             <optgroup label="已有模板">{catalog[t].map((phrase) => <option key={phrase.id} value={phrase.id}>{phrase.name}</option>)}</optgroup>
             <optgroup label="待提供">{EXTRA_PHRASE_PLACEHOLDERS.map((phrase) => <option key={phrase.id} value={phrase.id} disabled>{phrase.name} · 待提供</option>)}</optgroup>
           </select></label>
-        </div>)}
+        </div>; })}
         <footer><button disabled={!column.snapshot} onClick={() => playLive(column.id)}>▶ {column.snapshot?.name ?? '空列'}</button>
           <div className="pw-repeat-count"><span>×</span><input aria-label={`${column.name}循环次数`} {...fieldHistory} disabled={liveLocked || column.repeat === null} type="number" min="1" value={column.repeat ?? ''} placeholder="∞" onChange={(e) => { const n = Number(e.target.value); if (Number.isSafeInteger(n) && n > 0) columnChange(session.columns.map((c) => c.id === column.id ? { ...c, repeat: n } : c)); }} /><button aria-label={`${column.name}无限循环`} disabled={liveLocked} aria-pressed={column.repeat === null} onClick={() => columnChange(session.columns.map((c) => c.id === column.id ? { ...c, repeat: c.repeat === null ? 1 : null } : c))}>∞</button></div>
           <button disabled={liveLocked || !librarySelection} onClick={() => placeSection(column.id, librarySelection)}>放入选中段落</button>
