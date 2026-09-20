@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { createPerformanceEffects } from '../src/audio/performanceEffects.js';
 
 const param = () => ({ value: 0, setTargetAtTime(value) { this.value = value; } });
@@ -9,14 +10,16 @@ test('each audible track routes through its own repeat/filter/gain and only the 
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'AudioWorkletNode');
   Object.defineProperty(globalThis, 'AudioWorkletNode', { configurable: true, value: class {} });
   t.after(() => { if (previous) Object.defineProperty(globalThis, 'AudioWorkletNode', previous); else delete globalThis.AudioWorkletNode; });
-  const filters = [], repeats = [];
-  const context = { currentTime: 1, destination: node(), audioWorklet: { async addModule() {} },
+  const filters = [], repeats = [], modules = [];
+  const context = { currentTime: 1, destination: node(), audioWorklet: { async addModule(url) { modules.push(url); } },
     createGain: node, createBiquadFilter() { const n = node(); filters.push(n); return n; } };
   const engine = { async startAudio() {}, getToneContext: () => ({rawContext: context,
     createAudioWorkletNode() { const n = node(); n.messages = []; n.port = {postMessage: m => n.messages.push(m)}; repeats.push(n); return n; }}),
     drumPlayers: new Map([['kick',node()]]), fallbackSynth: node(), bassSampler: node(), chordSampler: node(), chordSynth: node(),
     melodySampler: node(), melodyInputSampler: node(), melodyOneShotSampler: node(), melodyTrackBanks: new Map([['chord',new Map([['piano',{sampler:node()}]])]]) };
   const effects = await createPerformanceEffects(engine); effects.route();
+  assert.equal(modules.length, 1);
+  assert.match(await readFile(new URL(modules[0]), 'utf8'), /registerProcessor\('arranger-beat-repeat'/);
   const input = engine.chordSampler.outputs[0];
   assert.equal(input.outputs[0],repeats[1]);
   assert.equal(repeats[1].outputs[0],filters[1]);

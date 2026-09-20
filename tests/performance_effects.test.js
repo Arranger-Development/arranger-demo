@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
-const source = await readFile(new URL('../public/audio/beat-repeat.js',import.meta.url),'utf8');
+const source = await readFile(new URL('../src/audio/beat-repeat.js',import.meta.url),'utf8');
 function processor() {
   let Constructor;
   class Base { constructor(){this.port={};} }

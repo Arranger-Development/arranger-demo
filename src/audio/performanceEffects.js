@@ -4,8 +4,7 @@ export async function createPerformanceEffects(engine) {
   const toneContext = engine.getToneContext();
   const context = toneContext?.rawContext;
   if (!context?.audioWorklet || !globalThis.AudioWorkletNode) throw new Error('演出效果需要支持 AudioWorklet 的浏览器，请使用最新版 Chrome 或 Edge。');
-  const base = import.meta.env?.BASE_URL ?? '/';
-  await context.audioWorklet.addModule(`${base}audio/beat-repeat.js`);
+  await context.audioWorklet.addModule(new URL('./beat-repeat.js?no-inline', import.meta.url).href);
   const buses = new Map(tracks.map((id) => {
     const input = context.createGain();
     const repeat = toneContext.createAudioWorkletNode('arranger-beat-repeat', { outputChannelCount: [2] });
