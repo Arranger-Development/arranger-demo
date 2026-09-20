@@ -1,0 +1,5 @@
+.pw-live-cell > .pw-phrase-perimeter, .jam-pad-slot .performance-pad > .pw-phrase-perimeter { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: hidden; border-radius: inherit; pointer-events: none; opacity: 0; }
+.pw-phrase-perimeter[data-running=false] { visibility: hidden; }
+.pw-phrase-perimeter path { fill: none; stroke: var(--pad-tone, var(--pw-track)); stroke-dasharray: 100 100; stroke-dashoffset: var(--pw-perimeter-offset,100); stroke-linecap: butt; }
+.pw-phrase-perimeter-glow { stroke-width: 4px; opacity: .55; filter: blur(1px); }
+.pw-phrase-perimeter-line { stroke-width: 2px; }

@@ -13,7 +13,7 @@
 .jam-pad-slot .performance-pad { position: relative; }
 .jam-pad-slot .performance-pad strong { font-size: clamp(10px,calc(var(--pad-size) * .15),16px); }
 .jam-pad-slot .performance-pad-top { font-size: clamp(9px,calc(var(--pad-size) * .115),12px); }
-.jam-pad-slot .pw-progress { bottom: 11%; left: 20%; right: 20%; height: 2px; }
+.jam-pad-slot .performance-pad > .pw-phrase-perimeter { inset: 7%; width: 86%; height: 86%; overflow: visible; }
 .jam-pad-replace { width: var(--pad-size); height: 20px; padding: 1px 3px; font-size: clamp(9px,calc(var(--pad-size) * .105),12px); font-family: inherit; color: var(--ink-2); border: 1px solid #8d704448; border-radius: 4px; background: #211a14; text-overflow: ellipsis; }
 .jam-track-timbre { position: relative; cursor: pointer; }
 .jam-track-timbre select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }

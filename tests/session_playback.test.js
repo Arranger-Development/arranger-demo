@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSessionPlayback } from '../src/app/sessionPlayback.js';
+import { jamPhraseProgress } from '../src/app/liveCellProgress.js';
 const segment = (id, bars=2,kind='main') => ({id,kind,totalBars:bars,matrix:{drums:Array.from({length:bars},()=>Array(16).fill(null))}});
 function fixture() {
   const notices=[]; let options,absolute=0;
@@ -9,6 +10,24 @@ function fixture() {
   const controller=createSessionPlayback(audio,n=>notices.push(n));
   return {controller,notices,audio,tick(step){absolute=step;const value=options.playbackSource(step,step*.15);value.onAudible?.();return value;},async ready(){await new Promise(r=>setImmediate(r));}};
 }
+test('Jam perimeter keeps audible identity through cancellation, one-shot fill and return', async () => {
+  const f = fixture();
+  const main = { ...segment('main'), phraseIds: { drums: 'beat' }, phraseBars: { drums: 2 } };
+  const fill = { ...segment('main:transition:drums:10', 1, 'transition'), phraseIds: { drums: 'fill' }, phraseBars: { drums: 1 } };
+  f.controller.launch(main, 120); await f.ready(); f.tick(5);
+  f.controller.launch(fill, 120);
+  assert.equal(jamPhraseProgress(f.controller.getProgress(), 'drums', 'beat'), 5 / 32);
+  assert.equal(jamPhraseProgress(f.controller.getProgress(), 'drums', 'fill'), 0);
+  f.controller.launch(fill, 120); f.tick(16);
+  assert.equal(jamPhraseProgress(f.controller.getProgress(), 'drums', 'beat'), .5);
+  f.controller.launch(fill, 120); f.tick(32); f.tick(40);
+  assert.equal(jamPhraseProgress(f.controller.getProgress(), 'drums', 'fill'), .5);
+  assert.equal(jamPhraseProgress(f.controller.getProgress(), 'drums', 'beat'), 0);
+  f.tick(48); f.tick(52);
+  assert.equal(jamPhraseProgress(f.controller.getProgress(), 'drums', 'beat'), 4 / 32);
+  f.controller.stop();
+  assert.equal(jamPhraseProgress(f.controller.getProgress(), 'drums', 'beat'), 0);
+});
 test('launch queues to next bar, starts at local zero and a duplicate pending request cancels',async()=>{
   const f=fixture();f.controller.launch(segment('a'),100);await f.ready();f.tick(0);f.tick(5);
   f.controller.launch(segment('b'),100);assert.equal(f.notices.at(-1).pendingId,'b');

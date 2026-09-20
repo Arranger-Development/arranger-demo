@@ -3,10 +3,10 @@ import { ArrowRightToLine, Check, ChevronDown, Save } from 'lucide-react';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, hasSelection } from '../performanceModel.js';
 import { EXTRA_PHRASE_PLACEHOLDERS, MAIN_PHRASE_SLOTS, TRANSITION_PHRASE_SLOTS, TIMBRE_OPTIONS } from '../performanceSession.js';
 import { performanceKeyLabel } from '../../input/performanceInput.js';
-import { Progress } from './PerformanceControls.jsx';
+import PhrasePerimeterProgress from './PhrasePerimeterProgress.jsx';
 import { PERFORMANCE_TRACK_ICONS } from './icons.js';
 
-void [ArrowRightToLine, Check, ChevronDown, Save, Progress, SectionDial];
+void [ArrowRightToLine, Check, ChevronDown, Save, PhrasePerimeterProgress, SectionDial];
 
 function SectionDial({ playback, section, playing, editing, pending, unsaved, onSelect }) {
   const ring = useRef(null);
@@ -77,7 +77,8 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
                     title={phrase ? `${phrase.name} · ${phrase.barCount ?? 2} 小节 · ${key}` : '待提供素材'} onClick={() => triggerPad(track, index)}>
                     <span className="performance-pad-top"><span className="performance-key-hint" aria-hidden="true">{key}</span>{selected ? <Check size={16} /> : <Icon size={16} />}</span>
                     <strong>{phrase?.name ?? '空位'}</strong>
-                    {selected && <Progress playback={playback} id={editingId} bars={phrase.barCount ?? 2} running={active && status.playingId === editingId} />}
+                    {phrase && <PhrasePerimeterProgress playback={playback} track={track} phraseId={phrase.id}
+                      running={active && status.mode === 'jam'} inset={0} radius={9} />}
                   </button>
                   <select className="jam-pad-replace" aria-label={`${LABELS[track]}${group ? '转场' : '主乐句'} ${group ? index - MAIN_PHRASE_SLOTS + 1 : index + 1} 更多模板`}
                     defaultValue="">

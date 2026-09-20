@@ -1,5 +1,0 @@
-.pw-live-cell > .pw-live-perimeter { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: hidden; border-radius: inherit; pointer-events: none; opacity: 0; }
-.pw-live-perimeter[data-running=false] { visibility: hidden; }
-.pw-live-perimeter path { fill: none; stroke: var(--pw-track); stroke-dasharray: 100 100; stroke-dashoffset: var(--pw-perimeter-offset,100); stroke-linecap: butt; }
-.pw-live-perimeter-glow { stroke-width: 4px; opacity: .55; filter: blur(1px); }
-.pw-live-perimeter-line { stroke-width: 2px; }

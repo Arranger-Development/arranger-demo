@@ -7,7 +7,7 @@ import { createSessionPlayback } from '../sessionPlayback.js';
 import { mapPerformanceKeyboard } from '../../input/performanceInput.js';
 import { Progress, TrackControls } from './PerformanceControls.jsx';
 import LiveTransport from './LiveTransport.jsx';
-import LiveCellProgress from './LiveCellProgress.jsx';
+import PhrasePerimeterProgress from './PhrasePerimeterProgress.jsx';
 import { PERFORMANCE_TRACK_ICONS, renderIcon } from './icons.js';
 import useLiveDrag from './useLiveDrag.js';
 import { insertLiveColumn, liveKeyboardCommand } from '../liveInteraction.js';
@@ -17,7 +17,7 @@ import './performance.css';
 import './performanceWorkspace.css';
 import './jamView.css';
 
-void [LiveTransport, LiveCellProgress, Progress, TrackControls, JamView, SectionEditorDialog];
+void [LiveTransport, PhrasePerimeterProgress, Progress, TrackControls, JamView, SectionEditorDialog];
 const storage = () => { try { return window.localStorage; } catch { return null; } };
 
 export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, recommendation, onBack, onImport, controlsRef, hardwareInput }) {
@@ -79,9 +79,14 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     selectLiveTrack(track); playLive(columnId);
   }
   const snapshot = (section) => snapshotSection(section, genreId, profileId);
+  const jamSnapshot = (section) => {
+    const value = snapshot(section);
+    // Runtime-only identity; persisted sections and Live copies keep their existing format.
+    return value && { ...value, phraseIds: { ...section.selection } };
+  };
   const launchDraft = (edit = false) => {
     setMessage('');
-    const current = editor.getSnapshot(); const next = snapshot(current.drafts[current.editingId]);
+    const current = editor.getSnapshot(); const next = jamSnapshot(current.drafts[current.editingId]);
     if (next) playback.launch(next, current.session.bpm, { edit }); else if (playback.isActive()) playback.stop();
   };
   function triggerPad(track, index) {
@@ -91,7 +96,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     const editing = current.drafts[current.editingId];
     if (index >= MAIN_PHRASE_SLOTS && editing.kind !== 'transition') {
       const selection = Object.fromEntries(TRACKS.map((t) => [t, t === track ? phrase.id : null]));
-      const preview = snapshot({ ...editing, id: `${editing.id}:transition:${track}:${index}`, kind: 'transition', selection });
+      const preview = jamSnapshot({ ...editing, id: `${editing.id}:transition:${track}:${index}`, kind: 'transition', selection });
       playback.launch(preview, current.session.bpm);
       return;
     }
@@ -259,7 +264,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         </header>
         {TRACKS.map((t) => <div className="pw-live-slot" data-track={t} key={t}><button type="button" className="pw-live-cell" data-track={t} aria-label={`${column.name} · 选择${LABELS[t]}轨道`}
           aria-pressed={selectedLiveTrack === t} onPointerDown={(e) => drag.begin(e, 'column', column.id)} onPointerMove={drag.move} onPointerUp={drag.end} onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}
-          onClick={(e) => clickColumn(e, column.id, t)}><strong title={column.snapshot?.phraseNames[t]}>{column.snapshot?.phraseNames[t] ?? '拖入或选择'}</strong><span>{column.snapshot ? `${column.snapshot.totalBars} 小节` : '空槽'}</span><LiveCellProgress playback={playback} id={column.id} bars={column.snapshot?.phraseBars[t]} running={active && status.playingId === column.id} /></button>
+          onClick={(e) => clickColumn(e, column.id, t)}><strong title={column.snapshot?.phraseNames[t]}>{column.snapshot?.phraseNames[t] ?? '拖入或选择'}</strong><span>{column.snapshot ? `${column.snapshot.totalBars} 小节` : '空槽'}</span><PhrasePerimeterProgress playback={playback} id={column.id} bars={column.snapshot?.phraseBars[t]} running={active && status.playingId === column.id} /></button>
           <label className="pw-live-replace-control" title="替换乐句" data-disabled={liveLocked}>
           {renderIcon(ChevronDown, { size: 14 })}
           <select className="pw-live-replace" aria-label={`曲式 ${index + 1} ${LABELS[t]}替换乐句`} disabled={liveLocked} value=""
