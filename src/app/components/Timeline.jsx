@@ -1,4 +1,5 @@
 import useMusicStore from '../../store/useMusicStore.js';
+import { MAX_PROJECT_BARS } from '../../domain/projectLength.js';
 import {
   Plus,
 } from 'lucide-react';
@@ -221,6 +222,10 @@ const Timeline = memo(forwardRef(function Timeline(
   {
     activeTrackId,
     totalBars = TOTAL_BARS,
+    projectBars = totalBars,
+    projectLengthLocked = false,
+    projectLengthLockReason = '',
+    onExtendProject,
     onAddClip,
     onMoveClip,
     onOpenClip,
@@ -757,6 +762,11 @@ const Timeline = memo(forwardRef(function Timeline(
 
         <TimelinePlayhead className={playheadGridClass} totalBars={totalBars} onMouseDown={handlePlayheadMouseDown} />
       </div>
+      <div className="timeline-add-bar"><button type="button" aria-label="追加一个小节"
+        disabled={projectLengthLocked || projectBars >= MAX_PROJECT_BARS}
+        data-limit={projectBars >= MAX_PROJECT_BARS}
+        title={projectLengthLocked ? projectLengthLockReason : projectBars >= MAX_PROJECT_BARS ? '已达 256 小节' : '追加一个空小节'}
+        onClick={() => onExtendProject(projectBars + 1)}>{projectBars >= MAX_PROJECT_BARS ? '已达 256 小节' : '+'}</button></div>
     </section>
   );
 }));

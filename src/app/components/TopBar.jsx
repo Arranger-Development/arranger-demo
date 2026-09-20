@@ -25,6 +25,7 @@ import { formatDisplayPosition } from '../transportPosition.js';
 import { HardwareInputStatus } from './HardwareInputStatus.jsx';
 import { BpmControl } from './BpmControl.jsx';
 import { renderIcon } from './icons.js';
+import ProjectLengthControl from './ProjectLengthControl.jsx';
 
 function BpmPopoverControl({
   bpm,
@@ -105,6 +106,10 @@ function BpmPopoverControl({
 }
 
 function TopBar({
+  totalBars,
+  projectLengthLocked = false,
+  projectLengthLockReason = '',
+  onExtendProject,
   activeTutorialTarget,
   bpm,
   bpmLocked = false,
@@ -287,6 +292,7 @@ function TopBar({
       </div>
 
       <div className="right-tools">
+        {createElement(ProjectLengthControl, { totalBars, locked: projectLengthLocked, lockReason: projectLengthLockReason, onExtend: onExtendProject })}
         {hardwareInput ? createElement(HardwareInputStatus, hardwareInput) : null}
         {onPerformanceEnter ? (
           <button className="key-switch performance-entry" type="button" onClick={onPerformanceEnter}>

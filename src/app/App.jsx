@@ -1,5 +1,5 @@
 import { getChordCellNotes, toggleChordNoteCell } from '../domain/chordCells.js';
-import { getTimelineBars, getTotalBars } from '../domain/projectLength.js';
+import { getProjectExtensionError, getTimelineBars, getTotalBars } from '../domain/projectLength.js';
 import {
   createElement,
   useCallback,
@@ -486,6 +486,9 @@ export default function App({
   const bpmLockedByTutorial = tutorialPanelState === 'running';
   const bpmLockedByRecording = drumsRecording.workflowLocked || melodyRecording.workflowLocked;
   const bpmLocked = bpmLockedByTutorial || bpmLockedByRecording;
+  const projectLengthLocked = activeTutorialLocked || bpmLocked;
+  const projectLengthLockReason = bpmLockedByRecording
+    ? '录音或倒数期间不能扩充小节。' : '请暂停或退出教程后扩充小节。';
   const bpmLockReason = bpmLockedByTutorial
     ? '教程正在使用固定速度，暂停或退出教程后可以调整。'
     : bpmLockedByRecording
@@ -642,6 +645,24 @@ export default function App({
     stopDrumsRecording,
     stopMelodyRecording,
   ]);
+
+  const handleExtendProject = useCallback((targetBars) => {
+    const state = useMusicStore.getState();
+    if (projectLengthLocked || getProjectExtensionError(targetBars, getTotalBars(state))
+      || Number(targetBars) === getTotalBars(state)) return false;
+    handleStop();
+    audioEngine.stopAllVoices();
+    const changed = withUndoCheckpoint(() => useMusicStore.getState().extendProject(targetBars));
+    if (changed) window.requestAnimationFrame(() => {
+      const scroll = timelineScrollRef.current;
+      const label = scroll?.querySelectorAll('.bar-label')[Number(targetBars) - 1];
+      if (scroll && label) {
+        const right = label.getBoundingClientRect().right - scroll.getBoundingClientRect().left + scroll.scrollLeft;
+        scroll.scrollLeft = Math.max(0, right + 56 - scroll.clientWidth);
+      }
+    });
+    return changed;
+  }, [projectLengthLocked, handleStop, withUndoCheckpoint]);
 
   const handleStopAndRewind = useCallback(() => {
     cancelChillPreviewPlayback();
@@ -3058,6 +3079,10 @@ export default function App({
     >
       <div className="app-main">
         {createElement(TopBar, {
+          totalBars,
+          projectLengthLocked,
+          projectLengthLockReason,
+          onExtendProject: handleExtendProject,
           activeTutorialTarget,
           bpm,
           bpmLocked,
@@ -3253,6 +3278,10 @@ export default function App({
           })}
           {createElement(Timeline, {
             totalBars: timelineBars,
+            projectBars: totalBars,
+            projectLengthLocked,
+            projectLengthLockReason,
+            onExtendProject: handleExtendProject,
             activeTutorialTarget,
             activeTrackId,
             onAddClip: handleAddClip,

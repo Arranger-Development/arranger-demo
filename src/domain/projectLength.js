@@ -2,6 +2,15 @@ import { STEPS_PER_BAR, TOTAL_BARS } from './musicConstants.js';
 
 export const MAX_PROJECT_BARS = 256;
 
+export function getProjectExtensionError(value, currentBars) {
+  if (String(value ?? '').trim() === '' || !Number.isInteger(Number(value)) || Number(value) < 1) {
+    return '请输入正整数小节数。';
+  }
+  if (Number(value) > MAX_PROJECT_BARS) return `最多支持 ${MAX_PROJECT_BARS} 小节。`;
+  if (Number(value) < currentBars) return `只能扩充，当前为 ${currentBars} 小节。`;
+  return '';
+}
+
 export function getTotalBars(state) {
   const bars = state?.totalBars;
   return Number.isInteger(bars) && bars >= 1 && bars <= MAX_PROJECT_BARS ? bars : TOTAL_BARS;
