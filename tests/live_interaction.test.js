@@ -54,3 +54,64 @@ test('Live shortcuts protect inputs, consumed effect events, modifier combinatio
   assert.equal(liveKeyboardCommand({key:' ',repeat:true}),null);
   assert.equal(liveKeyboardCommand({key:' ',ctrlKey:true}),null);
 });
+
+test('modal BPM survives Live undo and redo while saved sections, drafts and copies stay isolated', () => {
+  const editor = makeEditor();
+  const initial = editor.getSnapshot().session;
+  const position = { id: initial.columns[0].id, cycle: 2, step: 7 };
+  editor.columns(initial.columns.map((c, i) => i === 0 ? { ...c, name: '改名' } : c), position);
+  editor.patch({ bpm: 140 });
+  editor.edit({ name: '已保存素材' }); editor.save();
+  editor.edit({ name: '未保存草稿' });
+  editor.undoLive(position);
+  assert.equal(editor.getSnapshot().session.columns[0].name, initial.columns[0].name);
+  assert.equal(editor.getSnapshot().session.bpm, 140);
+  assert.deepEqual(editor.getSnapshot().livePosition, position);
+  editor.redoLive(position);
+  const state = editor.getSnapshot();
+  assert.equal(state.session.columns[0].name, '改名');
+  assert.equal(state.session.bpm, 140);
+  assert.equal(state.session.sections[0].name, '已保存素材');
+  assert.equal(state.drafts[state.editingId].name, '未保存草稿');
+  assert.deepEqual(state.session.columns[0].snapshot, initial.columns[0].snapshot);
+});
+
+test('modal changes rebase the redo branch and prune obsolete BPM-only history', () => {
+  const editor = makeEditor();
+  const initial = editor.getSnapshot().session;
+  editor.editLive({ bpm: 120 });
+  editor.columns(initial.columns.map((c, i) => i === 0 ? { ...c, name: '改名' } : c));
+  editor.undoLive();
+  editor.patch({ bpm: 140 });
+  assert.equal(editor.getSnapshot().liveUndo.length, 0);
+  assert.equal(editor.getSnapshot().liveRedo.length, 1);
+  editor.redoLive();
+  assert.equal(editor.getSnapshot().session.bpm, 140);
+  assert.equal(editor.getSnapshot().session.columns[0].name, '改名');
+  editor.editLive({ bpm: 160 });
+  editor.undoLive(); assert.equal(editor.getSnapshot().session.bpm, 140);
+  editor.redoLive(); assert.equal(editor.getSnapshot().session.bpm, 160);
+  editor.undoLive(); editor.editLive({ bpm: 150 });
+  assert.equal(editor.getSnapshot().liveRedo.length, 0);
+});
+
+test('modal changes preserve unrelated mix history and finish pending Live transactions', () => {
+  const editor = makeEditor();
+  const initial = editor.getSnapshot().session;
+  editor.beginLiveEdit();
+  editor.columns(initial.columns.map((c, i) => i === 0 ? { ...c, name: '组合改动' } : c));
+  editor.editLive({ bpm: 120, volumes: { ...initial.volumes, drums: -8 } });
+  editor.patch({ bpm: 140, volumes: { ...editor.getSnapshot().session.volumes, bass: -6 } });
+  assert.equal(editor.getSnapshot().liveUndo.length, 1);
+  editor.undoLive();
+  assert.equal(editor.getSnapshot().session.bpm, 140);
+  assert.equal(editor.getSnapshot().session.volumes.bass, -6);
+  assert.equal(editor.getSnapshot().session.volumes.drums, initial.volumes.drums);
+  assert.equal(editor.getSnapshot().session.columns[0].name, initial.columns[0].name);
+  editor.redoLive();
+  assert.equal(editor.getSnapshot().session.volumes.drums, -8);
+  assert.equal(editor.getSnapshot().session.volumes.bass, -6);
+  assert.equal(editor.getSnapshot().session.bpm, 140);
+  editor.patch({ bpm: 140 });
+  assert.equal(editor.getSnapshot().liveUndo.length, 1);
+});

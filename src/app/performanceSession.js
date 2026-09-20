@@ -211,6 +211,34 @@ export function createSessionEditor(initial) {
     const { position, ...patch } = clone(snapshot);
     return update({ session: { ...state.session, ...patch }, livePosition: position });
   };
+  const patchOutsideLive = (patch) => {
+    commitLiveEdit();
+    const previous = state.session;
+    const session = { ...previous, ...clone(patch) };
+    // Modal edits are not Live operations. Rebase both history branches so a
+    // later undo/redo cannot restore a shared value from before the modal edit.
+    const rebase = (snapshot) => {
+      const next = clone(snapshot);
+      for (const key of ['columns', 'bpm']) {
+        if (JSON.stringify(previous[key]) !== JSON.stringify(session[key])) next[key] = clone(session[key]);
+      }
+      for (const key of ['volumes', 'mutedTracks']) {
+        for (const track of TRACKS) {
+          if (previous[key][track] !== session[key][track]) next[key][track] = session[key][track];
+        }
+      }
+      return next;
+    };
+    const rebaseHistory = (history) => {
+      let adjacent = session;
+      return history.map(rebase).reverse().filter((snapshot) => {
+        if (!changed(snapshot, adjacent)) return false;
+        adjacent = snapshot;
+        return true;
+      }).reverse();
+    };
+    return update({ session, liveUndo: rebaseHistory(state.liveUndo), liveRedo: rebaseHistory(state.liveRedo) });
+  };
   return {
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, getSnapshot: () => state,
     select: (id) => state.drafts[id] && update({ editingId: id }),
@@ -226,7 +254,7 @@ export function createSessionEditor(initial) {
       const drafts = { ...state.drafts }; delete drafts[id];
       return update({ session: { ...state.session, sections }, drafts, editingId: state.editingId === id ? sections[0].id : state.editingId });
     },
-    patch: sessionPatch,
+    patch: patchOutsideLive,
     beginLiveEdit(position) { if (!transaction) transaction = capture(position); },
     commitLiveEdit,
     editLive,
