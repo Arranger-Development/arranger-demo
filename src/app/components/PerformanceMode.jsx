@@ -276,11 +276,11 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       <aside className="pw-live-effects" aria-label="选中轨道效果器" data-track={selectedLiveTrack}>
         <h2>现场效果</h2><p className="pw-effect-target">当前轨道 · {LABELS[selectedLiveTrack]}</p>
         {TRACKS.map((track) => <div key={`${track}:${editingSection}:${active}`} hidden={selectedLiveTrack !== track}>
-          <TrackControls live expanded track={track} session={session} audio={audio} changeMix={changeMix}
+          <TrackControls track={track} session={session} audio={audio} changeMix={changeMix}
             beginMixEdit={beginLiveEdit} commitMixEdit={commitLiveEdit}
             repeatEnabled={active && !editingSection && !status.loading && locked && selectedLiveTrack === track} />
         </div>)}
-        <p className="pw-effect-hint">点击轨道头或格子选择轨道。滤波与重复器仅影响现场声音。</p>
+        <p className="pw-effect-hint">按住重复 · 松开恢复</p>
       </aside>
     </main>
     {exporting && <div className="pw-dialog-backdrop"><section className="pw-dialog" role="dialog" aria-modal="true" aria-label="导出到创作模式"><h2>展开曲式</h2><p>无限循环仅在本次导出中转换为有限次数。</p>{session.columns.filter((c) => c.snapshot && c.repeat === null).map((c) => <label key={c.id}>{c.name} <input type="number" min="1" aria-label={`${c.name}导出次数`} value={counts[c.id] ?? ''} onChange={(e) => setCounts({ ...counts, [c.id]: e.target.value })} /></label>)}<p role="status">{exportError || `共 ${exportLength} 小节 · 上限 256 小节`}</p><p>将替换当前创作编排，可在创作模式撤销。</p><button onClick={() => setExporting(false)}>取消</button><button className="pw-primary" disabled={Boolean(exportError) || exportLength < 1 || exportLength > 256} onClick={() => {
