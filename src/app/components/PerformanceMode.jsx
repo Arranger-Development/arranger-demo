@@ -13,12 +13,13 @@ import useLiveDrag from './useLiveDrag.js';
 import { insertLiveColumn, liveKeyboardCommand } from '../liveInteraction.js';
 import JamView from './JamView.jsx';
 import SectionEditorDialog from './SectionEditorDialog.jsx';
+import LiveExportDialog from './LiveExportDialog.jsx';
 import './performance.css';
 import './performanceWorkspace.css';
 import './jamView.css';
 import './liveGems.css';
 
-void [LiveTransport, PhrasePerimeterProgress, Progress, TrackControls, JamView, SectionEditorDialog];
+void [LiveTransport, PhrasePerimeterProgress, Progress, TrackControls, JamView, SectionEditorDialog, LiveExportDialog];
 const storage = () => { try { return window.localStorage; } catch { return null; } };
 
 export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, recommendation, onBack, onImport, controlsRef, hardwareInput }) {
@@ -234,7 +235,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       <div className="pw-live-toolbar"><label>选择曲式 <select aria-label="选择曲式" disabled={liveLocked} value="" onChange={(e) => columnChange(createForm(e.target.value))}><option value="" disabled>选择曲式模板</option><option value="screenshot">完整曲式 · 截图模板</option><option value="blank">空白自定义</option></select></label><LiveTransport columns={session.columns} status={status} canUndo={liveUndo.length > 0} canRedo={liveRedo.length > 0}
           onUndo={() => restoreHistory('undo')} onRedo={() => restoreHistory('redo')} onPlay={toggleLive} onStop={() => playback.stop()}
           onRewind={() => { setMessage(''); playback.rewindLive(session.columns, session.bpm); }} />
-        <button disabled={liveLocked || !session.columns.some((c) => c.snapshot)} onClick={() => { if (previewing) playback.stop(); setCounts(Object.fromEntries(session.columns.filter((c) => c.snapshot && c.repeat === null).map((c) => [c.id, 1]))); setExporting(true); }}>导出到创作模式 →</button>
+        <button aria-haspopup="dialog" disabled={liveLocked || !session.columns.some((c) => c.snapshot)} onClick={() => { commitLiveEdit(); if (previewing) playback.stop(); setCounts(Object.fromEntries(session.columns.filter((c) => c.snapshot && c.repeat === null).map((c) => [c.id, 1]))); setExporting(true); }}>导出到创作模式 →</button>
       </div>
       <aside className="pw-library"><div className="pw-library-head"><h2>段落素材</h2><button type="button" className="pw-library-edit" ref={editorEntryRef} onClick={openSectionEditor}>编辑／保存段落</button></div>{session.sections.map((s) => {
         const playing = previewing && status.playingId === s.id;
@@ -290,9 +291,10 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         <p className="pw-effect-hint">按住重复 · 松开恢复</p>
       </aside>
     </main>
-    {exporting && <div className="pw-dialog-backdrop"><section className="pw-dialog" role="dialog" aria-modal="true" aria-label="导出到创作模式"><h2>展开曲式</h2><p>无限循环仅在本次导出中转换为有限次数。</p>{session.columns.filter((c) => c.snapshot && c.repeat === null).map((c) => <label key={c.id}>{c.name} <input type="number" min="1" aria-label={`${c.name}导出次数`} value={counts[c.id] ?? ''} onChange={(e) => setCounts({ ...counts, [c.id]: e.target.value })} /></label>)}<p role="status">{exportError || `共 ${exportLength} 小节 · 上限 256 小节`}</p><p>将替换当前创作编排，可在创作模式撤销。</p><button onClick={() => setExporting(false)}>取消</button><button className="pw-primary" disabled={Boolean(exportError) || exportLength < 1 || exportLength > 256} onClick={() => {
+    {exporting && <LiveExportDialog columns={session.columns} counts={counts} onCountsChange={setCounts}
+      error={exportError} length={exportLength} onClose={() => setExporting(false)} onConfirm={() => {
       try { const result = createLiveImport(session, counts); playback.stop(); onImport(result); setExporting(false); } catch (error) { setMessage(error.message); }
-    }}>展开并进入创作</button></section></div>}
+    }} />}
   </section>
     {editingSection && <SectionEditorDialog bpm={session.bpm} onBpmChange={changeBpm} onClose={closeSectionEditor} hardwareInput={hardwareInput} onConnect={connectHardware}>
       <JamView active={editingSection} session={session} drafts={drafts} editingId={editingId} draft={draft}
