@@ -11,8 +11,8 @@ export const TRANSITION_PHRASE_SLOTS = 2;
 export const clone = (value) => structuredClone(value);
 const uid = () => globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 export const TIMBRE_OPTIONS = {
-  drums: ['soft-electronic-kit', 'dusty-tape-kit', 'clean-digital-kit', DEEP_AUTUMN_DRUMS],
-  chord: ['warm-electric-piano', 'muted-rhodes', 'glass-electric-keys', DEEP_AUTUMN_CHORD],
+  drums: ['soft-electronic-kit', DEEP_AUTUMN_DRUMS],
+  chord: ['warm-electric-piano', DEEP_AUTUMN_CHORD],
   bass: ['round-electric-bass', 'soft-sub-bass', 'fm-round-bass'],
   melody: ['airy-synth-lead', 'hazy-bell-lead', 'soft-pluck-lead'],
 };

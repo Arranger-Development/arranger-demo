@@ -9,6 +9,13 @@ import { PERFORMANCE_TRACK_ICONS } from './icons.js';
 
 void [Check, ChevronDown, Save, PhrasePerimeterProgress, SectionDial, LoopActions];
 
+const DEFAULT_TIMBRE_LABELS = {
+  'soft-electronic-kit': '柔和电子鼓',
+  'warm-electric-piano': '温暖电钢琴',
+  'round-electric-bass': '圆润电贝司',
+  'airy-synth-lead': '空气感合成器',
+};
+
 function SectionDial({ playback, section, playing, editing, pending, unsaved, onSelect }) {
   const ring = useRef(null);
   useEffect(() => {
@@ -53,8 +60,8 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
           return <div className="performance-row jam-row" data-track={track} key={track} role="group" aria-label={`${LABELS[track]}乐句`}>
             <label className="performance-track-label jam-track-timbre" title={`切换${LABELS[track]}音色`}>
               <Icon size={22} aria-hidden="true" /><strong>{LABELS[track]}</strong><ChevronDown size={12} aria-hidden="true" />
-              <select aria-label={`${LABELS[track]}音色`} value={draft.timbres[track]} onChange={(e) => updateTimbre(track, e.target.value)}>
-                {TIMBRE_OPTIONS[track].map((id, i) => <option key={id} value={id}>{PERFORMANCE_SAMPLE_BANKS[id]?.label ?? `音色 ${i + 1} · 占位`}</option>)}
+              <select aria-label={`${LABELS[track]}音色`} value={TIMBRE_OPTIONS[track].includes(draft.timbres[track]) ? draft.timbres[track] : TIMBRE_OPTIONS[track][0]} onChange={(e) => updateTimbre(track, e.target.value)}>
+                {TIMBRE_OPTIONS[track].map((id, i) => <option key={id} value={id}>{PERFORMANCE_SAMPLE_BANKS[id]?.label ?? DEFAULT_TIMBRE_LABELS[id] ?? `音色 ${i + 1} · 占位`}</option>)}
               </select>
             </label>
             {[0, 1].map((group) => <div className={`jam-pad-group ${group ? 'jam-transitions' : ''}`} key={group}>
