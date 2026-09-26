@@ -3,6 +3,14 @@ import assert from 'node:assert/strict';
 import { createSessionPlayback } from '../src/app/sessionPlayback.js';
 import { jamPhraseProgress } from '../src/app/liveCellProgress.js';
 const segment = (id, bars=2,kind='main') => ({id,kind,totalBars:bars,matrix:{drums:Array.from({length:bars},()=>Array(16).fill(null))}});
+test('combination editing quantizes full transition mixtures and stops instead of returning to the old main', async () => {
+  const f = fixture(); const options = { edit: true, returnAfterTransition: false };
+  f.controller.launch(segment('draft'), 100, options); await f.ready(); f.tick(3);
+  f.controller.launch(segment('draft', 1, 'transition'), 100, options);
+  assert.equal(f.tick(15).totalBars, 2);
+  assert.equal(f.tick(16).totalBars, 1); assert.equal(f.tick(17).stepOffset, 16);
+  assert.equal(f.tick(32).done, true); assert.equal(f.controller.isActive(), false);
+});
 function fixture() {
   const notices=[]; let options,absolute=0;
   const audio={stop(){},stopAllVoices(){},resetPerformanceEffects(){},setTempo(){},getAbsolutePlaybackStep:()=>absolute,

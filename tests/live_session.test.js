@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSession, normalizePadBindings, replacePadBinding, fixedPerformancePads, EXTRA_PHRASE_PLACEHOLDERS, createSessionEditor, readSession, writeSession, sessionKey, snapshotSection, createLiveImport, createForm, liveExportLength } from '../src/app/performanceSession.js';
+import { createSection, createSession, normalizePadBindings, replacePadBinding, fixedPerformancePads, EXTRA_PHRASE_PLACEHOLDERS, createSessionEditor, readSession, writeSession, sessionKey, snapshotSection, createLiveImport, createForm, liveExportLength } from '../src/app/performanceSession.js';
 import { performanceStorageKey, performanceTemplates } from '../src/app/performanceModel.js';
 import { AI_PERFORMANCE_PROFILE_ID as profile } from '../src/data/aiPerformanceTemplates.js';
 import { getTotalBars, MAX_PROJECT_BARS } from '../src/domain/projectLength.js';
@@ -9,14 +9,14 @@ import { collectProjectEvents } from '../src/export/audioFile.js';
 import { createInitialRecommendationSelections, createMultimodalRecommendationAppState } from '../src/app/multimodalRecommendation.js';
 const genre = 'chill';
 function populated() {
-  const s = createSession(genre,profile,100);
+  const s = createSession(genre,profile,100); s.sections = [createSection()];
   s.sections[0].selection = Object.fromEntries(Object.entries(performanceTemplates(genre,profile)).map(([t,ps]) => [t,ps[0].id]));
   return s;
 }
 const memory = () => { const m = new Map(); return { getItem: k => m.get(k), setItem: (k,v) => m.set(k,v) }; };
-test('session starts with five independent main sections, eight visible slots, and supplied transitions', () => {
+test('session starts without saved placeholders, with eight visible slots and supplied transitions', () => {
   const s = createSession(genre,profile,100);
-  assert.equal(s.sections.length,5); assert.equal(new Set(s.sections.map(x=>x.id)).size,5);
+  assert.deepEqual(s.sections,[]);
   for(const pads of Object.values(s.pads)) { assert.equal(pads.length,8); assert.ok(pads[6]?.startsWith('deep-autumn-'));  }
   assert.deepEqual(s.columns.map(c=>c.repeat),[2,2,2,1,2,1,null,4]);
   assert.ok(s.columns.every(c=>!c.snapshot)); assert.deepEqual(createForm('blank'),[]);
@@ -36,6 +36,7 @@ test('legacy save migration preserves old bytes and exact phrase choices', () =>
 });
 test('draft edits, slot bindings, saved sections and Live snapshots never alias', () => {
   const initial = populated(); const editor = createSessionEditor(initial); const id = initial.sections[0].id;
+  editor.select(id);
   const copy = snapshotSection(initial.sections[0],genre,profile);
   editor.columns([{id:'column',name:'主歌',repeat:2,snapshot:copy}]);
   editor.edit({name:'改名',selection:{...initial.sections[0].selection,drums:null}});
@@ -48,7 +49,7 @@ test('form edits undo and restored copies remain independent of mutated source',
   const editor = createSessionEditor(populated()); const before = structuredClone(editor.getSnapshot().session.columns);
   editor.columns([]); assert.equal(editor.getSnapshot().session.columns.length,0); editor.undoLive();
   assert.deepEqual(editor.getSnapshot().session.columns,before);
-  editor.add('transition'); const state = editor.getSnapshot(); assert.equal(state.drafts[state.editingId].kind,'transition');
+  const state = editor.getSnapshot(); assert.equal(state.session.sections.length,1);
 });
 test('Live repeats are finite on export only; notes, placeholders and mix survive', () => {
   const s = populated(); const copy = snapshotSection(s.sections[0],genre,profile);
@@ -77,7 +78,7 @@ test('AI recommendation branches share requested timbres, BPM and muted track se
   const project = createMultimodalRecommendationAppState({bpm:119,selections});
   const jam = createSession(genre,profile,119,selections);
   assert.equal(jam.bpm,project.bpm); assert.deepEqual(jam.mutedTracks,project.mutedTracks);
-  assert.equal(project.matrix.chord.flat().find(Boolean).requestedTimbreId,jam.sections[0].timbres.chord);
+  assert.equal(project.matrix.chord.flat().find(Boolean).requestedTimbreId,createSessionEditor(jam,{timbres:selections.timbreByTrackId}).getSnapshot().drafts['draft:new'].timbres.chord);
 });
 
 test('explicitly emptied pad bindings survive refresh independently of saved sections', () => {
@@ -89,19 +90,7 @@ test('explicitly emptied pad bindings survive refresh independently of saved sec
 });
 
 
-test('sections grow beyond five and main/transition numbering remains separate after deletion', () => {
-  const editor = createSessionEditor(populated());
-  editor.add('main');
-  assert.equal(editor.getSnapshot().drafts[editor.getSnapshot().editingId].name, '段落 6');
-  editor.remove(editor.getSnapshot().session.sections[1].id);
-  editor.add('main');
-  assert.equal(editor.getSnapshot().drafts[editor.getSnapshot().editingId].name, '段落 7');
-  editor.add('transition');
-  assert.equal(editor.getSnapshot().drafts[editor.getSnapshot().editingId].name, '转场 1');
-  editor.add('transition');
-  assert.equal(editor.getSnapshot().drafts[editor.getSnapshot().editingId].name, '转场 2');
-  assert.equal(editor.getSnapshot().session.sections.length, 8);
-});
+
 
 
 test('visible pads retain supplied catalog order and extra choices are ten non-musical placeholders', () => {

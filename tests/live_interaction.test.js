@@ -20,7 +20,7 @@ test('Live history groups edits, restores cursor and supports redo without rever
   editor.columns(initial.columns.map((c,i)=>i===0?{...c,name:'新'}:c),cursor);
   editor.columns(editor.getSnapshot().session.columns.map((c,i)=>i===0?{...c,name:'新前奏'}:c),cursor);
   editor.commitLiveEdit(); assert.equal(editor.getSnapshot().liveUndo.length,1);
-  editor.edit({name:'保留的素材名'}); editor.save();
+  editor.edit({name:'保留的素材名',selection:{drums:'fixture'}}); editor.save();
   editor.undoLive(cursor); assert.equal(editor.getSnapshot().session.columns[0].name,initial.columns[0].name);
   assert.deepEqual(editor.getSnapshot().livePosition,cursor);
   assert.equal(editor.getSnapshot().session.sections[0].name,'保留的素材名');
@@ -61,7 +61,7 @@ test('modal BPM survives Live undo and redo while saved sections, drafts and cop
   const position = { id: initial.columns[0].id, cycle: 2, step: 7 };
   editor.columns(initial.columns.map((c, i) => i === 0 ? { ...c, name: '改名' } : c), position);
   editor.patch({ bpm: 140 });
-  editor.edit({ name: '已保存素材' }); editor.save();
+  editor.edit({ name: '已保存素材', selection: {drums:'fixture'} }); editor.save();
   editor.edit({ name: '未保存草稿' });
   editor.undoLive(position);
   assert.equal(editor.getSnapshot().session.columns[0].name, initial.columns[0].name);

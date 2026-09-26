@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DEEP_AUTUMN_TEMPLATES } from '../src/data/deepAutumnTemplates.js';
 import { AI_PERFORMANCE_PROFILE_ID as profile } from '../src/data/aiPerformanceTemplates.js';
 import { performanceTemplates, createPerformanceMatrix, emptySelection } from '../src/app/performanceModel.js';
-import { createSession, defaultTimbres, snapshotSection, createLiveImport, readSession, sessionKey } from '../src/app/performanceSession.js';
+import { createSection, createSession, defaultTimbres, snapshotSection, createLiveImport, readSession, sessionKey } from '../src/app/performanceSession.js';
 import { createMatrixPlaybackAdapter } from '../src/audio/matrixPlaybackAdapter.js';
 import { collectProjectEvents } from '../src/export/audioFile.js';
 import { createProjectFile } from '../src/export/projectFile.js';
@@ -79,7 +79,7 @@ test('sustained harmony retains octave-two notes and different per-note lengths 
 });
 
 test('legacy fourteen-pad session fills supplied transition slots without changing saved selections or Live copies', () => {
-  const before=createSession('chill',profile);
+  const before=createSession('chill',profile); before.sections=[createSection()];
   before.pads=Object.fromEntries(Object.entries(catalog).map(([t,list])=>[t,[...list.filter(p=>p.id.startsWith('ai-demo-1-')).map(p=>p.id),...Array(14).fill(null)].slice(0,14)]));
   before.sections[0].selection.chord='ai-demo-1-chord-ripple-1';
   before.columns[0].snapshot=snapshot(phrase('风之谷'));

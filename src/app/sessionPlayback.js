@@ -11,6 +11,7 @@ export function createSessionPlayback(audio, notify = () => {}) {
   let lastStep = -1;
   let cycle = 1;
   let mode = 'stopped';
+  let returnAfterTransition = true;
   let loading = false;
   let bpm = 100;
   let audible = null;
@@ -41,7 +42,7 @@ export function createSessionPlayback(audio, notify = () => {}) {
     void audio.stop(); audio.stopAllVoices(); audio.resetPerformanceEffects?.(); emit();
   }
   function change(target, absoluteStep) {
-    if (mode === 'jam' && target.snapshot.kind === 'transition' && current?.snapshot.kind !== 'transition') returnMain = current;
+    if (mode === 'jam' && returnAfterTransition && target.snapshot.kind === 'transition' && current?.snapshot.kind !== 'transition') returnMain = current;
     if (mode === 'jam' && target.snapshot.kind !== 'transition') returnMain = null;
     current = target; startStep = absoluteStep; cycle = 1; sourceSnapshot = makeSource();
   }
@@ -134,7 +135,9 @@ export function createSessionPlayback(audio, notify = () => {}) {
       else emit();
     },
     setTempo(value) { bpm = value; audio.setTempo(value); },
-    launch(snapshot, tempo, { edit = false } = {}) {
+    launch(snapshot, tempo, { edit = false, returnAfterTransition: shouldReturn = true } = {}) {
+      returnAfterTransition = shouldReturn;
+      if (!shouldReturn) returnMain = null;
       if (!snapshot) return;
       const target = { id: snapshot.id, snapshot };
       if (!isRunning()) { void start('jam', target, tempo); return; }

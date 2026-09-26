@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PERFORMANCE_TRACKS as tracks, performanceTemplates } from '../src/app/performanceModel.js';
 import { AI_PERFORMANCE_PROFILE_ID as profile } from '../src/data/aiPerformanceTemplates.js';
-import { createSession, createSessionEditor, snapshotSection, replaceLiveColumnTrack, createLiveImport, readSession, writeSession } from '../src/app/performanceSession.js';
+import { createSection, createSession, createSessionEditor, snapshotSection, replaceLiveColumnTrack, createLiveImport, readSession, writeSession } from '../src/app/performanceSession.js';
 import { createMatrixPlaybackAdapter } from '../src/audio/matrixPlaybackAdapter.js';
 
 const genre = 'chill';
 const catalog = performanceTemplates(genre, profile);
 function populated() {
-  const session = createSession(genre, profile, 119);
+  const session = createSession(genre, profile, 119); session.sections = [createSection()];
   const section = session.sections[0];
   section.selection = Object.fromEntries(tracks.map((track) => [track, catalog[track][0].id]));
   section.timbres.bass = 'soft-sub-bass';
@@ -118,7 +118,7 @@ test('one replacement is one undo step and survives redo, refresh, playback and 
 });
 
 test('legacy genre templates remain replaceable independently of the other three tracks', () => {
-  const s = createSession('pop', null, 100);
+  const s = createSession('pop', null, 100); s.sections = [createSection()];
   const templates = performanceTemplates('pop');
   s.sections[0].selection = Object.fromEntries(tracks.map((t) => [t, templates[t][0].id]));
   const column = { ...s.columns[0], snapshot: snapshotSection(s.sections[0], 'pop') };

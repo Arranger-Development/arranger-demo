@@ -1,13 +1,13 @@
 import { PERFORMANCE_SAMPLE_BANKS } from '../../data/performanceTimbres.js';
-import { useEffect, useRef, useState } from 'react';
-import { ArrowRightToLine, Check, ChevronDown, Save } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { Check, ChevronDown, Save } from 'lucide-react';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, hasSelection } from '../performanceModel.js';
 import { EXTRA_PHRASE_PLACEHOLDERS, MAIN_PHRASE_SLOTS, TRANSITION_PHRASE_SLOTS, TIMBRE_OPTIONS } from '../performanceSession.js';
 import { performanceKeyLabel } from '../../input/performanceInput.js';
 import PhrasePerimeterProgress from './PhrasePerimeterProgress.jsx';
 import { PERFORMANCE_TRACK_ICONS } from './icons.js';
 
-void [ArrowRightToLine, Check, ChevronDown, Save, PhrasePerimeterProgress, SectionDial];
+void [Check, ChevronDown, Save, PhrasePerimeterProgress, SectionDial, LoopActions];
 
 function SectionDial({ playback, section, playing, editing, pending, unsaved, onSelect }) {
   const ring = useRef(null);
@@ -37,26 +37,15 @@ function SectionDial({ playback, section, playing, editing, pending, unsaved, on
 }
 
 export default function JamView({ active, session, drafts, editingId, draft, templates, status, message, playback,
-  triggerPad, replacePad, catalog, selectSection, updateTimbre, save, onComplete, editSection, addSection, renameSection, removeSection }) {
+  triggerPad, replacePad, catalog, selectSection, updateTimbre, save, renameSection, removeSection }) {
   const locked = status.mode !== 'stopped';
-  const [newSectionKind, setNewSectionKind] = useState('main');
   const sectionsRef = useRef(null);
   useEffect(() => {
     const button = [...(sectionsRef.current?.children ?? [])].find((el) => el.dataset.sectionId === editingId);
     button?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [editingId]);
   return <main className="performance-body jam-body">
-    <div className="performance-intro"><span className="performance-eyebrow">四轨乐句 · JAM</span><span className="jam-zone-label">主乐句 × {MAIN_PHRASE_SLOTS} <span>转场 × {TRANSITION_PHRASE_SLOTS}</span></span>      <aside className="performance-save-panel jam-save-panel">
-        <button type="button" className="performance-save" onClick={save}><Save size={14} /><span>{draft.kind === 'transition' ? '保存转场' : '保存段落'}</span></button>
-        <button type="button" className="performance-save" onClick={onComplete}><ArrowRightToLine size={14} /><span>完成编辑</span></button>
-        <details className="jam-manage"><summary className="performance-connect">段落管理</summary>
-          <div className="jam-manage-panel">
-            <label>编辑段落<select aria-label="编辑段落" value={editingId} onChange={(e) => editSection(e.target.value)}>{session.sections.map((s) => <option key={s.id} value={s.id}>{drafts[s.id].name}</option>)}</select></label>
-            <label>名称<input aria-label="当前段落名称" value={draft.name} onChange={(e) => renameSection(e.target.value)} onBlur={() => { if (!draft.name.trim()) renameSection('未命名段落'); }} /></label>
-            <button type="button" className="performance-connect" disabled={session.sections.length === 1} onClick={() => removeSection(editingId)}>删除当前段落</button>
-          </div>
-        </details>
-      </aside></div>
+    <div className="performance-intro"><span className="performance-eyebrow">四轨乐句 · JAM</span><span className="jam-zone-label">主乐句 × {MAIN_PHRASE_SLOTS} <span>转场 × {TRANSITION_PHRASE_SLOTS}</span></span></div>
     <div className="performance-workbench jam-workbench">
       <div className="performance-grid jam-grid" aria-label="四轨乐句" style={{ '--jam-main-slots': MAIN_PHRASE_SLOTS, '--jam-transition-slots': TRANSITION_PHRASE_SLOTS, '--jam-total-slots': MAIN_PHRASE_SLOTS + TRANSITION_PHRASE_SLOTS }}>
         {TRACKS.map((track) => {
@@ -94,18 +83,43 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
       </div>
 
     </div>
-    <section className="performance-sequence jam-sequence" aria-label="保存的段落"><div ref={sectionsRef} className="performance-loops jam-loops">
-      {session.sections.map((s) => <SectionDial key={s.id} playback={playback} section={{ ...s, name: drafts[s.id].name }}
-        playing={active && status.playingId === s.id} pending={status.pendingId === s.id} editing={editingId === s.id}
-        unsaved={JSON.stringify(drafts[s.id]) !== JSON.stringify(s)} onSelect={() => selectSection(s.id)} />)}
-    </div><div className="jam-add-section">
-      <select aria-label="新增段落类型" value={newSectionKind} onChange={(e) => setNewSectionKind(e.target.value)}>
-        <option value="main">段落模板</option><option value="transition">转场模板</option>
-      </select>
-      <button type="button" className="performance-connect" onClick={() => addSection(newSectionKind)}>＋ Add</button>
-    </div></section>
-    <footer className="performance-footer jam-footer"><span role="status">{status.error || message || (status.loading ? '正在准备声音…' : status.pendingId ? '已排队 · 下一小节切换' : locked ? '播放中' : '选择段落开始演奏')}</span>
+    <div className="jam-combination-actions">
+      <span role="status">{status.error || message || (status.loading ? '正在准备声音…' : status.pendingId ? '已排队 · 下一小节切换' : '')}</span>
       {locked && <button type="button" className="performance-connect" onClick={() => playback.stop()}>停止</button>}
-    </footer>
+      <button type="button" className="performance-save" disabled={!hasSelection(draft.selection)} onClick={save}>
+        <Save size={14} /><span>{session.sections.some((s) => s.id === editingId) ? '更新' : '保存'}{draft.kind === 'transition' ? '转场' : '段落'}</span>
+      </button>
+    </div>
+    <section className="performance-sequence jam-sequence" aria-label="保存的 loop">
+      {session.sections.length ? <div ref={sectionsRef} className="performance-loops jam-loops">
+        {session.sections.map((s) => <div className="jam-saved-loop" key={s.id} data-section-id={s.id}>
+          <SectionDial playback={playback} section={s}
+            playing={active && status.playingId === s.id} pending={status.pendingId === s.id} editing={editingId === s.id}
+            unsaved={JSON.stringify(drafts[s.id]) !== JSON.stringify(s)} onSelect={() => selectSection(s.id)} />
+          <LoopActions section={s} rename={renameSection} remove={removeSection} />
+        </div>)}
+      </div> : <p className="jam-empty-library">保存后，loop 会显示在这里</p>}
+    </section>
   </main>;
+}
+
+function LoopActions({ section, rename, remove }) {
+  const menu = useRef(null);
+  const trigger = useRef(null);
+  const close = () => { menu.current?.hidePopover(); trigger.current?.focus(); };
+  return <>
+    <button ref={trigger} type="button" className="performance-connect jam-loop-more" aria-label={`${section.name}操作`}
+      popoverTarget={`loop-menu-${section.id}`} onClick={(event) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        menu.current.style.left = `${Math.max(12, Math.min(rect.left, window.innerWidth - 240))}px`;
+        menu.current.style.top = `${Math.max(12, rect.top - 135)}px`;
+      }}>⋯</button>
+    <div ref={menu} id={`loop-menu-${section.id}`} popover="auto" className="jam-loop-menu">
+      <form onSubmit={(event) => { event.preventDefault(); const name = new FormData(event.currentTarget).get('name').trim(); if (name) { rename(section.id, name); close(); } }}>
+        <label>名称<input key={section.name} name="name" aria-label={`重命名 ${section.name}`} defaultValue={section.name} required /></label>
+        <button type="submit" className="performance-connect">重命名</button>
+        <button type="button" className="performance-connect" onClick={() => { close(); remove(section.id); }}>删除</button>
+      </form>
+    </div>
+  </>;
 }

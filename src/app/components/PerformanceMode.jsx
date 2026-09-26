@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { ChevronDown } from 'lucide-react';
 import createAudioEngine from '../../audio/createAudioEngine.js';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, performanceTemplates, hasSelection, normalizePerformanceBpm } from '../performanceModel.js';
-import { createForm, MAIN_PHRASE_SLOTS, EXTRA_PHRASE_PLACEHOLDERS, fixedPerformancePads, replacePadBinding, createSessionEditor, readSession, writeSession, snapshotSection, replaceLiveColumnTrack, createLiveImport, liveExportLength } from '../performanceSession.js';
+import { createForm, EXTRA_PHRASE_PLACEHOLDERS, fixedPerformancePads, replacePadBinding, createSessionEditor, readSession, writeSession, snapshotSection, replaceLiveColumnTrack, createLiveImport, liveExportLength } from '../performanceSession.js';
 import { createSessionPlayback } from '../sessionPlayback.js';
 import { mapPerformanceKeyboard } from '../../input/performanceInput.js';
 import { Progress, TrackControls } from './PerformanceControls.jsx';
@@ -23,7 +23,7 @@ void [LiveTransport, PhrasePerimeterProgress, Progress, TrackControls, JamView, 
 const storage = () => { try { return window.localStorage; } catch { return null; } };
 
 export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, recommendation, onBack, onImport, controlsRef, hardwareInput }) {
-  const [editor] = useState(() => createSessionEditor(readSession(storage(), genreId, profileId, initialBpm, recommendation)));
+  const [editor] = useState(() => createSessionEditor(readSession(storage(), genreId, profileId, initialBpm, recommendation), { catalog: performanceTemplates(genreId, profileId), timbres: recommendation?.timbreByTrackId }));
   const { session, drafts, editingId, liveUndo, liveRedo } = useSyncExternalStore(editor.subscribe, editor.getSnapshot);
   const [audio] = useState(() => createAudioEngine());
   const [status, setStatus] = useState({ mode: 'stopped', loading: false, playingId: null, pendingId: null });
@@ -33,7 +33,8 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const [editorOpen, setEditorOpen] = useState(false);
   const editorEntryRef = useRef(null);
   const [counts, setCounts] = useState({});
-  const [page, setPage] = useState(0);
+  const [requestedPage, setPage] = useState(0);
+  const page = Math.min(requestedPage, Math.max(0, Math.ceil(session.sections.length / 5) - 1));
   const [librarySelection, setLibrarySelection] = useState('');
   const [selectedLiveTrack, setSelectedLiveTrack] = useState('drums');
   const editingSection = active && editorOpen;
@@ -89,7 +90,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const launchDraft = (edit = false) => {
     setMessage('');
     const current = editor.getSnapshot(); const next = jamSnapshot(current.drafts[current.editingId]);
-    if (next) playback.launch(next, current.session.bpm, { edit }); else if (playback.isActive()) playback.stop();
+    if (next) playback.launch(next, current.session.bpm, { edit, returnAfterTransition: false }); else if (playback.isActive()) playback.stop();
   };
   function replacePad(track, index, templateId) {
     const current = editor.getSnapshot().session;
@@ -101,19 +102,18 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     const current = editor.getSnapshot();
     const phrase = fixedPerformancePads(catalog, current.session.pads)[track][index];
     if (!phrase) return;
-    const editing = current.drafts[current.editingId];
-    if (index >= MAIN_PHRASE_SLOTS && editing.kind !== 'transition') {
-      const selection = Object.fromEntries(TRACKS.map((t) => [t, t === track ? phrase.id : null]));
-      const preview = jamSnapshot({ ...editing, id: `${editing.id}:transition:${track}:${index}`, kind: 'transition', selection });
-      playback.launch(preview, current.session.bpm);
-      return;
-    }
     const selection = { ...current.drafts[current.editingId].selection };
     selection[track] = selection[track] === phrase.id ? null : phrase.id;
     editor.edit({ selection }); launchDraft(true);
   }
-  function selectSection(id) { editor.select(id); launchDraft(); }
-  function save() { editor.save(); persist(); setMessage(`${draft.kind === 'transition' ? '转场' : '段落'}已保存，可拖入 Live。`); }
+  function selectSection(id) { playback.stop(); setMessage(''); editor.select(id); }
+  function save() {
+    if (!hasSelection(editor.getSnapshot().drafts[editor.getSnapshot().editingId].selection)) return;
+    if (!editor.save((next) => writeSession(storage(), genreId, profileId, next))) {
+      setMessage('保存失败，当前组合已保留，请重试。'); return;
+    }
+    playback.stop(); setMessage('已保存，可继续组合下一个 loop。');
+  }
   function changeMix(track, volume) {
     const current = editor.getSnapshot().session;
     patch({ volumes: { ...current.volumes, [track]: volume }, mutedTracks: { ...current.mutedTracks, [track]: false } });
@@ -220,7 +220,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         if (command.type === 'loop') { const s = session.sections[page * 5 + command.index]; if (s) selectSection(s.id); }
         if (command.type === 'save') save();
         if (command.type === 'togglePlayback' || command.type === 'stop') playback.stop();
-        if (command.type === 'page') setPage(Math.max(0, Math.min(Math.ceil(session.sections.length / 5) - 1, page + command.delta)));
+        if (command.type === 'page') setPage(Math.max(0, Math.min(Math.max(0, Math.ceil(session.sections.length / 5) - 1), page + command.delta)));
       },
       getSurface: () => ({ version: 4, templates, sections: session.sections, drafts, editingId, page, status, progress: playback.getProgress(), beatPhase: playback.getBeatPhase() }),
     };
@@ -306,9 +306,8 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       <JamView active={editingSection} session={session} drafts={drafts} editingId={editingId} draft={draft}
       templates={templates} status={status} message={message} playback={playback}
       catalog={catalog} replacePad={replacePad} triggerPad={triggerPad} selectSection={selectSection} updateTimbre={updateTimbre}
-      save={save} onComplete={closeSectionEditor} editSection={(id) => editor.select(id)}
-      addSection={(kind) => { editor.add(kind); persist(); }} renameSection={(name) => editor.edit({ name })}
-      removeSection={(id) => { if (status.playingId === id || status.pendingId === id) playback.stop(); editor.remove(id); if (librarySelection === id) setLibrarySelection(''); persist(); }}
+      save={save} renameSection={(id, name) => { editor.rename(id, name); persist(); }}
+      removeSection={(id) => { if (editingId === id || status.playingId === id || status.pendingId === id) playback.stop(); editor.remove(id); if (librarySelection === id) setLibrarySelection(''); persist(); }}
       />
     </SectionEditorDialog>}
   </>;
