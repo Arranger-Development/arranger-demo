@@ -3,6 +3,65 @@ import assert from 'node:assert/strict';
 import { createSessionPlayback } from '../src/app/sessionPlayback.js';
 import { jamPhraseProgress } from '../src/app/liveCellProgress.js';
 const segment = (id, bars=2,kind='main') => ({id,kind,totalBars:bars,matrix:{drums:Array.from({length:bars},()=>Array(16).fill(null))}});
+test('saved loop selection auditions its draft, cancels pending selection and toggles the playing loop off', async () => {
+  const f = fixture(); const options = { returnAfterTransition: false };
+  const draft = { ...segment('loop-a', 4), phraseIds: { drums: 'unsaved-beat' }, phraseBars: { drums: 4 } };
+  f.controller.launch(draft, 120, options); await f.ready();
+  f.tick(5); f.tick(64);
+  assert.equal(f.notices.at(-1).cycle, 2);
+  assert.deepEqual(f.controller.getProgress().snapshot, draft);
+  f.controller.launch(segment('loop-b'), 120, options);
+  assert.equal(f.notices.at(-1).pendingId, 'loop-b');
+  f.controller.launch(segment('loop-b'), 120, options);
+  assert.equal(f.notices.at(-1).pendingId, null);
+  f.controller.launch(segment('loop-b'), 120, options);
+  assert.equal(f.tick(79).totalBars, 4);
+  f.tick(80);
+  assert.equal(f.notices.at(-1).playingId, 'loop-b');
+  assert.equal(f.controller.getProgress().fraction, 0);
+  f.controller.launch(draft, 120, options);
+  f.controller.launch(segment('loop-b'), 120, options);
+  assert.equal(f.controller.isActive(), false, 'clicking the playing loop stops even with another loop queued');
+  assert.equal(f.notices.at(-1).pendingId, null);
+  assert.equal(f.controller.getProgress(), null);
+});
+
+test('selected transition loop ends once without returning to the preceding loop', async () => {
+  const f = fixture(); const options = { returnAfterTransition: false };
+  f.controller.launch(segment('main'), 100, options); await f.ready(); f.tick(3);
+  f.controller.launch(segment('fill', 1, 'transition'), 100, options);
+  assert.equal(f.tick(16).releaseVoices, true);
+  assert.equal(f.notices.at(-1).playingId, 'fill');
+  assert.equal(f.tick(32).done, true);
+  assert.equal(f.controller.isActive(), false);
+  assert.equal(f.controller.getProgress(), null);
+});
+
+test('loop clicks during preparation cancel or replace targets without stale playback', async () => {
+  const f = fixture(); const preparations = []; let plays = 0;
+  const options = { returnAfterTransition: false };
+  f.audio.preparePerformanceEffects = () => new Promise(resolve => preparations.push(resolve));
+  const play = f.audio.play;
+  f.audio.play = async o => { plays++; return play(o); };
+  f.controller.launch(segment('a'), 100, options);
+  assert.equal(f.notices.at(-1).loading, true);
+  f.controller.launch(segment('a'), 100, options);
+  preparations.shift()(); await f.ready();
+  assert.equal(plays, 0);
+  f.controller.launch(segment('a'), 100, options);
+  f.controller.launch(segment('b'), 100, options);
+  f.controller.launch(segment('b'), 100, options);
+  assert.equal(f.notices.at(-1).pendingId, null);
+  f.controller.launch(segment('c'), 100, options);
+  preparations.shift()(); await f.ready(); f.tick(0);
+  assert.equal(plays, 1);
+  assert.equal(f.notices.at(-1).playingId, 'c');
+  const old = f.tick(1);
+  f.controller.launch(segment('c'), 100, options);
+  old.onAudible();
+  assert.equal(f.notices.at(-1).mode, 'stopped');
+});
+
 test('combination editing quantizes full transition mixtures and stops instead of returning to the old main', async () => {
   const f = fixture(); const options = { edit: true, returnAfterTransition: false };
   f.controller.launch(segment('draft'), 100, options); await f.ready(); f.tick(3);

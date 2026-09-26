@@ -141,7 +141,8 @@ export function createSessionPlayback(audio, notify = () => {}) {
       if (!snapshot) return;
       const target = { id: snapshot.id, snapshot };
       if (!isRunning()) { void start('jam', target, tempo); return; }
-      if (!edit && current?.id === target.id && !pending) { stop(); return; }
+      if (!edit && pending?.id === target.id) { pending = null; emit(); return; }
+      if (!edit && current?.id === target.id) { stop(); return; }
       // Editing the same section replaces its queued snapshot rather than cancelling it.
       if (edit && pending?.id === target.id) { pending = { ...pending, ...target }; emit(); return; }
       queue(target);

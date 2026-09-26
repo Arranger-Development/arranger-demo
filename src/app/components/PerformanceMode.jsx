@@ -106,7 +106,11 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     selection[track] = selection[track] === phrase.id ? null : phrase.id;
     editor.edit({ selection }); launchDraft(true);
   }
-  function selectSection(id) { playback.stop(); setMessage(''); editor.select(id); }
+  function selectSection(id) {
+    if (!editor.getSnapshot().drafts[id]) return;
+    editor.select(id);
+    launchDraft();
+  }
   function save() {
     if (!hasSelection(editor.getSnapshot().drafts[editor.getSnapshot().editingId].selection)) return;
     if (!editor.save((next) => writeSession(storage(), genreId, profileId, next))) {
