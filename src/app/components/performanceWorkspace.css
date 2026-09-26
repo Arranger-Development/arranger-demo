@@ -169,3 +169,38 @@
 .pw-column[data-drop-side=before]::after { left: -5px; }
 .pw-column[data-drop-side=after]::after { right: -5px; }
 @media(max-width:1200px) { .pw-live-transport { gap: 7px; flex-wrap: wrap; }.pw-live-toolbar { gap: 5px; }.pw-live-toolbar > button { font-size: 10px; } }
+
+/* Scale the arrangement to its available panel, keeping narrow windows scrollable. */
+.pw-live-scroll { container-type: size; display: flex; }
+.pw-live-content {
+  --pw-fit-track-size: clamp(60px, min(calc((100cqw - var(--pw-head-width) - var(--pw-head-gap) - 68px) / var(--pw-visible-columns) - 16px), calc((100cqh - 160px) / 4 - 12px)), 220px);
+  --pw-track-height: var(--pw-fit-track-size);
+  --pw-row-gap: max(10px, calc((100cqh - var(--pw-header-height) - 92px - 4 * var(--pw-track-height)) / 5));
+  --pw-column-width: max(84px, calc(var(--pw-track-height) + 6px));
+  min-width: 100cqw;
+  min-height: calc(100cqh - 16px);
+  flex-shrink: 0;
+  margin: auto;
+  zoom: .8;
+  align-items: center;
+}
+.pw-live-content .pw-columns { flex: 1; width: auto; min-width: max-content; }
+.pw-live-content .pw-column {
+  width: var(--pw-column-width);
+  min-width: var(--pw-column-width);
+  flex: 1 0 var(--pw-column-width);
+  grid-template-rows: var(--pw-header-height) repeat(4, var(--pw-track-height)) 76px;
+  padding-bottom: 0;
+}
+.pw-live-content .pw-live-trackheads {
+  align-self: center;
+  grid-template-rows: var(--pw-header-height) repeat(4, var(--pw-track-height)) 76px;
+}
+.pw-live-content .pw-column footer { justify-items: center; align-content: start; }
+.pw-live-content .pw-column footer > button { width: 100%; }
+.pw-live-content .pw-add-column { flex: 0 0 42px; width: 42px; margin-inline: 8px; }
+.pw-live-content .pw-live-cell strong { font-size: clamp(12px, calc(var(--pw-track-height) * .105), 18px); }
+.pw-live-content .pw-live-cell > span:not(.pw-progress) { font-size: clamp(10px, calc(var(--pw-track-height) * .085), 14px); }
+.pw-live-content .pw-track-select > svg:first-child { width: clamp(22px, calc(var(--pw-track-height) * .25), 40px); height: clamp(22px, calc(var(--pw-track-height) * .25), 40px); }
+.pw-live-content .pw-track-select strong { font-size: clamp(13px, calc(var(--pw-track-height) * .11), 18px); line-height: 1.3; }
+.pw-live-effects { align-self: center; }

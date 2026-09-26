@@ -257,7 +257,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           <Progress playback={playback} id={s.id} running={active && playing} />
         </button>;
       })}</aside>
-      <div className="pw-live-scroll" ref={setScrollElement}><div className="pw-live-content">
+      <div className="pw-live-scroll" ref={setScrollElement} style={{ '--pw-visible-columns': Math.max(8, session.columns.length) }}><div className="pw-live-content">
       <div className="pw-live-trackheads"><div className="pw-column-spacer">轨道</div>{TRACKS.map((track) => <button type="button" key={track} className="pw-track-select" data-track={track}
         aria-label={`选择${LABELS[track]}轨道`} aria-pressed={selectedLiveTrack === track} onClick={() => selectLiveTrack(track)}>
         {renderIcon(PERFORMANCE_TRACK_ICONS[track], { size: 26 })}<strong>{LABELS[track]}</strong>{renderIcon(ChevronDown, { size: 12 })}
