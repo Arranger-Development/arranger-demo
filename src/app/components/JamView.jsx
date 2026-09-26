@@ -1,3 +1,4 @@
+import { PERFORMANCE_SAMPLE_BANKS } from '../../data/performanceTimbres.js';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRightToLine, Check, ChevronDown, Save } from 'lucide-react';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, hasSelection } from '../performanceModel.js';
@@ -64,7 +65,7 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
             <label className="performance-track-label jam-track-timbre" title={`切换${LABELS[track]}音色`}>
               <Icon size={22} aria-hidden="true" /><strong>{LABELS[track]}</strong><ChevronDown size={12} aria-hidden="true" />
               <select aria-label={`${LABELS[track]}音色`} value={draft.timbres[track]} onChange={(e) => updateTimbre(track, e.target.value)}>
-                {TIMBRE_OPTIONS[track].map((id, i) => <option key={id} value={id}>音色 {i + 1} · 占位</option>)}
+                {TIMBRE_OPTIONS[track].map((id, i) => <option key={id} value={id}>{PERFORMANCE_SAMPLE_BANKS[id]?.label ?? `音色 ${i + 1} · 占位`}</option>)}
               </select>
             </label>
             {[0, 1].map((group) => <div className={`jam-pad-group ${group ? 'jam-transitions' : ''}`} key={group}>

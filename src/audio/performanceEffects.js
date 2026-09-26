@@ -15,11 +15,12 @@ export async function createPerformanceEffects(engine) {
   }));
   const routed = new WeakSet();
   function route(node, track) {
-    if (!node?.connect || routed.has(node)) return;
+    if (!buses.has(track) || !node?.connect || routed.has(node)) return;
     node.disconnect(); node.connect(buses.get(track).input); routed.add(node);
   }
   return {
     route() {
+      engine.drumTrackBanks?.forEach((banks, track) => banks.forEach((bank) => bank.players.forEach((node) => route(node, track))));
       engine.drumPlayers.forEach((n) => route(n, 'drums')); route(engine.fallbackSynth, 'drums');
       route(engine.bassSampler, 'bass'); route(engine.chordSampler, 'chord'); route(engine.chordSynth, 'chord');
       for (const key of ['melodySampler', 'melodyInputSampler', 'melodyOneShotSampler']) route(engine[key], 'melody');

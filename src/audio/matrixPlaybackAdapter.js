@@ -1,3 +1,4 @@
+import { withPerformanceTimbre } from '../data/performanceTimbres.js';
 import {
   CHORD_SPAN,
   STEPS_PER_BAR,
@@ -285,11 +286,11 @@ function createMatrixPlaybackAdapter(matrixSource, options = {}) {
             events = extractMelodyEvents(cell, bar, step);
           }
 
-          return events.map((event) => (instanceAware ? {
+          return events.map((event) => withPerformanceTimbre(instanceAware ? {
             ...event,
             trackId,
             trackType,
-          } : event));
+          } : event, cell?.requestedTimbreId));
         })
     ));
   }

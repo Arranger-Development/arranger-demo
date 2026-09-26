@@ -8,9 +8,10 @@ import {
 import { getTrackTypeFromInstanceId } from '../domain/trackInstances.js';
 import { getTrackOutputVolume } from '../domain/trackVolume.js';
 import {
-  getMelodyTimbre,
-  normalizeMelodyTimbreId,
-} from '../data/melodyTimbres.js';
+  getPitchedSampleBank,
+  normalizePitchedSampleBankId,
+  getPerformanceSampleBank,
+} from '../data/performanceTimbres.js';
 import { AUDIO_STATUSES } from './audioStatus.js';
 import { createMatrixPlaybackAdapter } from './matrixPlaybackAdapter.js';
 
@@ -85,7 +86,7 @@ function createDrumsSampleUrls(baseUrl = '/') {
 
 function createMelodySampleUrls(baseUrl = '/', timbreId = 'piano') {
   const normalizedBaseUrl = baseUrl === '/' ? '' : trimTrailingSlash(baseUrl);
-  const sampleFiles = getMelodyTimbre(timbreId).sampleFiles;
+  const sampleFiles = getPitchedSampleBank(timbreId).sampleFiles;
 
   return Object.fromEntries(
     Object.entries(sampleFiles).map(([note, file]) => [
@@ -164,7 +165,7 @@ function disposeAudioNode(node, time) {
 
 function getMelodyVolume(trackVolume, timbreId) {
   if (trackVolume === -Infinity) return -Infinity;
-  return trackVolume + getMelodyTimbre(timbreId).gainDb;
+  return trackVolume + getPitchedSampleBank(timbreId).gainDb;
 }
 
 function getVelocityAdjustedVolume(trackVolume, velocity = 1) {
@@ -219,6 +220,7 @@ export default class AudioEngine {
     this.cancelTimeout = options.cancelTimeout ?? ((timerId) => globalThis.clearTimeout(timerId));
     this.status = AUDIO_STATUSES.IDLE;
     this.drumPlayers = new Map();
+    this.drumTrackBanks = new Map();
     this.fallbackSynth = null;
     this.chordSampler = null;
     this.chordSynth = null;
@@ -420,11 +422,11 @@ export default class AudioEngine {
   }
 
   getMelodyTimbreId(timbreId) {
-    if (timbreId) return normalizeMelodyTimbreId(timbreId);
+    if (timbreId) return normalizePitchedSampleBankId(timbreId);
     const sourceValue = typeof this.melodyTimbreSource === 'function'
       ? this.melodyTimbreSource()
       : this.melodyTimbreSource;
-    return normalizeMelodyTimbreId(sourceValue);
+    return normalizePitchedSampleBankId(sourceValue);
   }
 
   getMelodyTrackVolume(trackId, timbreId) {
@@ -437,6 +439,9 @@ export default class AudioEngine {
     const volume = this.getTrackVolume(trackId);
     const nodes = this.getInstanceAudioNodes(trackId, trackType, { create: false });
     if (trackType === 'drums') {
+      this.drumTrackBanks.get(trackId)?.forEach((bank, id) => bank.players.forEach((player) => (
+        applyVolume(player, volume + getPerformanceSampleBank('drums', id).gainDb)
+      )));
       nodes?.drumPlayers?.forEach((player) => applyVolume(player, volume));
       applyVolume(nodes?.fallbackSynth, volume);
     }
@@ -778,21 +783,62 @@ export default class AudioEngine {
     }
   }
 
+  async prepareDrumTimbre(timbreId, trackId = 'drums') {
+    const definition = getPerformanceSampleBank('drums', timbreId);
+    if (!definition) return false;
+    await this.startAudio();
+    const banks = this.drumTrackBanks.get(trackId) ?? new Map();
+    this.drumTrackBanks.set(trackId, banks);
+    const cached = banks.get(timbreId);
+    if (cached?.ready) return true;
+    if (cached?.promise) return cached.promise;
+    const entry = { players: new Map(), ready: false, promise: null };
+    banks.set(timbreId, entry);
+    try {
+      const base = this.baseUrl === '/' ? '' : trimTrailingSlash(this.baseUrl);
+      for (const [instrument, file] of Object.entries(definition.sampleFiles)) {
+        const player = callToDestination(this.createPlayer(createSampleUrl(base, file), instrument));
+        if (!player) throw new Error('Missing drum player');
+        entry.players.set(instrument, player);
+      }
+      entry.promise = Promise.resolve(this.tone?.loaded?.()).then(() => {
+        if (this.drumTrackBanks.get(trackId) !== banks || banks.get(timbreId) !== entry) return false;
+        entry.ready = true;
+        entry.promise = null;
+        this.performanceEffects?.route();
+        return true;
+      }).catch(() => {
+        entry.players.forEach((player) => disposeAudioNode(player, this.now()));
+        if (banks.get(timbreId) === entry) banks.delete(timbreId);
+        return false;
+      });
+      return entry.promise;
+    } catch {
+      entry.players.forEach((player) => disposeAudioNode(player, this.now()));
+      banks.delete(timbreId);
+      return false;
+    }
+  }
+
   triggerDrumsInstrument(
     instrument,
     time = this.now(),
     volume = this.getTrackVolume('drums'),
     trackId = 'drums',
+    timbreId,
   ) {
     if (!DRUMS_INSTRUMENT_IDS.includes(instrument)) return false;
 
     const nodes = trackId === 'drums'
       ? { drumPlayers: this.drumPlayers, fallbackSynth: this.fallbackSynth }
       : this.ensureInstanceAudioNodes(trackId, 'drums');
-    const player = nodes?.drumPlayers?.get(instrument);
+    const bank = getPerformanceSampleBank('drums', timbreId);
+    const player = bank ? this.drumTrackBanks.get(trackId)?.get(bank.id)?.players.get(instrument)
+      : nodes?.drumPlayers?.get(instrument);
+    if (bank && !player) return false;
     if (player?.start) {
       try {
-        applyVolume(player, volume);
+        applyVolume(player, volume + (bank?.gainDb ?? 0));
         player.start(time);
         return true;
       } catch {
@@ -1123,6 +1169,9 @@ export default class AudioEngine {
   disposeTrack(trackId, time = this.now()) {
     const trackType = getTrackTypeFromInstanceId(trackId);
     if (!trackType) return false;
+    const drumBanks = this.drumTrackBanks.get(trackId);
+    this.drumTrackBanks.delete(trackId);
+    drumBanks?.forEach((bank) => bank.players.forEach((player) => disposeAudioNode(player, time)));
     // Core Drums/Chord are engine-wide cached instruments created at startup.
     // Keep them ready for undo; duplicate-track nodes below can be recreated.
     if (trackId === 'drums') {
@@ -1565,6 +1614,7 @@ export default class AudioEngine {
             time + ((event.timingOffset ?? 0) * secondsPerSixteenth),
             getVelocityAdjustedVolume(this.getTrackVolume(trackId), event.velocity),
             trackId,
+            event.timbreId,
           );
         }
         if (event.type === 'bass') {
@@ -1683,6 +1733,7 @@ export default class AudioEngine {
     const matrixSource = options.matrixSource ?? this.matrixSource;
     const source = typeof matrixSource === 'function' ? matrixSource() : matrixSource;
     const matrix = source?.matrix ?? source;
+    const drumTimbres = new Map((options.additionalDrumTimbres ?? []).map(({ trackId, timbreId }) => [`${trackId}:${timbreId}`, [trackId, timbreId]]));
     const trackTimbres = new Map();
     const addTimbre = (trackId, timbreId, playbackMode) => trackTimbres.set(
       `${trackId}:${this.getMelodyBankKey(timbreId, playbackMode)}`, [trackId, timbreId, playbackMode],
@@ -1694,14 +1745,21 @@ export default class AudioEngine {
     for (const [trackId, bars] of Object.entries(matrix ?? {})) {
       if (!Array.isArray(bars)) continue;
       for (const cell of bars.flat()) {
-        if (['melody', 'note', 'notes'].includes(cell?.type) && cell.timbreId) {
+        const bank = getPerformanceSampleBank(getTrackTypeFromInstanceId(trackId), cell?.requestedTimbreId ?? cell?.timbreId);
+        if (bank?.track === 'drums') drumTimbres.set(`${trackId}:${bank.id}`, [trackId, bank.id]);
+        if (bank?.track === 'chord') addTimbre(trackId, bank.id, 'natural');
+        if (!bank && ['melody', 'note', 'notes'].includes(cell?.type) && cell.timbreId) {
           addTimbre(trackId, cell.timbreId, cell.playbackMode);
         }
       }
     }
+    if (drumTimbres.size) {
+      const ready = await Promise.all([...drumTimbres.values()].map(([trackId, id]) => this.prepareDrumTimbre(id, trackId)));
+      if (ready.some((result) => !result)) throw new Error('鼓组音色加载失败，请重试');
+    }
     if (trackTimbres.size) {
       const ready = await Promise.all([...trackTimbres.values()].map(([trackId, id, mode]) => this.prepareMelodyTimbre(id, trackId, mode)));
-      if (ready.some((result) => !result)) throw new Error('旋律音色加载失败，请重试');
+      if (ready.some((result) => !result)) throw new Error('音色加载失败，请重试');
     }
     if (requestId !== this.playRequestId) return false;
     this.playbackTotalBars = Number.isInteger(options.totalBars) && options.totalBars > 0
@@ -1725,11 +1783,16 @@ export default class AudioEngine {
     return true;
   }
 
+  releaseDrumBanks(time = this.now()) {
+    this.drumTrackBanks.forEach((banks) => banks.forEach((bank) => bank.players.forEach((player) => player.stop?.(time))));
+  }
+
   async pause() {
     this.playRequestId += 1;
     this.transportRunning = false;
     this.getStartedTransport()?.pause?.();
     this.releaseMelodyBanks(this.now());
+    this.releaseDrumBanks();
   }
 
   async stop(time = this.now()) {
@@ -1738,6 +1801,7 @@ export default class AudioEngine {
     this.stopDrumsPatternPreview();
     this.stopChordClipSequencePreview();
     this.stopMelodyPreview(time);
+    this.releaseDrumBanks(time);
     const transport = this.getStartedTransport();
     transport?.stop?.(time);
     this.stopMelodyVoices(time);
@@ -1754,6 +1818,7 @@ export default class AudioEngine {
     this.chordSynth?.releaseAll?.(time);
     this.fallbackSynth?.triggerRelease?.(time);
     this.drumPlayers.forEach((player) => player.stop?.(time));
+    this.releaseDrumBanks(time);
     this.instanceAudioNodes.forEach((nodes) => {
       nodes.bassSampler?.releaseAll?.(time);
       nodes.chordSampler?.releaseAll?.(time);

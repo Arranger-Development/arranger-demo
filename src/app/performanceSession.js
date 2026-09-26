@@ -1,3 +1,4 @@
+import { DEEP_AUTUMN_DRUMS, DEEP_AUTUMN_CHORD, withPerformanceTimbre } from '../data/performanceTimbres.js';
 import { UNDO_HISTORY_LIMIT } from './undoHistory.js';
 import { PERFORMANCE_TRACKS as TRACKS, emptySelection, performanceTemplates, createPerformanceMatrix, normalizePerformanceBpm, performanceStorageKey } from './performanceModel.js';
 import { createDefaultTrackState } from '../domain/trackInstances.js';
@@ -10,8 +11,8 @@ export const TRANSITION_PHRASE_SLOTS = 2;
 export const clone = (value) => structuredClone(value);
 const uid = () => globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 export const TIMBRE_OPTIONS = {
-  drums: ['soft-electronic-kit', 'dusty-tape-kit', 'clean-digital-kit'],
-  chord: ['warm-electric-piano', 'muted-rhodes', 'glass-electric-keys'],
+  drums: ['soft-electronic-kit', 'dusty-tape-kit', 'clean-digital-kit', DEEP_AUTUMN_DRUMS],
+  chord: ['warm-electric-piano', 'muted-rhodes', 'glass-electric-keys', DEEP_AUTUMN_CHORD],
   bass: ['round-electric-bass', 'soft-sub-bass', 'fm-round-bass'],
   melody: ['airy-synth-lead', 'hazy-bell-lead', 'soft-pluck-lead'],
 };
@@ -121,7 +122,10 @@ export function snapshotSection(section, genre, profile) {
   for (const t of TRACKS) for (const bar of matrix[t]) for (const cell of bar) {
     if (!cell) continue;
     cell.requestedTimbreId = section.timbres[t];
-    // Placeholder choice stays intact; real sample banks can be bound later.
+    // Store the effective bank too so creation's note audition uses the same sound.
+    const resolved = withPerformanceTimbre({ type: t }, section.timbres[t]);
+    if (resolved.timbreId) cell.timbreId = resolved.timbreId;
+    if (resolved.playbackMode) cell.playbackMode = resolved.playbackMode;
   }
   return { id: section.id, name: section.name, kind: section.kind, matrix, totalBars, timbres: { ...section.timbres },
     phraseNames: Object.fromEntries(TRACKS.map((t, i) => [t, selected[i]?.name ?? '静音'])),

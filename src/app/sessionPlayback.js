@@ -1,3 +1,4 @@
+import { DEEP_AUTUMN_DRUMS, DEEP_AUTUMN_CHORD } from '../data/performanceTimbres.js';
 // Musical state transitions happen before the audio engine reads the boundary event.
 export function createSessionPlayback(audio, notify = () => {}) {
   let generation = 0;
@@ -88,9 +89,10 @@ export function createSessionPlayback(audio, notify = () => {}) {
         matrixSource: () => current?.snapshot.matrix ?? target.snapshot.matrix,
         playbackSource: (step) => request === generation ? source(step) : { done: true },
         melodyTimbreIds: ['piano', 'yangqin', 'blues'],
+        additionalDrumTimbres: [{ trackId: 'drums', timbreId: DEEP_AUTUMN_DRUMS }],
         additionalTimbres: ['piano', 'yangqin', 'blues'].flatMap((timbreId) => [
           { trackId: 'chord', timbreId, playbackMode: 'natural' }, { trackId: 'melody', timbreId, playbackMode: 'natural' },
-        ]),
+        ]).concat({ trackId: 'chord', timbreId: DEEP_AUTUMN_CHORD, playbackMode: 'natural' }),
       });
       if (request !== generation) return;
       if (!started) throw new Error('音频未能启动，请重试。');

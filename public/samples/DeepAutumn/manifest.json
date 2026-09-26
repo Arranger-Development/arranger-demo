@@ -1,0 +1,146 @@
+[
+  {
+    "source": "Drum/Loop Demo 1 Snare.wav",
+    "file": "samples/DeepAutumn/Drums/Snare.wav",
+    "sha256": "65668de975421a37c299fe052889330c3031dadecb3b66379ac449536e9618e9",
+    "bytes": 476360
+  },
+  {
+    "source": "Drum/Loop Demo 1 Kick.wav",
+    "file": "samples/DeepAutumn/Drums/Kick.wav",
+    "sha256": "b888f071869213a8ecb0893ef3d7495251cfaaee0ede12375cf500a119c96be3",
+    "bytes": 396980
+  },
+  {
+    "source": "Drum/Loop Demo 1 Hihat.wav",
+    "file": "samples/DeepAutumn/Drums/Hihat.wav",
+    "sha256": "fb690da16565e7af202250d93ef4e5db8d7ad62b8f6430b2d446ddf574429e97",
+    "bytes": 396980
+  },
+  {
+    "source": "Chord/Loop Demo 1 A2.wav",
+    "file": "samples/DeepAutumn/Chord/A2.wav",
+    "sha256": "7f5031752ea2bb29c4baf10042c9d60fa6f393afcff11fc5b97f56af68268fef",
+    "bytes": 436670
+  },
+  {
+    "source": "Chord/Loop Demo 1 #F4.wav",
+    "file": "samples/DeepAutumn/Chord/FSharp4.wav",
+    "sha256": "049b775938f07772e6051d8118a5b64310e8a8faf090cff0ee0d4b49c560c357",
+    "bytes": 396980
+  },
+  {
+    "source": "Chord/Loop Demo 1 A3.wav",
+    "file": "samples/DeepAutumn/Chord/A3.wav",
+    "sha256": "2c419ed789ccfd01a2c772c19efc71b1a3f033bbba5870fefb1f89a5478bdd7a",
+    "bytes": 436670
+  },
+  {
+    "source": "Chord/Loop Demo 1 #G2.wav",
+    "file": "samples/DeepAutumn/Chord/GSharp2.wav",
+    "sha256": "fd2dda36e6b11d9ebef5a1dfeda74cd0c88f2203e5a359648384ff76da4f0d91",
+    "bytes": 436670
+  },
+  {
+    "source": "Chord/Loop Demo 1 #G3.wav",
+    "file": "samples/DeepAutumn/Chord/GSharp3.wav",
+    "sha256": "026d0e63ba93dfadcd49f01591fe9c8d7db66e199572ff41ee8c279b3b63f3b3",
+    "bytes": 436670
+  },
+  {
+    "source": "Chord/Loop Demo 1 A4.wav",
+    "file": "samples/DeepAutumn/Chord/A4.wav",
+    "sha256": "c352abf4b9688ab6346a89afc47df621e438d82cc2ab13436574b6e72813c719",
+    "bytes": 396980
+  },
+  {
+    "source": "Chord/Loop Demo 1 #F3.wav",
+    "file": "samples/DeepAutumn/Chord/FSharp3.wav",
+    "sha256": "a7e60c0e54bcef2743584ac5a2af56cfa222ff4585d7fed290b7c024d808bf8b",
+    "bytes": 436670
+  },
+  {
+    "source": "Chord/Loop Demo 1 #F2.wav",
+    "file": "samples/DeepAutumn/Chord/FSharp2.wav",
+    "sha256": "ddf77c10c648b9512af48525f0c97ff634eeb6d700963c025d98a3f1943bae97",
+    "bytes": 436670
+  },
+  {
+    "source": "Chord/Loop Demo 1 #G4.wav",
+    "file": "samples/DeepAutumn/Chord/GSharp4.wav",
+    "sha256": "1495fecb41c16db5e9537b5599c67d8314561e9aafe19a07095a3e1f0031cf2a",
+    "bytes": 396980
+  },
+  {
+    "source": "Chord/Loop Demo 1 #D4.wav",
+    "file": "samples/DeepAutumn/Chord/DSharp4.wav",
+    "sha256": "438fdca096f49b38a83e6eb726e3edb18bab4b5e7016541a5809d99274309a76",
+    "bytes": 396980
+  },
+  {
+    "source": "Chord/Loop Demo 1 B4.wav",
+    "file": "samples/DeepAutumn/Chord/B4.wav",
+    "sha256": "907d32d9a1481f70cf20e327986af55f79c18ee4f805f66f8b526aefba6532b3",
+    "bytes": 396980
+  },
+  {
+    "source": "Chord/Loop Demo 1 #D2.wav",
+    "file": "samples/DeepAutumn/Chord/DSharp2.wav",
+    "sha256": "86dba6522674109770ef37459dcfbb0d7990ffb4c55cd11ab49d894405e5bc7d",
+    "bytes": 436670
+  },
+  {
+    "source": "Chord/Loop Demo 1 #D3.wav",
+    "file": "samples/DeepAutumn/Chord/DSharp3.wav",
+    "sha256": "be62abc00a1b5d7f9c21aa00f54177af797ab478a4250c19c77c4bcc1b38a840",
+    "bytes": 436670
+  },
+  {
+    "source": "Chord/Loop Demo 1 B2.wav",
+    "file": "samples/DeepAutumn/Chord/B2.wav",
+    "sha256": "df471ac2b69699a32b16d37ac799f9428af0ab99f98095e31776e28486038c57",
+    "bytes": 436670
+  },
+  {
+    "source": "Chord/Loop Demo 1 B3.wav",
+    "file": "samples/DeepAutumn/Chord/B3.wav",
+    "sha256": "de2e4c8edee1c2ebe59cc4345327276b0c18058429414dc9cfa44258c9ca0ad9",
+    "bytes": 436670
+  },
+  {
+    "source": "Chord/Loop Demo 1 #C3.wav",
+    "file": "samples/DeepAutumn/Chord/CSharp3.wav",
+    "sha256": "c4bd85ab478a17210c8afe4ef8ea2471112ba11dd2040fb78a8086bff5f353ee",
+    "bytes": 436670
+  },
+  {
+    "source": "Chord/Loop Demo 1 #C2.wav",
+    "file": "samples/DeepAutumn/Chord/CSharp2.wav",
+    "sha256": "6b227cb0ea86303d4184ba45815572fc20dfc7698fe39826236c47d3d0e9240c",
+    "bytes": 436670
+  },
+  {
+    "source": "Chord/Loop Demo 1 E3.wav",
+    "file": "samples/DeepAutumn/Chord/E3.wav",
+    "sha256": "215d186ded343ae76ace81e5f360a70f21557928aa9874485fdf46a363b60be6",
+    "bytes": 436670
+  },
+  {
+    "source": "Chord/Loop Demo 1 E2.wav",
+    "file": "samples/DeepAutumn/Chord/E2.wav",
+    "sha256": "b21aea5c6546d6231f441f68cb4e05f521083af2725d3cd45861838294050017",
+    "bytes": 436670
+  },
+  {
+    "source": "Chord/Loop Demo 1 #C4.wav",
+    "file": "samples/DeepAutumn/Chord/CSharp4.wav",
+    "sha256": "2cadcb641710652b2f19e422c2b37edb45605eaa59c32affc3fc4e11984e2b16",
+    "bytes": 396980
+  },
+  {
+    "source": "Chord/Loop Demo 1 E4.wav",
+    "file": "samples/DeepAutumn/Chord/E4.wav",
+    "sha256": "cf0e9ced95133b9b80af92677fa495b9a3db6ecf5a8f902a5f757243796d7c5d",
+    "bytes": 396980
+  }
+]

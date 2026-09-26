@@ -1,7 +1,7 @@
 import { getTotalBars } from '../domain/projectLength.js';
 import { getTrackOutputVolume } from '../domain/trackVolume.js';
 import { createMatrixPlaybackAdapter } from '../audio/matrixPlaybackAdapter.js';
-import { getMelodyTimbre } from '../data/melodyTimbres.js';
+import { getPitchedSampleBank, getPerformanceSampleBank } from '../data/performanceTimbres.js';
 import {
   BEATS_PER_BAR,
   DEFAULT_BPM,
@@ -57,7 +57,7 @@ function noteNameToMidi(note) {
   return (Number(match[3]) + 1) * 12 + pitchClasses[match[1]] + (match[2] ? 1 : 0);
 }
 
-function findClosestSample(note, sampleFiles) {
+function findClosestSample(note, sampleFiles, preferHigher = false) {
   const noteMidi = noteNameToMidi(note);
   if (!Number.isInteger(noteMidi)) return null;
 
@@ -68,7 +68,8 @@ function findClosestSample(note, sampleFiles) {
       sampleNote,
     }))
     .filter(({ midi }) => Number.isInteger(midi))
-    .sort((a, b) => Math.abs(a.midi - noteMidi) - Math.abs(b.midi - noteMidi))[0] ?? null;
+    .sort((a, b) => Math.abs(a.midi - noteMidi) - Math.abs(b.midi - noteMidi)
+      || (preferHigher ? b.midi - a.midi : 0))[0] ?? null;
 }
 
 function getDurationSeconds(event, bpm) {
@@ -98,8 +99,10 @@ function getGainValue(volume) {
 function getEventVolume(state, event) {
   const rawVolume = getTrackOutputVolume(state.volumes?.[event.trackId], state.mutedTracks?.[event.trackId]);
   if (rawVolume === -Infinity) return -Infinity;
-  const trackVolume = ['melody', 'chord'].includes(event.type) && event.timbreId
-    ? (rawVolume ?? 0) + getMelodyTimbre(event.timbreId).gainDb : rawVolume;
+  const bank = getPerformanceSampleBank(event.type, event.timbreId);
+  const trackVolume = bank ? (rawVolume ?? 0) + bank.gainDb
+    : ['melody', 'chord'].includes(event.type) && event.timbreId
+      ? (rawVolume ?? 0) + getPitchedSampleBank(event.timbreId).gainDb : rawVolume;
   if (!['chord', 'drums', 'melody', 'bass'].includes(event.type) || !Number.isFinite(event.velocity)) {
     return trackVolume;
   }
@@ -140,7 +143,7 @@ function getAudioExportTrackIds(state) {
 
 function getSampleSelections(event, melodyTimbreId) {
   if (event.type === 'drums') {
-    const file = DRUM_SAMPLE_FILES[event.instrument];
+    const file = (getPerformanceSampleBank('drums', event.timbreId)?.sampleFiles ?? DRUM_SAMPLE_FILES)[event.instrument];
     return file ? [{ file, noteMidi: null, sampleMidi: null }] : [];
   }
 
@@ -148,11 +151,12 @@ function getSampleSelections(event, melodyTimbreId) {
     ? BASS_SAMPLE_FILES
     : event.type === 'chord' && !event.timbreId
       ? CHORD_SAMPLE_FILES
-      : getMelodyTimbre(event.timbreId ?? melodyTimbreId).sampleFiles;
+      : getPitchedSampleBank(event.timbreId ?? melodyTimbreId).sampleFiles;
   const notes = event.type === 'chord' ? event.notes : [event.note];
 
   return notes.map((note) => {
-    const sample = findClosestSample(note, sampleFiles);
+    // Tone.Sampler searches upward first when pitches are equally close.
+    const sample = findClosestSample(note, sampleFiles, Boolean(getPerformanceSampleBank('chord', event.timbreId)));
     if (!sample) return null;
     return {
       file: sample.file,
