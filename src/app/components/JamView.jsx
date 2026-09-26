@@ -2,7 +2,7 @@ import { PERFORMANCE_SAMPLE_BANKS } from '../../data/performanceTimbres.js';
 import { useEffect, useRef } from 'react';
 import { Check, ChevronDown, Save } from 'lucide-react';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, hasSelection } from '../performanceModel.js';
-import { EXTRA_PHRASE_PLACEHOLDERS, MAIN_PHRASE_SLOTS, TRANSITION_PHRASE_SLOTS, TIMBRE_OPTIONS } from '../performanceSession.js';
+import { availablePadTemplates, EXTRA_PHRASE_PLACEHOLDERS, MAIN_PHRASE_SLOTS, TRANSITION_PHRASE_SLOTS, TIMBRE_OPTIONS } from '../performanceSession.js';
 import { performanceKeyLabel } from '../../input/performanceInput.js';
 import PhrasePerimeterProgress from './PhrasePerimeterProgress.jsx';
 import { PERFORMANCE_TRACK_ICONS } from './icons.js';
@@ -67,6 +67,7 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
             {[0, 1].map((group) => <div className={`jam-pad-group ${group ? 'jam-transitions' : ''}`} key={group}>
               {Array.from({ length: group ? TRANSITION_PHRASE_SLOTS : MAIN_PHRASE_SLOTS }, (_, n) => n + (group ? MAIN_PHRASE_SLOTS : 0)).map((index) => {
                 const phrase = templates[track][index]; const selected = phrase && draft.selection[track] === phrase.id;
+                const available = availablePadTemplates(catalog, session.pads, track, index);
                 const key = performanceKeyLabel(track, index);
                 return <div className="jam-pad-slot" key={index}>
                   <button type="button" className={`performance-pad ${selected ? 'is-selected' : ''}`} disabled={!phrase}
@@ -79,8 +80,9 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
                   </button>
                   <select className="jam-pad-replace" aria-label={`${LABELS[track]}${group ? '转场' : '主乐句'} ${group ? index - MAIN_PHRASE_SLOTS + 1 : index + 1} 更多模板`}
                     value={phrase?.id ?? ""} onChange={(e) => replacePad(track, index, e.target.value)}>
-                    <option value="" disabled>更多模板</option>
-                    {catalog[track].filter((p) => (p.kind ?? 'main') === (group ? 'transition' : 'main')).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}{EXTRA_PHRASE_PLACEHOLDERS.map((p) => <option key={p.id} value={p.id} disabled>{p.name} · 待提供</option>)}
+                    <option value="" disabled>{available.length ? '更多模板' : '暂无可替换模板'}</option>
+                    {phrase && <option value={phrase.id} hidden disabled>{phrase.name}</option>}
+                    {available.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}{EXTRA_PHRASE_PLACEHOLDERS.map((p) => <option key={p.id} value={p.id} disabled>{p.name} · 待提供</option>)}
                   </select>
                 </div>;
               })}

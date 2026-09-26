@@ -49,10 +49,14 @@ export function normalizePadBindings(catalog, bindings) {
     return catalog[track].some((p) => p.id === id && (p.kind ?? 'main') === kind) ? id : fallback?.id ?? null;
   })]));
 }
-export function replacePadBinding(session, catalog, track, index, templateId) {
-  if (!TRACKS.includes(track) || !Number.isInteger(index) || index < 0 || index >= MAIN_PHRASE_SLOTS + TRANSITION_PHRASE_SLOTS) return session;
+export function availablePadTemplates(catalog, bindings, track, index) {
+  if (!TRACKS.includes(track) || !Number.isInteger(index) || index < 0 || index >= MAIN_PHRASE_SLOTS + TRANSITION_PHRASE_SLOTS) return [];
   const kind = index < MAIN_PHRASE_SLOTS ? 'main' : 'transition';
-  if (!catalog[track].some((p) => p.id === templateId && (p.kind ?? 'main') === kind) || session.pads[track][index] === templateId) return session;
+  const used = new Set(bindings[track]);
+  return catalog[track].filter((p) => (p.kind ?? 'main') === kind && !used.has(p.id));
+}
+export function replacePadBinding(session, catalog, track, index, templateId) {
+  if (!availablePadTemplates(catalog, session.pads, track, index).some((p) => p.id === templateId)) return session;
   return { ...session, pads: { ...session.pads, [track]: session.pads[track].map((id, i) => i === index ? templateId : id) } };
 }
 export const EXTRA_PHRASE_PLACEHOLDERS = Array.from({ length: 10 }, (_, i) => ({ id: `placeholder-${i + 1}`, name: `Placeholder ${i + 1}` }));
