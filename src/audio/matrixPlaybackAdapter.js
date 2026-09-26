@@ -269,7 +269,18 @@ function createMatrixPlaybackAdapter(matrixSource, options = {}) {
             if (event) events = [event];
           } else if (trackType === 'chord') {
             const event = extractChordEvent(cell, bar, step);
-            if (event) events = [event];
+            if (event) {
+              if (cell.noteDurationSteps) {
+                const groups = new Map();
+                for (const note of event.notes) {
+                  const steps = cell.noteDurationSteps[note];
+                  const durationSteps = Number.isInteger(steps) && steps > 0 ? steps : event.durationSteps ?? 1;
+                  if (!groups.has(durationSteps)) groups.set(durationSteps, []);
+                  groups.get(durationSteps).push(note);
+                }
+                events = [...groups].map(([durationSteps, notes]) => ({ ...event, notes, durationSteps }));
+              } else events = [event];
+            }
           } else if (trackType === 'melody') {
             events = extractMelodyEvents(cell, bar, step);
           }

@@ -14,10 +14,10 @@ function populated() {
   return s;
 }
 const memory = () => { const m = new Map(); return { getItem: k => m.get(k), setItem: (k,v) => m.set(k,v) }; };
-test('session starts with five independent main sections, eight visible slots, and no invented transitions', () => {
+test('session starts with five independent main sections, eight visible slots, and supplied transitions', () => {
   const s = createSession(genre,profile,100);
   assert.equal(s.sections.length,5); assert.equal(new Set(s.sections.map(x=>x.id)).size,5);
-  for(const pads of Object.values(s.pads)) { assert.equal(pads.length,8); assert.deepEqual(pads.slice(6),[null,null]); }
+  for(const pads of Object.values(s.pads)) { assert.equal(pads.length,8); assert.ok(pads[6]?.startsWith('deep-autumn-'));  }
   assert.deepEqual(s.columns.map(c=>c.repeat),[2,2,2,1,2,1,null,4]);
   assert.ok(s.columns.every(c=>!c.snapshot)); assert.deepEqual(createForm('blank'),[]);
 });
@@ -110,8 +110,8 @@ test('visible pads retain supplied catalog order and extra choices are ten non-m
   const pads = fixedPerformancePads(catalog);
   assert.deepEqual(pads.drums.slice(0,5).map(p=>p.name), ['悸动节奏','摇摆行进','街头舞步','放慢脚步','凝神屏气']);
   for (const track of Object.keys(catalog)) {
-    assert.deepEqual(pads[track].slice(0,6).filter(Boolean),catalog[track].slice(0,6));
-    assert.deepEqual(pads[track].slice(6),[null,null]);
+    assert.deepEqual(pads[track].slice(0,6).filter(Boolean),catalog[track].filter(p=>(p.kind ?? 'main') === 'main').slice(0,6));
+    assert.deepEqual(pads[track].slice(6).filter(Boolean), catalog[track].filter(p=>p.kind === 'transition').slice(0,2));
   }
   assert.equal(EXTRA_PHRASE_PLACEHOLDERS.length,10);
   assert.equal(new Set(EXTRA_PHRASE_PLACEHOLDERS.map(p=>p.id)).size,10);

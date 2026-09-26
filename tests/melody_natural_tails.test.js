@@ -123,7 +123,7 @@ test('adding a melody after a drum-only preview uses the preloaded natural piano
 test('all 92 Excel chord attacks retain identical MIDI bytes with natural tails', () => {
   const genreId = 'electronic-edm', profileId = 'ai-demo-1';
   const templates = performanceTemplates(genreId, profileId);
-  const saved = [...templates.chord.slice(1).map(({ id }) => ({ ...emptySelection(), chord: id })), emptySelection()];
+  const saved = [...templates.chord.slice(1,5).map(({ id }) => ({ ...emptySelection(), chord: id })), emptySelection()];
   const project = createPerformanceImport({ saved, genreId, profileId, bpm: 100 });
   const events = collectProjectEvents(project);
   assert.equal(events.flatMap(event => event.notes).length, 92);

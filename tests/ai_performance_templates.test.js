@@ -8,7 +8,7 @@ import {
 import { createMatrixPlaybackAdapter } from '../src/audio/matrixPlaybackAdapter.js';
 
 const genre = 'electronic-edm';
-const templates = performanceTemplates(genre, profile);
+const templates = Object.fromEntries(Object.entries(performanceTemplates(genre, profile)).map(([track, list]) => [track, list.filter(p => p.id.startsWith('ai-demo-1-'))]));
 const choose = (track, index) => ({ ...emptySelection(), [track]: templates[track][index].id });
 const render = (selection) => createPerformanceMatrix(selection, genre, profile);
 

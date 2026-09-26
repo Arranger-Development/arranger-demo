@@ -7,7 +7,7 @@ import { createPerformancePlayback } from '../src/app/performancePlayback.js';
 import { PERFORMANCE_TRACKS, emptySelection, performanceTemplates, createPerformanceMatrix, createPerformanceSequence } from '../src/app/performanceModel.js';
 import { AI_PERFORMANCE_PROFILE_ID } from '../src/data/aiPerformanceTemplates.js';
 
-const templates = performanceTemplates('pop', AI_PERFORMANCE_PROFILE_ID);
+const templates = Object.fromEntries(Object.entries(performanceTemplates('pop', AI_PERFORMANCE_PROFILE_ID)).map(([track, list]) => [track, list.filter(p => p.id.startsWith('ai-demo-1-'))]));
 const session = () => ({ bpm: 100, saved: Array.from({ length: 5 }, emptySelection) });
 const key = (code, overrides = {}) => ({ type: 'keydown', code, ...overrides });
 const light = (frame, note) => frame.find(([status, number]) => status === 0x90 && number === note)?.[2];

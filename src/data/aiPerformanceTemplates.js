@@ -1,3 +1,5 @@
+import { DEEP_AUTUMN_TEMPLATES } from './deepAutumnTemplates.js';
+
 // Drums/bass transcribed from Notion “表演模式 Demo 1”, 2026-09-13.
 // Four chord scores: 未命名表格.xlsx, 2026-09-14; B2/G#2 omitted.
 // Melody and 灵动底韵: Notion piano-roll images; repeated hits are retained.
@@ -13,7 +15,7 @@ const pitched = (track, slug, name, bars) => ({
   id: `ai-demo-1-${track}-${slug}`, name, bars, barCount: bars.length,
 });
 
-export const AI_PERFORMANCE_TEMPLATES = {
+const LEGACY_AI_PERFORMANCE_TEMPLATES = {
   drums: [
     drum('pulse', '悸动节奏', [{ kick: [0, 12], snare: [], hihat: [0, 1, 2, 4, 6, 10, 14] }]),
     drum('march', '摇摆行进', [{ kick: [0, 1, 4, 12], snare: [8], hihat: [0, 1, 2, 4, 6, 10, 14] }]),
@@ -88,3 +90,8 @@ export const AI_PERFORMANCE_TEMPLATES = {
     ]),
   ],
 };
+
+// Append without renaming or reinterpreting saved legacy IDs.
+export const AI_PERFORMANCE_TEMPLATES = Object.fromEntries(
+  Object.entries(LEGACY_AI_PERFORMANCE_TEMPLATES).map(([track, phrases]) => [track, [...phrases, ...DEEP_AUTUMN_TEMPLATES[track]]]),
+);

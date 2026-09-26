@@ -73,10 +73,11 @@ export function createPerformanceMatrix(selection, genreId, profileId = null) {
             return instruments.length ? createDrumsCell(instruments) : null;
           });
         } else {
-          phraseBar.forEach(([step, note]) => {
+          phraseBar.forEach(([step, note, durationSteps = 1]) => {
             matrix[track][bar][step] = track === 'bass' ? createBassCell(note, '16n')
               : track === 'chord' ? createChordNotesCell([...getChordCellNotes(matrix.chord[bar][step]), note], {
                 duration: '16n', timbreId: 'piano', playbackMode: 'natural',
+                ...(template.source ? { noteDurationSteps: { ...matrix.chord[bar][step]?.noteDurationSteps, [note]: durationSteps } } : {}),
               })
               : createMelodyCellFromNotes([...getMelodyCellNotes(matrix.melody[bar][step]), note], {
                 duration: '16n', timbreId: 'piano', playbackMode: 'natural',

@@ -5,7 +5,7 @@ import {
 
 const CHORD_ROOTS = Object.freeze(['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']);
 const CHORD_GRID_ROOTS = Object.freeze(['B', 'A#', 'A', 'G#', 'G', 'F#', 'F', 'E', 'D#', 'D', 'C#', 'C']);
-const CHORD_GRID_OCTAVES = Object.freeze([5, 4, 3]);
+const CHORD_GRID_OCTAVES = Object.freeze([5, 4, 3, 2]);
 const DEFAULT_CHORD_GRID_OCTAVE = 4;
 const CHORD_GRID_PITCHES = Object.freeze(
   CHORD_GRID_OCTAVES.flatMap((octave) => (
@@ -416,6 +416,10 @@ function createChordNotesCell(notes, options = {}) {
     label: normalizedNotes.join('/'),
     ...(options.duration ? { duration: options.duration } : {}),
     ...(Number.isInteger(options.durationSteps) ? { durationSteps: options.durationSteps } : {}),
+    ...(options.noteDurationSteps ? { noteDurationSteps: Object.fromEntries(normalizedNotes
+      .filter((note) => Number.isInteger(options.noteDurationSteps[note]) && options.noteDurationSteps[note] > 0)
+      .map((note) => [note, options.noteDurationSteps[note]])) } : {}),
+    ...(options.requestedTimbreId ? { requestedTimbreId: options.requestedTimbreId } : {}),
     ...(Number.isFinite(options.velocity) ? { velocity: options.velocity } : {}),
     ...(options.timbreId ? { timbreId: options.timbreId } : {}),
     ...(options.playbackMode === 'natural' ? { playbackMode: 'natural' } : {}),
