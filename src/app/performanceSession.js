@@ -5,8 +5,8 @@ import { createClipRecord } from '../domain/clipHelpers.js';
 import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
 
 export const SESSION_VERSION = 4;
-export const MAIN_PHRASE_SLOTS = 10;
-export const TRANSITION_PHRASE_SLOTS = 4;
+export const MAIN_PHRASE_SLOTS = 6;
+export const TRANSITION_PHRASE_SLOTS = 2;
 export const clone = (value) => structuredClone(value);
 const uid = () => globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 export const TIMBRE_OPTIONS = {
@@ -31,10 +31,28 @@ export function nextSectionNumber(sections, kind) {
     return match ? Number(match[1]) : 0;
   })) + 1;
 }
-export function fixedPerformancePads(catalog) {
+export function fixedPerformancePads(catalog, bindings) {
   return Object.fromEntries(TRACKS.map((track) => [track, Array.from({ length: MAIN_PHRASE_SLOTS + TRANSITION_PHRASE_SLOTS }, (_, i) => (
-    catalog[track].filter((p) => (p.kind ?? 'main') === (i < MAIN_PHRASE_SLOTS ? 'main' : 'transition'))[i < MAIN_PHRASE_SLOTS ? i : i - MAIN_PHRASE_SLOTS] ?? null
+    bindings ? catalog[track].find((p) => p.id === bindings[track]?.[i]) ?? null
+      : catalog[track].filter((p) => (p.kind ?? 'main') === (i < MAIN_PHRASE_SLOTS ? 'main' : 'transition'))[i < MAIN_PHRASE_SLOTS ? i : i - MAIN_PHRASE_SLOTS] ?? null
   ))]));
+}
+export function normalizePadBindings(catalog, bindings) {
+  const defaults = fixedPerformancePads(catalog);
+  return Object.fromEntries(TRACKS.map((track) => [track, defaults[track].map((fallback, index) => {
+    // v4 previously stored ten main slots followed by four transition slots.
+    const sourceIndex = bindings?.[track]?.length === 14 && index >= MAIN_PHRASE_SLOTS ? index - MAIN_PHRASE_SLOTS + 10 : index;
+    const id = bindings?.[track]?.[sourceIndex];
+    if (id === null && bindings?.[track]?.length === 8) return null;
+    const kind = index < MAIN_PHRASE_SLOTS ? 'main' : 'transition';
+    return catalog[track].some((p) => p.id === id && (p.kind ?? 'main') === kind) ? id : fallback?.id ?? null;
+  })]));
+}
+export function replacePadBinding(session, catalog, track, index, templateId) {
+  if (!TRACKS.includes(track) || !Number.isInteger(index) || index < 0 || index >= MAIN_PHRASE_SLOTS + TRANSITION_PHRASE_SLOTS) return session;
+  const kind = index < MAIN_PHRASE_SLOTS ? 'main' : 'transition';
+  if (!catalog[track].some((p) => p.id === templateId && (p.kind ?? 'main') === kind) || session.pads[track][index] === templateId) return session;
+  return { ...session, pads: { ...session.pads, [track]: session.pads[track].map((id, i) => i === index ? templateId : id) } };
 }
 export const EXTRA_PHRASE_PLACEHOLDERS = Array.from({ length: 10 }, (_, i) => ({ id: `placeholder-${i + 1}`, name: `Placeholder ${i + 1}` }));
 export function createSession(genre, profile, bpm = 100, recommendation) {
@@ -63,11 +81,7 @@ export function readSession(storage, genre, profile, bpm, recommendation) {
       });
       return { ...base, ...value, bpm: normalizePerformanceBpm(value.bpm),
         sections: value.sections.map(normalizeSection),
-        pads: Object.fromEntries(TRACKS.map((t) => [t, base.pads[t].map((fallback, i) => {
-          const id = value.pads?.[t]?.[i];
-          if (id === null) return null;
-          return catalog[t].some((p) => p.id === id && (p.kind ?? 'main') === (i < MAIN_PHRASE_SLOTS ? 'main' : 'transition')) ? id : fallback;
-        })])),
+        pads: normalizePadBindings(catalog, value.pads),
         volumes: Object.fromEntries(TRACKS.map((t) => [t, Math.max(-24, Math.min(6, Number(value.volumes?.[t]) || 0))])),
         columns: value.columns.filter((c) => c && typeof c.id === 'string').map((c) => ({ ...c, name: String(c.name || '段落'),
           repeat: c.repeat === null ? null : Math.max(1, Math.floor(Number(c.repeat) || 1)),

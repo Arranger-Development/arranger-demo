@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSession, fixedPerformancePads, EXTRA_PHRASE_PLACEHOLDERS, createSessionEditor, readSession, writeSession, sessionKey, snapshotSection, createLiveImport, createForm, liveExportLength } from '../src/app/performanceSession.js';
+import { createSession, normalizePadBindings, replacePadBinding, fixedPerformancePads, EXTRA_PHRASE_PLACEHOLDERS, createSessionEditor, readSession, writeSession, sessionKey, snapshotSection, createLiveImport, createForm, liveExportLength } from '../src/app/performanceSession.js';
 import { performanceStorageKey, performanceTemplates } from '../src/app/performanceModel.js';
 import { AI_PERFORMANCE_PROFILE_ID as profile } from '../src/data/aiPerformanceTemplates.js';
 import { getTotalBars, MAX_PROJECT_BARS } from '../src/domain/projectLength.js';
@@ -14,10 +14,10 @@ function populated() {
   return s;
 }
 const memory = () => { const m = new Map(); return { getItem: k => m.get(k), setItem: (k,v) => m.set(k,v) }; };
-test('session starts with five independent main sections, fourteen visible slots, and no invented transitions', () => {
+test('session starts with five independent main sections, eight visible slots, and no invented transitions', () => {
   const s = createSession(genre,profile,100);
   assert.equal(s.sections.length,5); assert.equal(new Set(s.sections.map(x=>x.id)).size,5);
-  for(const pads of Object.values(s.pads)) { assert.equal(pads.length,14); assert.deepEqual(pads.slice(10),[null,null,null,null]); }
+  for(const pads of Object.values(s.pads)) { assert.equal(pads.length,8); assert.deepEqual(pads.slice(6),[null,null]); }
   assert.deepEqual(s.columns.map(c=>c.repeat),[2,2,2,1,2,1,null,4]);
   assert.ok(s.columns.every(c=>!c.snapshot)); assert.deepEqual(createForm('blank'),[]);
 });
@@ -110,11 +110,31 @@ test('visible pads retain supplied catalog order and extra choices are ten non-m
   const pads = fixedPerformancePads(catalog);
   assert.deepEqual(pads.drums.slice(0,5).map(p=>p.name), ['悸动节奏','摇摆行进','街头舞步','放慢脚步','凝神屏气']);
   for (const track of Object.keys(catalog)) {
-    assert.deepEqual(pads[track].slice(0,10).filter(Boolean),catalog[track].slice(0,10));
-    assert.deepEqual(pads[track].slice(10),[null,null,null,null]);
+    assert.deepEqual(pads[track].slice(0,6).filter(Boolean),catalog[track].slice(0,6));
+    assert.deepEqual(pads[track].slice(6),[null,null]);
   }
   assert.equal(EXTRA_PHRASE_PLACEHOLDERS.length,10);
   assert.equal(new Set(EXTRA_PHRASE_PLACEHOLDERS.map(p=>p.id)).size,10);
   assert.ok(EXTRA_PHRASE_PLACEHOLDERS.every(p=>p.bars===undefined));
   assert.deepEqual(catalog,before);
+});
+
+
+test('ten plus four bindings migrate by category, preserving sources outside visible slots', () => {
+  const catalog = Object.fromEntries(['drums','chord','bass','melody'].map(track => [track, [
+    ...Array.from({length:11}, (_,i) => ({id:`${track}-main-${i}`,kind:'main'})),
+    ...Array.from({length:4}, (_,i) => ({id:`${track}-transition-${i}`,kind:'transition'})),
+  ]]));
+  const old = Object.fromEntries(Object.entries(catalog).map(([track, list]) => [track, [...list.slice(0,10), ...list.slice(11)].map(p=>p.id)]));
+  const bindings = normalizePadBindings(catalog,old);
+  assert.deepEqual(bindings.drums,['drums-main-0','drums-main-1','drums-main-2','drums-main-3','drums-main-4','drums-main-5','drums-transition-0','drums-transition-1']);
+  const source = {...populated(),pads:bindings};
+  const before = structuredClone(source);
+  const replaced = replacePadBinding(source,catalog,'drums',0,'drums-main-10');
+  assert.equal(fixedPerformancePads(catalog,replaced.pads).drums[0].id,'drums-main-10');
+  assert.deepEqual(source,before);
+  assert.equal(replaced.sections,source.sections); assert.equal(replaced.columns,source.columns);
+  assert.equal(replacePadBinding(source,catalog,'drums',0,'drums-transition-0'),source);
+  assert.equal(replacePadBinding(source,catalog,'drums',8,'drums-main-0'),source);
+  assert.deepEqual(normalizePadBindings(catalog,replaced.pads),replaced.pads);
 });

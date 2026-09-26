@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { ChevronDown } from 'lucide-react';
 import createAudioEngine from '../../audio/createAudioEngine.js';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, performanceTemplates, hasSelection, normalizePerformanceBpm } from '../performanceModel.js';
-import { createForm, MAIN_PHRASE_SLOTS, EXTRA_PHRASE_PLACEHOLDERS, fixedPerformancePads, createSessionEditor, readSession, writeSession, snapshotSection, replaceLiveColumnTrack, createLiveImport, liveExportLength } from '../performanceSession.js';
+import { createForm, MAIN_PHRASE_SLOTS, EXTRA_PHRASE_PLACEHOLDERS, fixedPerformancePads, replacePadBinding, createSessionEditor, readSession, writeSession, snapshotSection, replaceLiveColumnTrack, createLiveImport, liveExportLength } from '../performanceSession.js';
 import { createSessionPlayback } from '../sessionPlayback.js';
 import { mapPerformanceKeyboard } from '../../input/performanceInput.js';
 import { Progress, TrackControls } from './PerformanceControls.jsx';
@@ -42,7 +42,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const previewing = status.mode === 'preview';
   const draft = drafts[editingId];
   const catalog = useMemo(() => performanceTemplates(genreId, profileId), [genreId, profileId]);
-  const templates = useMemo(() => fixedPerformancePads(catalog), [catalog]);
+  const templates = useMemo(() => fixedPerformancePads(catalog, session.pads), [catalog, session.pads]);
   const persist = () => { if (!writeSession(storage(), genreId, profileId, editor.getSnapshot().session)) setMessage('浏览器未能保存，当前会话仍可继续使用。'); };
   const patch = (value) => {
     if (editingSection) editor.patch(value);
@@ -91,9 +91,15 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     const current = editor.getSnapshot(); const next = jamSnapshot(current.drafts[current.editingId]);
     if (next) playback.launch(next, current.session.bpm, { edit }); else if (playback.isActive()) playback.stop();
   };
+  function replacePad(track, index, templateId) {
+    const current = editor.getSnapshot().session;
+    const next = replacePadBinding(current, catalog, track, index, templateId);
+    if (next === current) return;
+    editor.patch({ pads: next.pads }); persist();
+  }
   function triggerPad(track, index) {
     const current = editor.getSnapshot();
-    const phrase = templates[track][index];
+    const phrase = fixedPerformancePads(catalog, current.session.pads)[track][index];
     if (!phrase) return;
     const editing = current.drafts[current.editingId];
     if (index >= MAIN_PHRASE_SLOTS && editing.kind !== 'transition') {
@@ -299,7 +305,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     {editingSection && <SectionEditorDialog bpm={session.bpm} onBpmChange={changeBpm} onClose={closeSectionEditor} hardwareInput={hardwareInput} onConnect={connectHardware}>
       <JamView active={editingSection} session={session} drafts={drafts} editingId={editingId} draft={draft}
       templates={templates} status={status} message={message} playback={playback}
-      triggerPad={triggerPad} selectSection={selectSection} updateTimbre={updateTimbre}
+      catalog={catalog} replacePad={replacePad} triggerPad={triggerPad} selectSection={selectSection} updateTimbre={updateTimbre}
       save={save} onComplete={closeSectionEditor} editSection={(id) => editor.select(id)}
       addSection={(kind) => { editor.add(kind); persist(); }} renameSection={(name) => editor.edit({ name })}
       removeSection={(id) => { if (status.playingId === id || status.pendingId === id) playback.stop(); editor.remove(id); if (librarySelection === id) setLibrarySelection(''); persist(); }}

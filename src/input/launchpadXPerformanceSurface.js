@@ -58,7 +58,7 @@ export function createLedFrameSender() {
 
 function createSessionFrame({ templates, sections, drafts, editingId, page, status, progress, beatPhase }) {
   const lights = new Map();
-  PERFORMANCE_TRACKS.forEach((track, row) => templates[track]?.slice(0, 7).forEach((p, index) => {
+  PERFORMANCE_TRACKS.forEach((track, row) => templates[track]?.slice(0, 8).forEach((p, index) => {
     if (p) lights.set((8-row)*10+index+1, TRACK_COLORS[track][drafts[editingId]?.selection[track] === p.id ? 2 : 0]);
   }));
   sections.slice(page*5,page*5+5).forEach((section,index) => lights.set(11+index,

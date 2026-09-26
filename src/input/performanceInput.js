@@ -2,10 +2,10 @@ import { PERFORMANCE_TRACKS } from '../app/performanceModel.js';
 import { parseLaunchpadXMessage } from './launchpadXProtocol.js';
 
 export const PERFORMANCE_KEYS = {
-  drums: ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'],
-  chord: ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU', 'KeyI', 'KeyO', 'KeyP'],
-  bass: ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon'],
-  melody: ['KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyB', 'KeyN', 'KeyM', 'Comma', 'Period', 'Slash'],
+  drums: ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8'],
+  chord: ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU', 'KeyI'],
+  bass: ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK'],
+  melody: ['KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyB', 'KeyN', 'KeyM', 'Comma'],
 };
 export function performanceKeyLabel(trackId, index) {
   const code = PERFORMANCE_KEYS[trackId]?.[index];
@@ -42,7 +42,7 @@ export function createPerformanceMidiInput() {
       held.add(message.number);
       const row = 8 - Math.floor(message.number / 10);
       const column = message.number % 10 - 1;
-      if (row >= 0 && row < 4 && column >= 0 && column < 7) {
+      if (row >= 0 && row < 4 && column >= 0 && column < 8) {
         return templateCommand(templates, PERFORMANCE_TRACKS[row], column);
       }
       if (message.number >= 11 && message.number <= 15) return { type: 'loop', index: message.number - 11 };

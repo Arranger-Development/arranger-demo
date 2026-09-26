@@ -194,14 +194,14 @@ test('beat indication uses audio position across BPM changes, variable segments,
 });
 
 
-test('ten keyboard slots remain reachable without overflowing Launchpad rows', () => {
-  const slots = Object.fromEntries(PERFORMANCE_TRACKS.map(track => [track, Array.from({length:10}, (_, i) => ({id:`${track}-${i}`}))]));
+test('eight keyboard and Launchpad slots match the six plus two workbench', () => {
+  const slots = Object.fromEntries(PERFORMANCE_TRACKS.map(track => [track, Array.from({length:8}, (_, i) => ({id:`${track}-${i}`}))]));
   for (const track of PERFORMANCE_TRACKS) {
-    assert.equal(PERFORMANCE_KEYS[track].length,10);
+    assert.equal(PERFORMANCE_KEYS[track].length,8);
     PERFORMANCE_KEYS[track].forEach((code,i) => assert.deepEqual(mapPerformanceKeyboard(key(code),slots), {type:'template',trackId:track,templateId:`${track}-${i}`}));
   }
   const frame = createLaunchpadXPerformanceLedFrame({version:4,templates:slots,sections:[],drafts:{draft:{selection:{}}},editingId:'draft',page:0,status:{mode:'stopped'},progress:null,beatPhase:0});
-  assert.equal(light(frame,88),0);
+  assert.ok(light(frame,88)>0);
   assert.equal(light(frame,48),0);
   assert.ok(light(frame,87)>0);
 });

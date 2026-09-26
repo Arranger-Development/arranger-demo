@@ -36,7 +36,7 @@ function SectionDial({ playback, section, playing, editing, pending, unsaved, on
 }
 
 export default function JamView({ active, session, drafts, editingId, draft, templates, status, message, playback,
-  triggerPad, selectSection, updateTimbre, save, onComplete, editSection, addSection, renameSection, removeSection }) {
+  triggerPad, replacePad, catalog, selectSection, updateTimbre, save, onComplete, editSection, addSection, renameSection, removeSection }) {
   const locked = status.mode !== 'stopped';
   const [newSectionKind, setNewSectionKind] = useState('main');
   const sectionsRef = useRef(null);
@@ -81,8 +81,9 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
                       running={active && status.mode === 'jam'} inset={0} radius={9} />}
                   </button>
                   <select className="jam-pad-replace" aria-label={`${LABELS[track]}${group ? '转场' : '主乐句'} ${group ? index - MAIN_PHRASE_SLOTS + 1 : index + 1} 更多模板`}
-                    defaultValue="">
-                    <option value="" disabled>更多模板</option>{EXTRA_PHRASE_PLACEHOLDERS.map((p) => <option key={p.id} value={p.id} disabled>{p.name} · 待提供</option>)}
+                    value={phrase?.id ?? ""} onChange={(e) => replacePad(track, index, e.target.value)}>
+                    <option value="" disabled>更多模板</option>
+                    {catalog[track].filter((p) => (p.kind ?? 'main') === (group ? 'transition' : 'main')).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}{EXTRA_PHRASE_PLACEHOLDERS.map((p) => <option key={p.id} value={p.id} disabled>{p.name} · 待提供</option>)}
                   </select>
                 </div>;
               })}
