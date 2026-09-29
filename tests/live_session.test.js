@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSection, createSession, normalizePadBindings, replacePadBinding, fixedPerformancePads, EXTRA_PHRASE_PLACEHOLDERS, createSessionEditor, readSession, writeSession, sessionKey, snapshotSection, createLiveImport, createForm, liveExportLength } from '../src/app/performanceSession.js';
+import { createSection, createSession, normalizePadBindings, replacePadBinding, fixedPerformancePads, EXTRA_PHRASE_PLACEHOLDERS, createSessionEditor, readSession, writeSession, sessionKey, snapshotSection, createArrangementImport, arrangementExportLength } from '../src/app/performanceSession.js';
 import { performanceStorageKey, performanceTemplates } from '../src/app/performanceModel.js';
 import { AI_PERFORMANCE_PROFILE_ID as profile } from '../src/data/aiPerformanceTemplates.js';
 import { getTotalBars, MAX_PROJECT_BARS } from '../src/domain/projectLength.js';
@@ -18,8 +18,7 @@ test('session starts without saved placeholders, with eight visible slots and su
   const s = createSession(genre,profile,100);
   assert.deepEqual(s.sections,[]);
   for(const pads of Object.values(s.pads)) { assert.equal(pads.length,8); assert.ok(pads[6]?.startsWith('deep-autumn-'));  }
-  assert.deepEqual(s.columns.map(c=>c.repeat),[2,2,2,1,2,1,null,4]);
-  assert.ok(s.columns.every(c=>!c.snapshot)); assert.deepEqual(createForm('blank'),[]);
+  assert.equal(s.columns, undefined);
 });
 test('legacy save migration preserves old bytes and exact phrase choices', () => {
   const store = memory(); const selection = populated().sections[0].selection;
@@ -38,25 +37,19 @@ test('draft edits, slot bindings, saved sections and Live snapshots never alias'
   const initial = populated(); const editor = createSessionEditor(initial); const id = initial.sections[0].id;
   editor.select(id);
   const copy = snapshotSection(initial.sections[0],genre,profile);
-  editor.columns([{id:'column',name:'主歌',repeat:2,snapshot:copy}]);
+
   editor.edit({name:'改名',selection:{...initial.sections[0].selection,drums:null}});
   assert.notEqual(editor.getSnapshot().session.sections[0].name,'改名'); editor.save();
   editor.patch({pads:{...initial.pads,drums:Array(7).fill(null)}}); editor.remove(id);
-  assert.deepEqual(editor.getSnapshot().session.columns[0].snapshot,copy);
+  assert.equal(editor.getSnapshot().session.columns,undefined);
   assert.ok(copy.matrix.drums.flat().some(Boolean)); assert.ok(initial.sections[0].selection.drums);
-});
-test('form edits undo and restored copies remain independent of mutated source', () => {
-  const editor = createSessionEditor(populated()); const before = structuredClone(editor.getSnapshot().session.columns);
-  editor.columns([]); assert.equal(editor.getSnapshot().session.columns.length,0); editor.undoLive();
-  assert.deepEqual(editor.getSnapshot().session.columns,before);
-  const state = editor.getSnapshot(); assert.equal(state.session.sections.length,1);
 });
 test('Live repeats are finite on export only; notes, placeholders and mix survive', () => {
   const s = populated(); const copy = snapshotSection(s.sections[0],genre,profile);
   s.columns = [{id:'a',name:'主歌',repeat:2,snapshot:copy},{id:'b',name:'副歌',repeat:null,snapshot:copy},{id:'empty',repeat:null,snapshot:null}];
   s.volumes.drums = -8;
-  assert.throws(()=>createLiveImport(s),/有限循环次数/);
-  const result = createLiveImport(s,{b:3});
+  assert.throws(()=>createArrangementImport(s, s.columns),/有限循环次数/);
+  const result = createArrangementImport(s, s.columns,{b:3});
   assert.equal(result.totalBars,copy.totalBars*5); assert.equal(s.columns[1].repeat,null);
   assert.equal(result.volumes.drums,-8); assert.equal(result.bpm,100);
   assert.equal(result.matrix.chord[0].find(Boolean).requestedTimbreId,s.sections[0].timbres.chord);
@@ -67,11 +60,11 @@ test('256 bars exports in full, 257 is rejected before constructing a replacemen
   const s = populated(); const snapshot = snapshotSection(s.sections[0],genre,profile);
   const one = {...snapshot,totalBars:1,matrix:Object.fromEntries(Object.entries(snapshot.matrix).map(([t,bars])=>[t,[bars[0]]]))};
   s.columns = [{id:'a',name:'长曲式',repeat:256,snapshot:one}];
-  const result = createLiveImport(s); assert.equal(MAX_PROJECT_BARS,256); assert.equal(getTotalBars(result),256);
+  const result = createArrangementImport(s, s.columns); assert.equal(MAX_PROJECT_BARS,256); assert.equal(getTotalBars(result),256);
   assert.equal(createProjectFile(result).arrangement.totalBars,256);
   assert.ok(collectProjectEvents(result).some(e=>e.bar===255));
-  s.columns[0].repeat=257; assert.equal(liveExportLength(s.columns),257); assert.throws(()=>createLiveImport(s),/257/);
-  s.columns[0].repeat=1; assert.equal(getTotalBars(createLiveImport(s)),1);
+  s.columns[0].repeat=257; assert.equal(arrangementExportLength(s.columns),257); assert.throws(()=>createArrangementImport(s, s.columns),/257/);
+  s.columns[0].repeat=1; assert.equal(getTotalBars(createArrangementImport(s, s.columns)),1);
 });
 test('AI recommendation branches share requested timbres, BPM and muted track selections', () => {
   const selections = createInitialRecommendationSelections(); selections.selectedTrackIds=['drums']; selections.timbreByTrackId.chord='muted-rhodes';

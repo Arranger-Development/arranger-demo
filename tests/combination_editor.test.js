@@ -68,14 +68,14 @@ test('editing updates stable ID; inferred type renames automatic labels but pres
 test('switching drafts does not save them; rename does not save unfinished music; saved copies remain independent', () => {
   const editor = create(); editor.edit({ selection: selection({ drums: main }) }); editor.save();
   const saved = editor.getSnapshot().session.sections[0];
-  const copy = snapshotSection(saved, genre, profile); editor.patch({ columns: [{ id: 'copy', snapshot: copy, repeat: 2 }] });
+  const copy = snapshotSection(saved, genre, profile);
   editor.select(saved.id); editor.edit({ selection: selection({ drums: fill }) });
   editor.select(NEW_COMBINATION_ID); editor.edit({ selection: selection({ chord: chordFill }) });
   editor.select(saved.id); assert.equal(current(editor).selection.drums, fill);
   editor.rename(saved.id, '自定义'); assert.equal(editor.getSnapshot().session.sections[0].selection.drums, main);
   editor.select(NEW_COMBINATION_ID); assert.equal(current(editor).selection.chord, chordFill);
   editor.remove(saved.id); assert.deepEqual(editor.getSnapshot().session.sections, []);
-  assert.deepEqual(editor.getSnapshot().session.columns[0].snapshot, copy);
+  assert.ok(copy.matrix.drums.flat().some(Boolean));
   assert.equal(current(editor).selection.chord, chordFill);
 });
 
@@ -87,10 +87,10 @@ test('deleting the last saved loop while editing returns to new draft without re
 });
 
 test('v4 empty libraries restore BPM and Live columns instead of falling back; old empty slots are hidden', () => {
-  const empty = createSession(genre, profile, 143); empty.columns[0].name = '保留曲式';
+  const empty = createSession(genre, profile, 143); empty.columns = [{name:'旧曲式'}];
   const storage = { getItem: key => key === sessionKey(genre, profile) ? JSON.stringify(empty) : JSON.stringify({ version: 1, bpm: 90, saved: [] }) };
   const restored = readSession(storage, genre, profile); assert.equal(restored.bpm, 143);
-  assert.equal(restored.columns[0].name, '保留曲式'); assert.deepEqual(restored.sections, []);
+  assert.equal(restored.columns, undefined); assert.deepEqual(restored.sections, []);
   const old = createSession(genre, profile); old.sections = Array.from({ length: 5 }, (_, i) => createSection('main', i + 1));
   old.sections[3].selection.drums = main; const id = old.sections[3].id;
   const result = readSession({ getItem: key => key === sessionKey(genre, profile) ? JSON.stringify(old) : null }, genre, profile);

@@ -217,9 +217,9 @@ export default function App({
   const totalBars = useMusicStore((state) => getTotalBars(state));
   const timelineBars = getTimelineBars({ totalBars });
   const barNumbers = useMemo(() => Array.from({ length: timelineBars }, (_, index) => index + 1), [timelineBars]);
-  const [workspaceView, setWorkspaceView] = useState(initialView === 'jam' ? 'live' : initialView);
+  const [workspaceView, setWorkspaceView] = useState(initialView === 'live' ? 'jam' : initialView);
   const performanceActive = workspaceView !== 'creation';
-  const setPerformanceActive = (value) => setWorkspaceView(value ? 'live' : 'creation');
+  const setPerformanceActive = (value) => setWorkspaceView(value ? 'jam' : 'creation');
   const performanceControlsRef = useRef(null);
   const [performanceVisited, setPerformanceVisited] = useState(initialView !== 'creation');
   const bpm = useMusicStore((state) => state.bpm);

@@ -1,0 +1,13 @@
+.jam-export-dialog { width: min(780px,calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow:auto; color:var(--ink); background:#241d16; border:1px solid #947044; border-radius:12px; padding:24px; }
+.jam-export-dialog::backdrop { background:#080604b8; backdrop-filter:blur(3px); }
+.jam-export-dialog h2 { margin:0 0 16px; }
+.jam-export-dialog p { color:var(--ink-2); }
+.jam-export-dialog ol { padding:0; list-style:none; }
+.jam-export-dialog li { display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid #765a3540; }
+.jam-export-dialog li strong { flex:1; }
+.jam-export-dialog label { display:flex; align-items:center; gap:8px; }
+.jam-export-dialog input { width:65px; }
+.jam-export-dialog button,.jam-export-dialog input,.jam-export-dialog select { color:var(--ink); background:#17120e; border:1px solid #947044; border-radius:5px; padding:7px; font:inherit; }
+.jam-export-dialog button:disabled { opacity:.4; }
+.jam-export-dialog footer { display:flex; justify-content:flex-end; gap:12px; }
+@media(max-width:650px) { .jam-export-dialog li { flex-wrap:wrap; } .jam-workspace .performance-header { flex-wrap:wrap; } }

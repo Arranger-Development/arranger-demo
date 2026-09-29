@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import AudioEngine, { createMelodySampleUrls } from '../src/audio/AudioEngine.js';
 import { DEEP_AUTUMN_DRUMS as drums, DEEP_AUTUMN_CHORD as chord, PERFORMANCE_SAMPLE_BANKS as banks } from '../src/data/performanceTimbres.js';
-import { createSection, createSession, snapshotSection, createLiveImport, readSession, sessionKey, replaceLiveColumnTrack } from '../src/app/performanceSession.js';
+import { createSection, createSession, snapshotSection, createArrangementImport, readSession, sessionKey } from '../src/app/performanceSession.js';
 import { collectProjectEvents, renderProjectToWav, getEventVolume } from '../src/export/audioFile.js';
 import { createProjectFile } from '../src/export/projectFile.js';
 
@@ -16,7 +16,7 @@ function project() {
   section.selection.chord = 'deep-autumn-chord-nostalgic-piano';
   section.timbres = { ...section.timbres, drums, chord };
   session.columns = [{ id: 'column', name: '深秋', repeat: 1, snapshot: snapshotSection(section, 'chill', profile) }];
-  return { session, state: createLiveImport(session) };
+  return { session, state: createArrangementImport(session, session.columns) };
 }
 
 function setup() {
@@ -72,9 +72,6 @@ test('chosen banks survive session, independent Live copy, single-track replacem
   assert.deepEqual(createProjectFile(state).arrangement.matrix, state.matrix);
   session.sections[0].timbres.chord = 'warm-electric-piano';
   assert.deepEqual(session.columns[0], copy);
-  const replaced = replaceLiveColumnTrack(copy, 'chord', 'deep-autumn-chord-wind-valley', 'chill', profile);
-  assert.ok(replaced.snapshot.matrix.chord.flat().filter(Boolean).every(c => c.timbreId === chord));
-  assert.deepEqual(copy.snapshot.matrix.drums.slice(0, 2), replaced.snapshot.matrix.drums);
   assert.equal(createSection().timbres.drums, 'soft-electronic-kit');
 });
 
