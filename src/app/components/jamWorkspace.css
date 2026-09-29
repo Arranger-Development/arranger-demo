@@ -11,20 +11,55 @@
 .jam-export-dialog button:disabled { opacity:.4; }
 .jam-export-dialog footer { display:flex; justify-content:flex-end; gap:12px; }
 @media(max-width:650px) { .jam-export-dialog li { flex-wrap:wrap; } .jam-workspace .performance-header { flex-wrap:wrap; } }
-.jam-workspace .jam-workbench { grid-template-columns:minmax(0,1fr) 210px; gap:20px; }
-.jam-workspace .jam-grid { --pad-size:max(44px,min(144px,calc((100cqw - 400px) / 8),calc((100cqh - 114px) / 4))); }
-.jam-effects { --pw-track:#73d49d; width:210px; border:1px solid #8c7048; border-top:4px solid var(--pw-track); border-radius:9px; background:#16120e; padding:14px; color:var(--ink); }
+.jam-workspace .jam-workbench { grid-template-columns:minmax(0,1fr) 224px; gap:20px; padding-right:20px; min-height:352px; }
+.jam-workspace .jam-grid { --pad-size:max(44px,min(144px,calc((100cqw - 400px) / 8),calc((100cqh - 138px) / 4))); }
+.jam-effects { --pw-track:#73d49d; width:100%; border:1px solid #8c7048; border-top:4px solid var(--pw-track); border-radius:9px; background:#16120e; padding:10px; color:var(--ink); }
 .jam-effects[data-track=chord] { --pw-track:#e2a15e; }.jam-effects[data-track=bass] { --pw-track:#78b5f1; }.jam-effects[data-track=melody] { --pw-track:#c58ae0; }
-.jam-effects h2 { font-size:16px; margin:0 0 12px; }.jam-effects p { font-size:12px; color:var(--pw-track); }.jam-effects .jam-effect-hint { text-align:center; color:var(--ink-2); font-size:10px; }
+.jam-effects h2 { font-size:19px; margin:0 0 6px; }.jam-effects p { margin:6px 0; font-size:14px; color:var(--pw-track); }.jam-effects .jam-effect-hint { text-align:center; color:var(--ink-2); font-size:12px; margin-bottom:0; }
 .jam-track-select { display:flex; flex-direction:column; align-items:center; gap:7px; padding:3px; border:0; border-radius:5px; color:inherit; background:transparent; }
 .jam-track-select[aria-pressed=true] { box-shadow:0 0 0 1px var(--pad-tone); }
 .jam-timbre-select { display:block; position:relative; width:32px; height:18px; text-align:center; }
 .jam-track-timbre .jam-timbre-select select { inset:0; }
-@media(max-width:900px) { .jam-workspace .jam-workbench { grid-template-columns:minmax(0,1fr) 176px; gap:10px; }.jam-effects { width:176px; padding:10px; }.jam-workspace .jam-grid { --pad-size:max(40px,min(96px,calc((100cqw - 325px) / 8),calc((100cqh - 114px) / 4))); } }
+@media(max-width:900px) { .jam-workspace .jam-workbench { grid-template-columns:minmax(0,1fr) 196px; gap:10px; padding-right:10px; }.jam-effects { padding:10px; }.jam-workspace .jam-grid { --pad-size:max(40px,min(96px,calc((100cqw - 365px) / 8),calc((100cqh - 138px) / 4))); } }
 @media(max-width:650px) { .jam-workspace { grid-template-rows:auto minmax(0,1fr); }.jam-workspace .jam-workbench { overflow:auto; }.jam-workspace .jam-body { min-height:560px; }.jam-export-dialog li strong { flex-basis:100%; } }
 .jam-loop-count { display:flex; justify-content:center; flex-wrap:wrap; gap:5px; margin-top:6px; }
-.jam-loop-count input,.jam-loop-count button { box-sizing:border-box; width:38px; height:30px; border:1px solid #947044; border-radius:5px; background:#211a14; color:var(--ink); text-align:center; font:12px inherit; }
+.jam-loop-count input,.jam-loop-count button { box-sizing:border-box; width:42px; height:32px; border:1px solid #947044; border-radius:5px; background:#211a14; color:var(--ink); text-align:center; font-family:inherit; font-size:15px; }
 .jam-loop-count button[aria-pressed=true] { background:#b38b4d; color:#1a130b; }.jam-loop-count input:disabled { opacity:.5; }.jam-loop-count small { flex-basis:100%; text-align:center; color:#ffc28d; font-size:10px; }
 .jam-saved-loop[data-dragging=true] { opacity:.45; }.jam-saved-loop[data-drop-side=before] { border-left:2px solid #f5d494; }.jam-saved-loop[data-drop-side=after] { border-right:2px solid #f5d494; }
 .jam-saved-loop .performance-loop { touch-action:pan-y; }
 .jam-workspace .jam-sequence { display:flex; align-items:center; gap:12px; }.jam-workspace .jam-loops { flex:1; min-width:0; }.jam-play-sequence { flex:none; flex-direction:column; justify-content:center; width:78px; height:85px; }.jam-play-sequence span { font-size:24px; }.jam-empty-library { flex:1; }
+
+/* Keep phrase names at their existing size, centered independently of key hints. */
+.jam-workspace .performance-pad { display:block; }
+.jam-workspace .performance-pad-top { position:absolute; top:17%; left:19%; right:19%; }
+.jam-workspace .performance-pad strong { position:absolute; top:50%; left:50%; width:64%; transform:translate(-50%,-50%); text-align:center; }
+
+/* Readable labels around the pads, including the effects deck and Loop controls. */
+.jam-workspace .performance-eyebrow { font-size:12px; }
+.jam-workspace .performance-title h1 { font-size:24px; }
+.jam-workspace .performance-tempo { font-size:13px; }
+.jam-workspace .performance-tempo input { font-size:24px; }
+.jam-workspace .performance-connect,.jam-workspace .performance-save { font-size:14px!important; }
+.jam-workspace .jam-zone-label { font-size:13px; }
+.jam-workspace .performance-track-label { font-size:16px; }
+.jam-workspace .jam-pad-replace { height:26px; font-size:13px; }
+.jam-workspace .jam-timbre-select select { font-size:14px; }
+.jam-workspace .jam-combination-actions > span,.jam-workspace .jam-empty-library { font-size:14px; }
+.jam-workspace .jam-loops { grid-auto-columns:154px; }
+.jam-workspace .performance-loop strong { font-size:15px; }
+.jam-workspace .performance-loop small { font-size:13px; }
+.jam-workspace .performance-loop-circle { font-size:15px; }
+.jam-workspace .jam-loop-menu { font-size:15px; width:256px; }
+.jam-workspace .jam-loop-menu label { font-size:15px; }
+.jam-workspace .jam-loop-more { font-size:18px!important; }
+.jam-workspace .jam-loop-count small { font-size:12px; }
+.jam-effects .dj-control-label,.jam-effects .dj-repeat-label { font-size:13px; }
+.jam-effects .dj-mixer-row { padding:6px 0; }
+.jam-effects .dj-channel-control { gap:4px; }
+.jam-effects .dj-repeat-label { margin:8px 0 4px; }
+.jam-effects .dj-channel-control output { font-size:14px; min-height:18px; }
+.jam-effects .dj-fader-scale { font-size:10px; }
+.jam-effects .dj-fader-well { width:64px; }
+.jam-effects .dj-knob-ends { width:68px; font-size:11px; }
+.jam-workspace .dj-repeat-pad { font-size:14px; height:48px; }
+.jam-export-dialog { font-size:16px; }
