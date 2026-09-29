@@ -66,7 +66,7 @@ export function createSessionPlayback(audio, notify = () => {}) {
     } catch (error) { if (request === generation) { stop(); emit({ error: error.message }); } }
   }
   return {
-    stop, isActive,
+    stop, isActive, isReady: () => isActive() && !loading,
     setTempo(value) { bpm = value; audio.setTempo(value); },
     launch(snapshot, tempo, { edit = false } = {}) {
       if (!snapshot) { stop(); return; }

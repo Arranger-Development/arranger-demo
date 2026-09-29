@@ -368,6 +368,7 @@ function useLaunchpadXCommands({
   useLayoutEffect(() => {
     modeRef.current = { enabled, performanceActive, performanceControlsRef };
     performanceMidiRef.current.reset();
+    modeRef.current.performanceControlsRef?.current?.release?.();
     chordGestureRef.current.cancel();
     releaseMelodyPads({ redraw: false });
     ledSenderRef.current.reset();
@@ -402,6 +403,7 @@ function useLaunchpadXCommands({
     if (typeof window === 'undefined') return undefined;
     const handleWindowBlur = () => {
       performanceMidiRef.current.reset();
+    modeRef.current.performanceControlsRef?.current?.release?.();
       chordGestureRef.current.cancel();
       releaseMelodyPads();
     };
@@ -449,6 +451,7 @@ function useLaunchpadXCommands({
     if (previousInput !== input) {
       if (previousInput) detachInput(previousInput);
       performanceMidiRef.current.reset();
+    modeRef.current.performanceControlsRef?.current?.release?.();
       chordGestureRef.current.cancel();
       releaseMelodyPads({ redraw: false });
     }
@@ -574,6 +577,7 @@ function useLaunchpadXCommands({
       chordGestureRef.current?.cancel();
       releaseMelodyPads({ redraw: false });
       performanceMidi.reset();
+      modeRef.current.performanceControlsRef?.current?.release?.();
       inputRef.current = null;
       outputRef.current = null;
     };

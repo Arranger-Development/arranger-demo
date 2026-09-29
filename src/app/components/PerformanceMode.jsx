@@ -25,10 +25,11 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const [status, setStatus] = useState({ mode: 'stopped', loading: false, playingId: null, pendingId: null });
   const [playback] = useState(() => createSessionPlayback(audio, setStatus));
   const [message, setMessage] = useState('');
+  const [savedAt, setSavedAt] = useState(-Infinity);
   const [exportEntries, setExportEntries] = useState(null);
   const [counts, setCounts] = useState({});
   const [requestedPage, setPage] = useState(0);
-  const page = Math.min(requestedPage, Math.max(0, Math.ceil(session.sections.length / 5) - 1));
+  const page = Math.min(requestedPage, Math.max(0, Math.ceil(session.sections.length / 8) - 1));
   const inputActive = active && !exportEntries;
   const locked = status.mode !== 'stopped';
   const draft = drafts[editingId];
@@ -77,7 +78,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     if (!editor.save((next) => writeSession(storage(), genreId, profileId, next))) {
       setMessage('保存失败，当前组合已保留，请重试。'); return;
     }
-    playback.stop(); setMessage('已保存，可继续组合下一个 loop。');
+    effects.reset(); playback.stop(); setSavedAt(performance.now()); setMessage('已保存，可继续组合下一个 loop。');
   }
   function changeMix(track, volume) {
     const current = editor.getSnapshot().session;
@@ -124,12 +125,22 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       templates,
       dispatch(command) {
         if (command.type === 'template') triggerPad(command.trackId, templates[command.trackId].findIndex((p) => p?.id === command.templateId));
-        if (command.type === 'loop') { const s = session.sections[page * 5 + command.index]; if (s) selectSection(s.id); }
+        if (command.type === 'loop') { const s = session.sections[page * 8 + command.index]; if (s) selectSection(s.id); }
         if (command.type === 'save') save();
-        if (command.type === 'togglePlayback' || command.type === 'stop') playback.stop();
-        if (command.type === 'page') setPage(Math.max(0, Math.min(Math.max(0, Math.ceil(session.sections.length / 5) - 1), page + command.delta)));
+        if (command.type === 'togglePlayback') toggleSequence();
+        if (command.type === 'stop') { effects.reset(); playback.stop(); }
+        const track = effects.getSnapshot().selectedTrack;
+        if (command.type === 'selectTrack') effects.select(command.trackId);
+        if (command.type === 'volume') changeMix(track, command.value);
+        if (command.type === 'cutoff') effects.cutoff(track, command.value);
+        if (command.type === 'repeat') {
+          if (!command.pressed) effects.repeat.release(command.token);
+          else if (playback.isReady()) effects.repeat.press(command.token, command.division, editor.getSnapshot().session.bpm);
+        }
+        if (command.type === 'page') setPage(Math.max(0, Math.min(Math.max(0, Math.ceil(session.sections.length / 8) - 1), page + command.delta)));
       },
-      getSurface: () => ({ version: 4, templates, sections: session.sections, drafts, editingId, page, status, progress: playback.getProgress(), beatPhase: playback.getBeatPhase() }),
+      release: () => effects.reset(),
+      getSurface: () => ({ selectedTrack: effects.getSnapshot().selectedTrack, volumes: editor.getSnapshot().session.volumes, cutoffs: effects.getSnapshot().cutoffs, repeat: effects.repeat.getSnapshot(), savedAt, storageError: message.includes('失败'), version: 4, templates, sections: session.sections, drafts, editingId, page, status, progress: playback.getProgress(), beatPhase: playback.getBeatPhase() }),
     };
     controlsRef.current = controls;
     return () => { if (controlsRef.current === controls) controlsRef.current = null; };
