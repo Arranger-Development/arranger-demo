@@ -98,7 +98,6 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
     </div>
     <div className="jam-combination-actions">
       <span role="status">{status.error || message || (status.loading ? '正在准备声音…' : status.pendingId ? '已排队 · 下一小节切换' : '')}</span>
-      {locked && <button type="button" className="performance-connect" onClick={() => playback.stop()}>停止</button>}
       <button type="button" className="performance-save" disabled={!hasSelection(draft.selection)} onClick={save}>
         <Save size={14} /><span>{session.sections.some((s) => s.id === editingId) ? '更新' : '保存'}{draft.kind === 'transition' ? '转场' : '段落'}</span>
       </button>
