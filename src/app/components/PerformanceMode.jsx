@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import createAudioEngine from '../../audio/createAudioEngine.js';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, performanceTemplates, hasSelection, normalizePerformanceBpm } from '../performanceModel.js';
 import { fixedPerformancePads, replacePadBinding, createSessionEditor, readSession, writeSession, snapshotSection, createExportEntry, createArrangementImport, arrangementExportLength } from '../performanceSession.js';
@@ -6,6 +6,7 @@ import { createSessionPlayback } from '../sessionPlayback.js';
 import { mapPerformanceKeyboard } from '../../input/performanceInput.js';
 import { loopRepeat } from '../loopOrder.js';
 import { createJamEffects } from '../jamEffects.js';
+import { bindJamBlankClick, returnToNewCombination } from '../jamBlankClick.js';
 import { TrackControls } from './PerformanceControls.jsx';
 import JamView from './JamView.jsx';
 import JamExportDialog from './JamExportDialog.jsx';
@@ -31,6 +32,11 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const [requestedPage, setPage] = useState(0);
   const page = Math.min(requestedPage, Math.max(0, Math.ceil(session.sections.length / 8) - 1));
   const inputActive = active && !exportEntries;
+  const workspaceRef = useRef(null);
+  useEffect(() => bindJamBlankClick(workspaceRef.current, {
+    isEnabled: () => inputActive && !playback.isActive(),
+    onClick: () => returnToNewCombination(editor, playback),
+  }), [editor, playback, inputActive]);
   const locked = status.mode !== 'stopped';
   const draft = drafts[editingId];
   const catalog = useMemo(() => performanceTemplates(genreId, profileId), [genreId, profileId]);
@@ -147,7 +153,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   });
   let exportLength = 0; let exportError = '';
   try { exportLength = arrangementExportLength(exportEntries ?? [], counts); } catch (error) { exportError = error.message; }
-  return <section className="performance-mode jam-workspace" hidden={!active} aria-label="Jam 演奏">
+  return <section ref={workspaceRef} className="performance-mode jam-workspace" hidden={!active} aria-label="Jam 演奏">
     <header className="performance-header">
       <button className="performance-connect" onClick={() => { resetPlayback(); onBack(); }}>← 创作模式</button>
       <div className="performance-title"><span className="performance-eyebrow">PROJECT ARRANGER</span><h1>Jam · 演奏</h1></div>
