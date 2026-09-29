@@ -6195,6 +6195,22 @@ body {
   z-index: 2;
 }
 
+/* The AI-only homepage uses one centered entry instead of the genre catalogue's columns. */
+.ai-entry-screen .genre-grid {
+  grid-template-columns: minmax(0, 420px);
+  justify-content: center;
+  padding-block: 16px;
+}
+
+.ai-entry-screen .genre-card {
+  min-height: 240px;
+}
+
+.ai-entry-screen .genre-art-image {
+  width: min(100%, 320px);
+  height: 120px;
+}
+
 .genre-card-shell {
   --genre-gem-asset: var(--asset-gem-amber);
 

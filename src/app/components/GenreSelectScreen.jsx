@@ -33,11 +33,11 @@ function GenreSelectScreen({
     <HardwareFlowShell
       screenClassName={entryOnly ? 'ai-entry-screen' : ''}
       ariaLabel={entryOnly ? "AI 音乐创作" : "选择曲风"}
-      consoleTitle="AETHER SYNTHESIZERS - GENRE SELECT"
+      consoleTitle={entryOnly ? "AETHER SYNTHESIZERS - CREATE WITH AI" : "AETHER SYNTHESIZERS - GENRE SELECT"}
       kicker={entryOnly ? "CREATE WITH AI" : "GENRE SELECT"}
       title={entryOnly ? "AI 音乐创作" : "选择曲风"}
     >
-      <div className="genre-grid" role="list" aria-label="曲风列表">
+      <div className="genre-grid" role="list" aria-label={entryOnly ? "创作入口" : "曲风列表"}>
         {options.map((genre) => {
           const selected = genre.id === selectedPreviewGenreId;
           const genreStyle = {
