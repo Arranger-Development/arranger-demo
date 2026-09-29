@@ -1,13 +1,15 @@
 import { PERFORMANCE_SAMPLE_BANKS } from '../../data/performanceTimbres.js';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Save } from 'lucide-react';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, hasSelection } from '../performanceModel.js';
 import { availablePadTemplates, EXTRA_PHRASE_PLACEHOLDERS, MAIN_PHRASE_SLOTS, TRANSITION_PHRASE_SLOTS, TIMBRE_OPTIONS } from '../performanceSession.js';
+import useLoopDrag from './useLoopDrag.js';
+import { loopRepeat } from '../loopOrder.js';
 import { performanceKeyLabel } from '../../input/performanceInput.js';
 import PhrasePerimeterProgress from './PhrasePerimeterProgress.jsx';
 import { PERFORMANCE_TRACK_ICONS } from './icons.js';
 
-void [Check, ChevronDown, Save, PhrasePerimeterProgress, SectionDial, LoopActions];
+void [Check, ChevronDown, Save, PhrasePerimeterProgress, SectionDial, LoopActions, LoopRepeat];
 
 const DEFAULT_TIMBRE_LABELS = {
   'soft-electronic-kit': '柔和电子鼓',
@@ -16,7 +18,7 @@ const DEFAULT_TIMBRE_LABELS = {
   'airy-synth-lead': '空气感合成器',
 };
 
-function SectionDial({ playback, section, playing, editing, pending, unsaved, onSelect }) {
+function SectionDial({ playback, section, playing, editing, pending, unsaved, onSelect, dragProps }) {
   const ring = useRef(null);
   useEffect(() => {
     if (!playing) { ring.current?.setAttribute('stroke-dashoffset', '100'); return undefined; }
@@ -29,14 +31,14 @@ function SectionDial({ playback, section, playing, editing, pending, unsaved, on
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [playback, section.id, playing]);
-  return <button type="button" onClick={onSelect} data-section-id={section.id} aria-pressed={editing}
+  return <button type="button" {...dragProps} onClick={onSelect} aria-pressed={editing}
     className={`performance-loop ${editing ? 'is-editing' : ''} ${playing ? 'is-playing' : ''} ${pending ? 'is-pending' : ''}`}>
     <span className="performance-loop-dial">
       <svg className="performance-loop-progress" viewBox="0 0 64 64" aria-hidden="true">
         <circle className="performance-loop-rail" cx="32" cy="32" r="29" />
         <circle ref={ring} className="performance-loop-elapsed" cx="32" cy="32" r="29" pathLength="100" strokeDasharray="100" strokeDashoffset="100" />
       </svg>
-      <span className="performance-loop-circle">{section.kind === 'transition' ? '单次' : '∞'}</span>
+      <span className="performance-loop-circle">{loopRepeat(section) === null ? '∞' : `×${loopRepeat(section)}`}</span>
     </span>
     <strong>{section.name}</strong>
     <small>{pending ? '待播放' : playing ? '播放中' : editing ? '编辑中' : section.kind === 'transition' ? '转场' : '主段落'} · {unsaved ? '未保存' : hasSelection(section.selection) ? '已保存' : '空位'}</small>
@@ -44,9 +46,10 @@ function SectionDial({ playback, section, playing, editing, pending, unsaved, on
 }
 
 export default function JamView({ active, session, drafts, editingId, draft, templates, status, message, playback,
-  triggerPad, replacePad, catalog, selectSection, updateTimbre, save, renameSection, removeSection, selectedTrack, selectTrack, effectsPanel }) {
+  triggerPad, replacePad, catalog, selectSection, updateTimbre, save, renameSection, removeSection, selectedTrack, selectTrack, effectsPanel, reorderSection, changeRepeat }) {
   const locked = status.mode !== 'stopped';
   const sectionsRef = useRef(null);
+  const { drag: dragState, ...drag } = useLoopDrag({ disabled: locked, onDrop: reorderSection });
   useEffect(() => {
     const button = [...(sectionsRef.current?.children ?? [])].find((el) => el.dataset.sectionId === editingId);
     button?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -101,11 +104,13 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
       </button>
     </div>
     <section className="performance-sequence jam-sequence" aria-label="保存的 loop">
-      {session.sections.length ? <div ref={sectionsRef} className="performance-loops jam-loops">
-        {session.sections.map((s) => <div className="jam-saved-loop" key={s.id} data-section-id={s.id}>
+      {session.sections.length ? <div ref={el => { sectionsRef.current = el; drag.setScrollElement(el); }} className="performance-loops jam-loops">
+        {session.sections.map((s) => <div className="jam-saved-loop" key={s.id} data-section-id={s.id} data-dragging={dragState?.id === s.id} data-drop-side={dragState?.targetId === s.id ? dragState.side : undefined}>
           <SectionDial playback={playback} section={s}
             playing={active && status.playingId === s.id} pending={status.pendingId === s.id} editing={editingId === s.id}
-            unsaved={JSON.stringify(drafts[s.id]) !== JSON.stringify(s)} onSelect={() => selectSection(s.id)} />
+            unsaved={JSON.stringify(drafts[s.id]) !== JSON.stringify(s)} onSelect={(e) => { if (!drag.suppressClick(e)) selectSection(s.id); }}
+            dragProps={{ onPointerDown: e => drag.begin(e, 'loop', s.id), onPointerMove: drag.move, onPointerUp: drag.end, onPointerCancel: drag.cancel, onLostPointerCapture: drag.cancel }} />
+          <LoopRepeat key={`${s.id}:${s.repeat}`} section={s} disabled={locked} onChange={changeRepeat} />
           <LoopActions disabled={locked} section={s} rename={renameSection} remove={removeSection} />
         </div>)}
       </div> : <p className="jam-empty-library">保存后，loop 会显示在这里</p>}
@@ -132,4 +137,26 @@ function LoopActions({ section, rename, remove, disabled }) {
       </form>
     </div>
   </>;
+}
+
+
+function LoopRepeat({ section, disabled, onChange }) {
+  const repeat = loopRepeat(section);
+  const [value, setValue] = useState(String(repeat ?? 1));
+  const [error, setError] = useState('');
+  const commit = () => {
+    if (disabled || repeat === null) return;
+    const count = Number(value);
+    if (!value.trim() || !Number.isSafeInteger(count) || count < 1) { setError('请输入正整数'); return; }
+    setError(''); onChange(section.id, count);
+  };
+  return <div className="jam-loop-count">
+    <input aria-label={`${section.name}循环次数`} disabled={disabled || repeat === null} type="number" min="1" step="1" value={repeat === null ? '' : value} placeholder="∞"
+      onChange={e => setValue(e.target.value)} onBlur={commit} onKeyDown={e => {
+        if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+        if (e.key === 'Escape') { e.stopPropagation(); setValue(String(repeat ?? 1)); setError(''); }
+      }} />
+    <button type="button" disabled={disabled} aria-label={`${section.name}无限循环`} aria-pressed={repeat === null} onClick={() => onChange(section.id, repeat === null ? 1 : null)}>∞</button>
+    {error && <small role="alert">{error}</small>}
+  </div>;
 }

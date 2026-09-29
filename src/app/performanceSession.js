@@ -2,6 +2,7 @@ import { DEEP_AUTUMN_DRUMS, DEEP_AUTUMN_CHORD, DEEP_AUTUMN_BASS, DEEP_AUTUMN_MEL
 import { PERFORMANCE_TRACKS as TRACKS, emptySelection, performanceTemplates, createPerformanceMatrix, normalizePerformanceBpm, performanceStorageKey, hasSelection } from './performanceModel.js';
 import { createDefaultTrackState } from '../domain/trackInstances.js';
 import { createClipRecord } from '../domain/clipHelpers.js';
+import { insertLoop, loopRepeat } from './loopOrder.js';
 import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
 
 export const SESSION_VERSION = 4;
@@ -18,7 +19,7 @@ export const TIMBRE_OPTIONS = {
 export const defaultTimbres = () => Object.fromEntries(TRACKS.map((id) => [id, TIMBRE_OPTIONS[id][0]]));
 export const sessionKey = (genre, profile) => `arranger-performance:v4:${profile ?? genre}`;
 export function createSection(kind = 'main', number = 1, timbres = defaultTimbres()) {
-  return { id: uid(), name: `${kind === 'transition' ? '转场' : '段落'} ${number}`, kind, selection: emptySelection(), timbres: { ...timbres } };
+  return { id: uid(), name: `${kind === 'transition' ? '转场' : '段落'} ${number}`, kind, repeat: kind === 'transition' ? 1 : null, selection: emptySelection(), timbres: { ...timbres } };
 }
 export function nextSectionNumber(sections, kind) {
   const prefix = kind === 'transition' ? '转场' : '段落';
@@ -76,7 +77,7 @@ export function readSession(storage, genre, profile, bpm, recommendation) {
       const normalizeSection = (s, i) => ({ ...createSection(s.kind === 'transition' ? 'transition' : 'main', i + 1), ...s,
         id: typeof s.id === 'string' ? s.id : uid(), name: String(s.name || `段落 ${i + 1}`),
         selection: Object.fromEntries(TRACKS.map((t) => [t, catalog[t].some((p) => p.id === s.selection?.[t]) ? s.selection[t] : null])),
-        timbres: { ...defaultTimbres(), ...s.timbres },
+        timbres: { ...defaultTimbres(), ...s.timbres }, repeat: loopRepeat(s),
       });
       return { ...base, bpm: normalizePerformanceBpm(value.bpm),
         sections: value.sections.map(normalizeSection).filter((s) => hasSelection(s.selection)),
@@ -194,7 +195,7 @@ export function createSessionEditor(initial, { catalog = {}, timbres } = {}) {
       const existing = state.session.sections.find((s) => s.id === state.editingId);
       const kind = inferSectionKind(draft.selection, catalog);
       const automaticName = !draft.name.trim() || (existing?.kind !== kind && /^(段落|转场)\s*\d+$/.test(draft.name));
-      const saved = { ...clone(draft), kind, id: existing?.id ?? uid(),
+      const saved = { ...clone(draft), kind, repeat: existing ? loopRepeat(existing) : (kind === 'transition' ? 1 : null), id: existing?.id ?? uid(),
         name: automaticName ? `${kind === 'transition' ? '转场' : '段落'} ${nextSectionNumber(state.session.sections, kind)}` : draft.name.trim() };
       const sections = existing ? state.session.sections.map((s) => s.id === saved.id ? saved : s) : [...state.session.sections, saved];
       const next = { ...state.session, sections };
@@ -213,12 +214,22 @@ export function createSessionEditor(initial, { catalog = {}, timbres } = {}) {
       const drafts = { ...state.drafts }; delete drafts[id];
       return update({ session: { ...state.session, sections }, drafts, editingId: state.editingId === id ? NEW_COMBINATION_ID : state.editingId });
     },
+    reorder(id, targetId, side) {
+      const sections = insertLoop(state.session.sections, id, targetId, side);
+      return sections === state.session.sections ? state : sessionPatch({ sections });
+    },
+    setRepeat(id, repeat) {
+      if (repeat !== null && (!Number.isSafeInteger(repeat) || repeat < 1)) return state;
+      if (!state.session.sections.some(s => s.id === id)) return state;
+      return update({ session: { ...state.session, sections: state.session.sections.map(s => s.id === id ? { ...s, repeat } : s) },
+        drafts: { ...state.drafts, [id]: { ...state.drafts[id], repeat } } });
+    },
     patch: (patch) => sessionPatch(clone(patch)),
   };
 }
 
 // Export entries are disposable snapshots; they never enter local session storage.
 export function createExportEntry(section, genre, profile) {
-  return { id: uid(), name: section.name, repeat: section.repeat === undefined ? (section.kind === 'transition' ? 1 : null) : section.repeat,
+  return { id: uid(), name: section.name, repeat: loopRepeat(section),
     snapshot: snapshotSection(section, genre, profile) };
 }

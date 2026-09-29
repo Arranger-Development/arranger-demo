@@ -22,3 +22,8 @@
 .jam-track-timbre .jam-timbre-select select { inset:0; }
 @media(max-width:900px) { .jam-workspace .jam-workbench { grid-template-columns:minmax(0,1fr) 176px; gap:10px; }.jam-effects { width:176px; padding:10px; }.jam-workspace .jam-grid { --pad-size:max(40px,min(96px,calc((100cqw - 325px) / 8),calc((100cqh - 114px) / 4))); } }
 @media(max-width:650px) { .jam-workspace { grid-template-rows:auto minmax(0,1fr); }.jam-workspace .jam-workbench { overflow:auto; }.jam-workspace .jam-body { min-height:560px; }.jam-export-dialog li strong { flex-basis:100%; } }
+.jam-loop-count { display:flex; justify-content:center; flex-wrap:wrap; gap:5px; margin-top:6px; }
+.jam-loop-count input,.jam-loop-count button { box-sizing:border-box; width:38px; height:30px; border:1px solid #947044; border-radius:5px; background:#211a14; color:var(--ink); text-align:center; font:12px inherit; }
+.jam-loop-count button[aria-pressed=true] { background:#b38b4d; color:#1a130b; }.jam-loop-count input:disabled { opacity:.5; }.jam-loop-count small { flex-basis:100%; text-align:center; color:#ffc28d; font-size:10px; }
+.jam-saved-loop[data-dragging=true] { opacity:.45; }.jam-saved-loop[data-drop-side=before] { border-left:2px solid #f5d494; }.jam-saved-loop[data-drop-side=after] { border-right:2px solid #f5d494; }
+.jam-saved-loop .performance-loop { touch-action:pan-y; }

@@ -136,6 +136,8 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         <TrackControls key={selectedTrack} track={selectedTrack} session={session} changeMix={changeMix} effects={effects} cutoff={cutoffs[selectedTrack]} repeatEnabled={inputActive && locked && !status.loading} />
         <p className="jam-effect-hint">按住重复 · 松开恢复</p></aside>}
       catalog={catalog} replacePad={replacePad} triggerPad={triggerPad} selectSection={selectSection} updateTimbre={updateTimbre}
+      reorderSection={(id, target, side) => { if (!locked) { editor.reorder(id, target, side); persist(); } }}
+      changeRepeat={(id, repeat) => { if (!locked) { editor.setRepeat(id, repeat); persist(); } }}
       save={save} renameSection={(id, name) => { if (!locked) { editor.rename(id, name); persist(); } }}
       removeSection={(id) => { if (!locked) { editor.remove(id); persist(); } }} />
     {exportEntries && <JamExportDialog entries={exportEntries} sections={session.sections} onEntriesChange={setExportEntries}
