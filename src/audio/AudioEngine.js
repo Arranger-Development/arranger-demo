@@ -1246,6 +1246,11 @@ export default class AudioEngine {
     await this.startAudio();
     if (requestId !== this.playRequestId) return false;
     const trackId = options.trackId ?? 'bass';
+    if (options.timbreId) {
+      const ready = await this.prepareMelodyTimbre(options.timbreId, trackId, options.playbackMode);
+      if (!ready || requestId !== this.playRequestId) return false;
+      return this.triggerMelodyBankEvent({ ...options, trackId, note, duration }, time ?? this.now(), options.bpm);
+    }
     if (trackId === 'bass') return this.triggerBassSampler(note, duration, time ?? this.now());
     const nodes = this.ensureInstanceAudioNodes(trackId, 'bass');
     if (!nodes?.bassSampler?.triggerAttackRelease) return false;
@@ -1619,6 +1624,7 @@ export default class AudioEngine {
         }
         if (event.type === 'bass') {
           const trackId = event.trackId ?? 'bass';
+          if (event.timbreId) { this.triggerMelodyBankEvent(event, time, transport.bpm?.value ?? DEFAULT_BPM); continue; }
           if (trackId === 'bass') {
             this.triggerBassSampler(
               event.note,
@@ -1747,7 +1753,7 @@ export default class AudioEngine {
       for (const cell of bars.flat()) {
         const bank = getPerformanceSampleBank(getTrackTypeFromInstanceId(trackId), cell?.requestedTimbreId ?? cell?.timbreId);
         if (bank?.track === 'drums') drumTimbres.set(`${trackId}:${bank.id}`, [trackId, bank.id]);
-        if (bank?.track === 'chord') addTimbre(trackId, bank.id, 'natural');
+        if (bank && bank.track !== 'drums') addTimbre(trackId, bank.id, 'natural');
         if (!bank && ['melody', 'note', 'notes'].includes(cell?.type) && cell.timbreId) {
           addTimbre(trackId, cell.timbreId, cell.playbackMode);
         }

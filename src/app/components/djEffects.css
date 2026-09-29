@@ -1,5 +1,5 @@
 /* Scoped to Live's compact effects deck; shared workspace buttons stay untouched. */
-.pw-live-effects .dj-controls { color: #ddc49c; }
+.jam-effects .dj-controls { color: #ddc49c; }
 .dj-mixer-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 0 14px; border-block: 1px solid #a9844538; }
 .dj-channel-control { display: flex; flex-direction: column; align-items: center; gap: 7px; min-width: 0; }
 .dj-control-label,.dj-repeat-label { font-size: 10px; color: #cbb48f; letter-spacing: .12em; }
@@ -10,7 +10,7 @@
 .dj-fader-scale span:first-child { top: 0; }
 .dj-fader-scale span:nth-child(2) { top: 20%; }
 .dj-fader-scale span:last-child { bottom: 0; }
-.pw-workspace .pw-live-effects input.dj-fader { appearance: none; -webkit-appearance: none; writing-mode: vertical-lr; direction: rtl; position: absolute; right: 4px; top: 5px; margin: 0; width: 30px; height: 98px; background: transparent; cursor: ns-resize; touch-action: none; }
+.jam-workspace .jam-effects input.dj-fader { appearance: none; -webkit-appearance: none; writing-mode: vertical-lr; direction: rtl; position: absolute; right: 4px; top: 5px; margin: 0; width: 30px; height: 98px; background: transparent; cursor: ns-resize; touch-action: none; }
 .dj-fader::-webkit-slider-runnable-track { width: 4px; border-radius: 3px; background: #080706; box-shadow: 1px 0 #c7a36a50; }
 .dj-fader::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 28px; height: 15px; margin-left: -12px; border-radius: 3px; border: 1px solid #ba975e; background: linear-gradient(#e8c68b,#796039 42%,#20190f 44%,#20190f 54%,#bc975d 58%,#594529); box-shadow: 0 3px 4px #000c,inset 0 1px #fff6; }
 .dj-fader::-moz-range-track { width: 4px; border-radius: 3px; background: #080706; }
@@ -22,11 +22,11 @@
 .dj-knob-ends { display: flex; justify-content: space-between; width: 58px; font-size: 8px; color: #9e8969; }
 .dj-repeat-label { margin: 14px 0 8px; }
 .dj-repeat-pads { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; }
-.pw-workspace .dj-repeat-pad { position: relative; height: 44px; min-width: 0; padding: 13px 0 3px; border: 1px solid #685338; border-radius: 5px; color: #dfc18d; background: linear-gradient(#372e22,#18140e); box-shadow: inset 0 1px #d9b36945,inset 0 -3px #0008,0 2px 3px #000b; font: 11px ui-monospace,monospace; touch-action: none; user-select: none; }
+.jam-workspace .dj-repeat-pad { position: relative; height: 44px; min-width: 0; padding: 13px 0 3px; border: 1px solid #685338; border-radius: 5px; color: #dfc18d; background: linear-gradient(#372e22,#18140e); box-shadow: inset 0 1px #d9b36945,inset 0 -3px #0008,0 2px 3px #000b; font: 11px ui-monospace,monospace; touch-action: none; user-select: none; }
 .dj-pad-led { position: absolute; top: 7px; left: 27%; width: 46%; height: 3px; border-radius: 2px; background: color-mix(in srgb,var(--pw-track) 35%,#171310); }
-.pw-workspace .dj-repeat-pad:hover:not(:disabled) { border-color: var(--pw-track); background: linear-gradient(#4b3b28,#241b12); }
-.pw-workspace .dj-repeat-pad[aria-pressed=true] { color: #fff0d6; border-color: var(--pw-track); background: linear-gradient(color-mix(in srgb,var(--pw-track) 35%,#282018),#201910); box-shadow: inset 0 2px 5px #000b,0 0 8px color-mix(in srgb,var(--pw-track) 50%,transparent); transform: translateY(1px); }
+.jam-workspace .dj-repeat-pad:hover:not(:disabled) { border-color: var(--pw-track); background: linear-gradient(#4b3b28,#241b12); }
+.jam-workspace .dj-repeat-pad[aria-pressed=true] { color: #fff0d6; border-color: var(--pw-track); background: linear-gradient(color-mix(in srgb,var(--pw-track) 35%,#282018),#201910); box-shadow: inset 0 2px 5px #000b,0 0 8px color-mix(in srgb,var(--pw-track) 50%,transparent); transform: translateY(1px); }
 .dj-repeat-pad[aria-pressed=true] .dj-pad-led { background: var(--pw-track); box-shadow: 0 0 7px var(--pw-track); }
-.pw-workspace .dj-repeat-pad:disabled { opacity: .4; cursor: default; }
+.jam-workspace .dj-repeat-pad:disabled { opacity: .4; cursor: default; }
 .dj-knob:focus-visible,.dj-fader:focus-visible,.dj-repeat-pad:focus-visible { outline: 2px solid var(--pw-track); outline-offset: 3px; }
-.pw-live-effects .pw-effect-hint { margin-top: 12px; font-size: 10px; text-align: center; }
+.jam-effects .pw-effect-hint { margin-top: 12px; font-size: 10px; text-align: center; }

@@ -378,8 +378,8 @@ function ResultsView({
 
       </section>
       <div className="results-continue-actions">
-        <button type="button" onClick={() => onApply('live')}>在演出模式继续</button>
-        <button type="button" onClick={() => onApply('creation')}>在创作模式继续</button>
+        <button className="hardware-flow-button" type="button" onClick={() => onApply('jam')}>在演出模式继续</button>
+        <button className="hardware-flow-button" type="button" onClick={() => onApply('creation')}>在创作模式继续</button>
       </div>
     </div>
   );

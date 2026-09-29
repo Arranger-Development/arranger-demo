@@ -142,5 +142,149 @@
     "file": "samples/DeepAutumn/Chord/E4.wav",
     "sha256": "cf0e9ced95133b9b80af92677fa495b9a3db6ecf5a8f902a5f757243796d7c5d",
     "bytes": 396980
+  },
+  {
+    "source": "Bass/Loop Demo 1 G0.wav",
+    "file": "samples/DeepAutumn/Bass/G0.wav",
+    "sha256": "92ac354a2e1e1ecc1bbc50b16702af54914b4cac613d85f756dd622d45dfb440",
+    "bytes": 502436
+  },
+  {
+    "source": "Bass/Loop Demo 1 F0.wav",
+    "file": "samples/DeepAutumn/Bass/F0.wav",
+    "sha256": "f1b70e5f12262f32163c5316ae335c28ae9eaddb628110d847a93b4e561fb3fc",
+    "bytes": 502436
+  },
+  {
+    "source": "Bass/Loop Demo 1 F1.wav",
+    "file": "samples/DeepAutumn/Bass/F1.wav",
+    "sha256": "ca57e9a226466383b748238efa594ee6bca77ddadbc458f6edbf3bd158a95dc7",
+    "bytes": 502436
+  },
+  {
+    "source": "Bass/Loop Demo 1 A0.wav",
+    "file": "samples/DeepAutumn/Bass/A0.wav",
+    "sha256": "ca2377a33363ef81cff7249fa46f045c19441bd0c8a4979593cd6c4b47b1fdda",
+    "bytes": 502436
+  },
+  {
+    "source": "Bass/Loop Demo 1 C1.wav",
+    "file": "samples/DeepAutumn/Bass/C1.wav",
+    "sha256": "25999a8ae89e745fa6fb20bbb34257627697e281e6b82a2ccb0e0ef0d995ad0b",
+    "bytes": 502436
+  },
+  {
+    "source": "Bass/Loop Demo 1 B0.wav",
+    "file": "samples/DeepAutumn/Bass/B0.wav",
+    "sha256": "2264a476cd022e8170c7642bcd826f53fcedcdcefea89a215c8ba61aadd8db4d",
+    "bytes": 502436
+  },
+  {
+    "source": "Bass/Loop Demo 1 E0.wav",
+    "file": "samples/DeepAutumn/Bass/E0.wav",
+    "sha256": "c758adcdd4723aef98e740d4a22314f43951ed5eb0f77e1325d6eb05759ce43d",
+    "bytes": 476360
+  },
+  {
+    "source": "Bass/Loop Demo 1 E1.wav",
+    "file": "samples/DeepAutumn/Bass/E1.wav",
+    "sha256": "151c014870c18514160d85d2cf90e61f82c480d051142891d2c06fba2293458b",
+    "bytes": 502436
+  },
+  {
+    "source": "Bass/Loop Demo 1 D1.wav",
+    "file": "samples/DeepAutumn/Bass/D1.wav",
+    "sha256": "6914e6661fb10c37e657de8bffb7fd687e909907089e1fd4128694c45180a0ac",
+    "bytes": 502436
+  },
+  {
+    "source": "Melody/Loop Demo 1 F4.wav",
+    "file": "samples/DeepAutumn/Melody/F4.wav",
+    "sha256": "b4935eb1435769404298dfde68ba1f1a87a8e88fd7ed1152a43241a2a2f00840",
+    "bytes": 635120
+  },
+  {
+    "source": "Melody/Loop Demo 1 G3.wav",
+    "file": "samples/DeepAutumn/Melody/G3.wav",
+    "sha256": "518934d3cb549176a7fc14ab4a5968f8194b00858c04b15c56c3fb284784e049",
+    "bytes": 635120
+  },
+  {
+    "source": "Melody/Loop Demo 1 F3.wav",
+    "file": "samples/DeepAutumn/Melody/F3.wav",
+    "sha256": "baaf43ee8d7b784b6a1d498924268718b1ba5b0beccb12fd72d61fcc61705898",
+    "bytes": 635120
+  },
+  {
+    "source": "Melody/Loop Demo 1 G4.wav",
+    "file": "samples/DeepAutumn/Melody/G4.wav",
+    "sha256": "a2361987c1241edf7c2bfe1995daf15900a0f1f1c5b3dbe389cd157ea0c95a31",
+    "bytes": 635120
+  },
+  {
+    "source": "Melody/Loop Demo 1 A3.wav",
+    "file": "samples/DeepAutumn/Melody/A3.wav",
+    "sha256": "dfd31b45e8e9a611940a5e9478e0861ecf5f7eb0eb3b24bad5da2cd33c3fa433",
+    "bytes": 635120
+  },
+  {
+    "source": "Melody/Loop Demo 1 A4.wav",
+    "file": "samples/DeepAutumn/Melody/A4.wav",
+    "sha256": "2a6a1dc3b605f08227e0106f9e81eb7f9efec20680a563f8cebbd859c2390a4a",
+    "bytes": 635120
+  },
+  {
+    "source": "Melody/Loop Demo 1 C3.wav",
+    "file": "samples/DeepAutumn/Melody/C3.wav",
+    "sha256": "4a5cedf4491fe6f907e5aa67f6671caf5fa4c1b75188b5dfb08898c2a4fcb854",
+    "bytes": 635120
+  },
+  {
+    "source": "Melody/Loop Demo 1 B4.wav",
+    "file": "samples/DeepAutumn/Melody/B4.wav",
+    "sha256": "8eff2c095c9c6fb52ae6c8bf30fd7600121e479028d0eb4fca759ae52536c104",
+    "bytes": 635120
+  },
+  {
+    "source": "Melody/Loop Demo 1 C5.wav",
+    "file": "samples/DeepAutumn/Melody/C5.wav",
+    "sha256": "fa1d54ae5bc485d5f94ebc6bd81d49ad89d6576689ee8593691325ea7ba5440f",
+    "bytes": 635120
+  },
+  {
+    "source": "Melody/Loop Demo 1 C4.wav",
+    "file": "samples/DeepAutumn/Melody/C4.wav",
+    "sha256": "a4fb652493940698ad042fa2c65f95cf6f33adbe7605780d71b7908485ebf516",
+    "bytes": 635120
+  },
+  {
+    "source": "Melody/Loop Demo 1 B3.wav",
+    "file": "samples/DeepAutumn/Melody/B3.wav",
+    "sha256": "f68fc420ea639db4834e76e81de108e46f79869ec14721a2891dd6932a3935fc",
+    "bytes": 635120
+  },
+  {
+    "source": "Melody/Loop Demo 1 D4.wav",
+    "file": "samples/DeepAutumn/Melody/D4.wav",
+    "sha256": "2721a68f1ea8b4625efe4faf7937a296b5ee6fb906d0bb7cc63aeb6e624a502a",
+    "bytes": 635120
+  },
+  {
+    "source": "Melody/Loop Demo 1 E3.wav",
+    "file": "samples/DeepAutumn/Melody/E3.wav",
+    "sha256": "8482c59ca48b41198cef6f9029d21ec5572dd51f13305374d7ed6bc261eb5db9",
+    "bytes": 635120
+  },
+  {
+    "source": "Melody/Loop Demo 1 D3.wav",
+    "file": "samples/DeepAutumn/Melody/D3.wav",
+    "sha256": "eff0060a069999fad1ad96f9d36df3817f0c2b2ca7780080f47c2e45dd461892",
+    "bytes": 635120
+  },
+  {
+    "source": "Melody/Loop Demo 1 E4.wav",
+    "file": "samples/DeepAutumn/Melody/E4.wav",
+    "sha256": "b9468f2b4850d20377c205744d7b2c91a62b4eae126292209c95799156972a3b",
+    "bytes": 635120
   }
 ]

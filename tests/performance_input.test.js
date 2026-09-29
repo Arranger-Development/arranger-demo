@@ -53,16 +53,26 @@ test('Launchpad maps physical top rows and bottom controls; repeat/release/press
       assert.equal(input.handle([0x80, note, 64], templates), null);
     }
   });
-  for (let index = 0; index < 5; index += 1) assert.deepEqual(input.handle([0x90, 11 + index, 1], templates), { type: 'loop', index });
-  assert.deepEqual(input.handle([0x90, 17, 100], templates), { type: 'save' });
-  assert.deepEqual(input.handle([0x90, 18, 100], templates), { type: 'togglePlayback' });
-  assert.equal(input.handle([0x90, 18, 0], templates), null);
-  assert.deepEqual(input.handle([0x90, 18, 100], templates), { type: 'togglePlayback' });
-  for (const data of [[0xb0, 98, 127], [0xb0, 49, 127], [0x91, 81, 127], [0x90, 16, 127], [0x90, 21, 127], [0x90, 41, 127]]) assert.equal(input.handle(data, templates), null);
-  assert.deepEqual(input.handle([0x90, 31, 127], templates), { type: 'page', delta: -1 });
-  assert.deepEqual(input.handle([0x90, 32, 127], templates), { type: 'page', delta: 1 });
+  for (let index = 0; index < 8; index++) assert.deepEqual(input.handle([0x90,11+index,127],templates), {type:'loop',index});
+  assert.deepEqual(input.handle([0xb0,97,127],templates), {type:'save'});
+  assert.deepEqual(input.handle([0xb0,98,127],templates), {type:'togglePlayback'});
+  assert.equal(input.handle([0xb0,98,100],templates),null);
+  input.handle([0xb0,98,0],templates);
+  assert.deepEqual(input.handle([0xb0,98,127],templates), {type:'togglePlayback'});
+  assert.deepEqual(input.handle([0xb0,93,127],templates), {type:'page',delta:-1});
+  assert.deepEqual(input.handle([0xb0,94,127],templates), {type:'page',delta:1});
+  [89,79,69,59].forEach((cc,i)=>assert.deepEqual(input.handle([0xb0,cc,127],templates),{type:'selectTrack',trackId:PERFORMANCE_TRACKS[i]}));
+  [-24,-18,-12,-9,-6,-3,0,6].forEach((value,i)=>assert.deepEqual(input.handle([0x90,41+i,127],templates),{type:'volume',value}));
+  [100,250,500,1000,2000,5000,10000,20000].forEach((value,i)=>assert.deepEqual(input.handle([0x90,31+i,127],templates),{type:'cutoff',value}));
+  [4,8,16].forEach((division,i)=>{
+    const token=`midi:note:${21+i}`;
+    assert.deepEqual(input.handle([0x90,21+i,127],templates),{type:'repeat',token,division,pressed:true});
+    assert.equal(input.handle([0xa0,21+i,127],templates),null);
+    assert.deepEqual(input.handle([0x80,21+i,0],templates),{type:'repeat',token,division,pressed:false});
+  });
+  for (const data of [[0xb0,49,127],[0xb0,95,127],[0x90,24,127],[0x91,81,127]]) assert.equal(input.handle(data,templates),null);
   input.reset();
-  assert.deepEqual(input.handle([0x90, 18, 100], templates), { type: 'togglePlayback' });
+  assert.deepEqual(input.handle([0xb0,98,127],templates),{type:'togglePlayback'});
 });
 
 test('consecutive inputs before rendering preserve tracks, drafts and independent saved snapshots', () => {
@@ -97,47 +107,28 @@ test('consecutive inputs before rendering preserve tracks, drafts and independen
   assert.equal(changes, previous);
 });
 
-test('LEDs distinguish templates, editing/saved loops, save feedback and transport; unused pads stay off', () => {
-  const editor = createPerformanceEditor(session());
-  editor.toggleTemplate('drums', templates.drums[0].id);
-  editor.save();
-  editor.selectLoop(1);
-  const state = editor.getSnapshot();
-  const base = { templates, ...state, saved: state.session.saved, status: { mode: 'stopped' } };
-  const frame = createLaunchpadXPerformanceLedFrame(base);
-  assert.equal(frame.length, 80);
-  assert.equal(light(frame, 81), 19);
-  assert.equal(light(frame, 12), 17);
-  assert.equal(light(frame, 11), 42);
-  assert.equal(light(frame, 13), 15);
-  assert.equal(light(frame, 18), 17);
-  for (const note of [87, 88, 76, 65, 66, 56, 41, 31, 21, 16]) assert.equal(light(frame, note), 0);
-  assert.ok(frame.filter(([status]) => status === 0xb0).every(([, , value]) => value === 0));
-  editor.toggleTemplate('chord', templates.chord[0].id);
-  const dirty = { ...base, drafts: editor.getSnapshot().drafts };
-  assert.equal(light(createLaunchpadXPerformanceLedFrame(dirty), 71), 9);
-  assert.equal(light(createLaunchpadXPerformanceLedFrame(dirty), 17), 9);
-  assert.equal(light(createLaunchpadXPerformanceLedFrame({ ...dirty, saveFeedback: true }), 17), 17);
-  assert.equal(light(createLaunchpadXPerformanceLedFrame({ ...dirty, storageError: true }), 17), 5);
-  const loading = { ...dirty, status: { mode: 'sequence', loading: true }, progress: { segment: 0, fraction: .5 } };
-  assert.equal(light(createLaunchpadXPerformanceLedFrame(loading, 0), 18), 5);
-  assert.equal(light(createLaunchpadXPerformanceLedFrame(loading, 300), 18), 7);
-  assert.equal(light(createLaunchpadXPerformanceLedFrame(loading), 21), 0);
-});
-
-test('progress lights follow audible fraction, loop index and beat phase, including preview', () => {
-  for (const mode of ['sequence', 'preview']) {
-    const base = { templates, ...session(), selectedLoop: 4, sequenceIndices: [1, 4], status: { mode }, beatPhase: .1 };
-    for (const [fraction, count] of [[0, 1], [.125, 2], [.5, 5], [.999, 8]]) {
-      const frame = createLaunchpadXPerformanceLedFrame({ ...base, progress: { segment: 1, fraction } });
-      assert.equal(frame.filter(([status, note, value]) => status === 0x90 && note >= 21 && note <= 28 && value).length, count);
-      assert.equal(light(frame, 15), 49);
-    }
-    const frame = createLaunchpadXPerformanceLedFrame({ ...base, beatPhase: .75, progress: { segment: 0, fraction: 0 } });
-    assert.equal(light(frame, mode === 'preview' ? 15 : 12), mode === 'preview' ? 50 : 18);
-    assert.equal(light(frame, 22), 0);
-    assert.equal(light(frame, 18), 5);
-  }
+test('Jam LEDs show eight loops, selected track, slider values, repeat ownership and save feedback', () => {
+  const sections=Array.from({length:10},(_,i)=>({id:`loop-${i}`,selection:{drums:templates.drums[0].id}}));
+  const cc=(frame,n)=>frame.find(([s,k])=>s===0xb0&&k===n)?.[2];
+  const base={templates,sections,drafts:{draft:{selection:{drums:templates.drums[0].id}}},editingId:'draft',status:{mode:'jam',playingId:'loop-0',pendingId:'loop-1'},selectedTrack:'bass',volumes:{bass:-8},cutoffs:{bass:1900},repeat:8};
+  const frame=createLaunchpadXPerformanceLedFrame(base);
+  assert.equal(frame.length,80);
+  assert.equal(light(frame,81),17);
+  assert.equal(light(frame,11),15); assert.equal(light(frame,12),13); assert.equal(light(frame,18),13);
+  assert.equal(cc(frame,69),41); assert.equal(cc(frame,89),19);
+  assert.equal(light(frame,44),41); assert.equal(light(frame,45),0);
+  assert.equal(light(frame,35),41); assert.equal(light(frame,36),0);
+  assert.equal(light(frame,22),41); assert.equal(light(frame,21),43);
+  assert.equal(cc(frame,93),0); assert.equal(cc(frame,94),13);
+  assert.equal(cc(frame,97),9); assert.equal(cc(createLaunchpadXPerformanceLedFrame({...base,savedAt:10},100),97),17);
+  assert.equal(cc(createLaunchpadXPerformanceLedFrame({...base,storageError:true}),97),5);
+  for(const n of [24,25,26,27,28]) assert.equal(light(frame,n),0);
+  for(const n of [91,92,95,96,49,39,29,19]) assert.equal(cc(frame,n),0);
+  const next=createLaunchpadXPerformanceLedFrame({...base,page:1,status:{mode:'stopped'}});
+  assert.equal(light(next,11),13); assert.equal(light(next,13),0);
+  assert.equal(light(next,22),0); assert.equal(cc(next,93),13); assert.equal(cc(next,94),0);
+  const waiting=createLaunchpadXPerformanceLedFrame({...base,status:{mode:'sequence',loading:true,requestedId:'loop-2'}},300);
+  assert.equal(light(waiting,13),15); assert.equal(light(waiting,21),0); assert.equal(cc(waiting,98),7);
 });
 
 test('LED output sends only changed colors and repaints fully after reset or partial failure', () => {

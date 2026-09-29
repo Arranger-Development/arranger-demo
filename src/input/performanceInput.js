@@ -28,27 +28,43 @@ export function mapPerformanceKeyboard(event, templates) {
   return null;
 }
 
-// One press per physical depression. Releases only clear the latch; pressure,
-// peripheral controls and other MIDI channels never enter the performance route.
+export const JAM_VOLUME_STEPS = [-24, -18, -12, -9, -6, -3, 0, 6];
+export const JAM_FILTER_STEPS = [100, 250, 500, 1000, 2000, 5000, 10000, 20000];
+export const JAM_TRACK_CC = [89, 79, 69, 59];
+export function nearestJamStep(steps, value) {
+  return steps.reduce((best, step, index) => Math.abs(step - value) < Math.abs(steps[best] - value) ? index : best, 0);
+}
+
+// Programmer mode, channel 1. Repeated Note/CC presses and aftertouch are ignored.
 export function createPerformanceMidiInput() {
   const held = new Set();
   return {
     reset() { held.clear(); },
     handle(data, templates) {
       const message = parseLaunchpadXMessage(data);
-      if (message?.channel !== 1 || message.kind !== 'note') return null;
-      if (!message.pressed) { held.delete(message.number); return null; }
-      if (held.has(message.number)) return null;
-      held.add(message.number);
-      const row = 8 - Math.floor(message.number / 10);
-      const column = message.number % 10 - 1;
-      if (row >= 0 && row < 4 && column >= 0 && column < 8) {
-        return templateCommand(templates, PERFORMANCE_TRACKS[row], column);
+      if (message?.channel !== 1) return null;
+      const { number, kind, pressed } = message;
+      const token = `midi:${kind}:${number}`;
+      const repeater = kind === 'note' && number >= 21 && number <= 23;
+      if (!pressed) {
+        held.delete(token);
+        return repeater ? { type: 'repeat', token, division: [4, 8, 16][number - 21], pressed: false } : null;
       }
-      if (message.number >= 11 && message.number <= 15) return { type: 'loop', index: message.number - 11 };
-      if (message.number === 31 || message.number === 32) return { type: 'page', delta: message.number === 31 ? -1 : 1 };
-      if (message.number === 17) return { type: 'save' };
-      if (message.number === 18) return { type: 'togglePlayback' };
+      if (held.has(token)) return null;
+      held.add(token);
+      if (kind === 'control-change') {
+        if (JAM_TRACK_CC.includes(number)) return { type: 'selectTrack', trackId: PERFORMANCE_TRACKS[JAM_TRACK_CC.indexOf(number)] };
+        if (number === 93 || number === 94) return { type: 'page', delta: number === 93 ? -1 : 1 };
+        if (number === 97) return { type: 'save' };
+        if (number === 98) return { type: 'togglePlayback' };
+        return null;
+      }
+      const row = 8 - Math.floor(number / 10), column = number % 10 - 1;
+      if (row >= 0 && row < 4 && column >= 0 && column < 8) return templateCommand(templates, PERFORMANCE_TRACKS[row], column);
+      if (number >= 11 && number <= 18) return { type: 'loop', index: number - 11 };
+      if (number >= 41 && number <= 48) return { type: 'volume', value: JAM_VOLUME_STEPS[number - 41] };
+      if (number >= 31 && number <= 38) return { type: 'cutoff', value: JAM_FILTER_STEPS[number - 31] };
+      if (repeater) return { type: 'repeat', token, division: [4, 8, 16][number - 21], pressed: true };
       return null;
     },
   };

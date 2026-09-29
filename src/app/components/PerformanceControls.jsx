@@ -1,12 +1,10 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { PERFORMANCE_LABELS as LABELS } from '../performanceModel.js';
-import { createRepeatPadController } from '../repeatPadController.js';
 import './djEffects.css';
 
 void [RepeatPads, FilterKnob];
 
-function RepeatPads({ audio, track, bpm, enabled }) {
-  const [controller] = useState(() => createRepeatPadController((values) => audio.setPerformanceEffect(track, values)));
+function RepeatPads({ controller, track, bpm, enabled }) {
   const held = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   useEffect(() => {
     if (!enabled) controller.reset();
@@ -25,7 +23,7 @@ function RepeatPads({ audio, track, bpm, enabled }) {
       onPointerUp={(e) => controller.release(`pointer:${e.pointerId}:${division}`)}
       onPointerCancel={(e) => controller.release(`pointer:${e.pointerId}:${division}`)}
       onLostPointerCapture={(e) => controller.release(`pointer:${e.pointerId}:${division}`)}
-      onBlur={() => controller.releaseDivision(division)}
+      onBlur={() => { controller.release(`key:${division}: `); controller.release(`key:${division}:Enter`); }}
       onKeyDown={(e) => {
         if (![' ', 'Enter'].includes(e.key)) return;
         e.preventDefault();
@@ -86,8 +84,7 @@ export function Progress({ playback, id, bars, running }) {
   return <span className="pw-progress" aria-hidden="true"><span ref={ref} /></span>;
 }
 
-export function TrackControls({ track, session, changeMix, audio, repeatEnabled = false, beginMixEdit, commitMixEdit }) {
-  const [cutoff, setCutoff] = useState(20000);
+export function TrackControls({ track, session, changeMix, effects, cutoff, repeatEnabled = false, beginMixEdit, commitMixEdit }) {
   const volume = session.volumes[track];
   return <div className="dj-controls" data-track={track}>
     <div className="dj-mixer-row">
@@ -105,11 +102,11 @@ export function TrackControls({ track, session, changeMix, audio, repeatEnabled 
       <div className="dj-channel-control">
         <span className="dj-control-label">低通</span>
         <output>{cutoff === 20000 ? '关闭' : cutoff >= 1000 ? `${(cutoff / 1000).toFixed(1)} kHz` : `${cutoff} Hz`}</output>
-        <FilterKnob track={track} value={cutoff} onChange={(value) => { setCutoff(value); audio.setPerformanceEffect(track, { cutoff: value }); }} />
+        <FilterKnob track={track} value={cutoff} onChange={(value) => effects.cutoff(track, value)} />
         <span className="dj-knob-ends" aria-hidden="true">低<span>关闭</span></span>
       </div>
     </div>
     <div className="dj-repeat-label">重复</div>
-    <RepeatPads audio={audio} track={track} bpm={session.bpm} enabled={repeatEnabled} />
+    <RepeatPads controller={effects.repeat} track={track} bpm={session.bpm} enabled={repeatEnabled} />
   </div>;
 }
