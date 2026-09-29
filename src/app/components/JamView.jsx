@@ -44,7 +44,7 @@ function SectionDial({ playback, section, playing, editing, pending, unsaved, on
 }
 
 export default function JamView({ active, session, drafts, editingId, draft, templates, status, message, playback,
-  triggerPad, replacePad, catalog, selectSection, updateTimbre, save, renameSection, removeSection }) {
+  triggerPad, replacePad, catalog, selectSection, updateTimbre, save, renameSection, removeSection, selectedTrack, selectTrack, effectsPanel }) {
   const locked = status.mode !== 'stopped';
   const sectionsRef = useRef(null);
   useEffect(() => {
@@ -58,12 +58,13 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
         {TRACKS.map((track) => {
           const Icon = PERFORMANCE_TRACK_ICONS[track]; void Icon;
           return <div className="performance-row jam-row" data-track={track} key={track} role="group" aria-label={`${LABELS[track]}乐句`}>
-            <label className="performance-track-label jam-track-timbre" title={`切换${LABELS[track]}音色`}>
-              <Icon size={22} aria-hidden="true" /><strong>{LABELS[track]}</strong><ChevronDown size={12} aria-hidden="true" />
+            <div className="performance-track-label jam-track-timbre" data-selected={selectedTrack === track}>
+              <button type="button" className="jam-track-select" aria-label={`选择${LABELS[track]}效果轨道`} aria-pressed={selectedTrack === track} onClick={() => selectTrack?.(track)}>
+              <Icon size={22} aria-hidden="true" /><strong>{LABELS[track]}</strong></button><label className="jam-timbre-select" title={`切换${LABELS[track]}音色`}><ChevronDown size={12} aria-hidden="true" />
               <select aria-label={`${LABELS[track]}音色`} value={TIMBRE_OPTIONS[track].includes(draft.timbres[track]) ? draft.timbres[track] : TIMBRE_OPTIONS[track][0]} onChange={(e) => updateTimbre(track, e.target.value)}>
                 {TIMBRE_OPTIONS[track].map((id, i) => <option key={id} value={id}>{PERFORMANCE_SAMPLE_BANKS[id]?.label ?? DEFAULT_TIMBRE_LABELS[id] ?? `音色 ${i + 1} · 占位`}</option>)}
               </select>
-            </label>
+            </label></div>
             {[0, 1].map((group) => <div className={`jam-pad-group ${group ? 'jam-transitions' : ''}`} key={group}>
               {Array.from({ length: group ? TRANSITION_PHRASE_SLOTS : MAIN_PHRASE_SLOTS }, (_, n) => n + (group ? MAIN_PHRASE_SLOTS : 0)).map((index) => {
                 const phrase = templates[track][index]; const selected = phrase && draft.selection[track] === phrase.id;
@@ -90,7 +91,7 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
           </div>;
         })}
       </div>
-
+      {effectsPanel}
     </div>
     <div className="jam-combination-actions">
       <span role="status">{status.error || message || (status.loading ? '正在准备声音…' : status.pendingId ? '已排队 · 下一小节切换' : '')}</span>
@@ -105,20 +106,20 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
           <SectionDial playback={playback} section={s}
             playing={active && status.playingId === s.id} pending={status.pendingId === s.id} editing={editingId === s.id}
             unsaved={JSON.stringify(drafts[s.id]) !== JSON.stringify(s)} onSelect={() => selectSection(s.id)} />
-          <LoopActions section={s} rename={renameSection} remove={removeSection} />
+          <LoopActions disabled={locked} section={s} rename={renameSection} remove={removeSection} />
         </div>)}
       </div> : <p className="jam-empty-library">保存后，loop 会显示在这里</p>}
     </section>
   </main>;
 }
 
-function LoopActions({ section, rename, remove }) {
+function LoopActions({ section, rename, remove, disabled }) {
   const menu = useRef(null);
   const trigger = useRef(null);
   const close = () => { menu.current?.hidePopover(); trigger.current?.focus(); };
   return <>
     <button ref={trigger} type="button" className="performance-connect jam-loop-more" aria-label={`${section.name}操作`}
-      popoverTarget={`loop-menu-${section.id}`} onClick={(event) => {
+      disabled={disabled} popoverTarget={`loop-menu-${section.id}`} onClick={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
         menu.current.style.left = `${Math.max(12, Math.min(rect.left, window.innerWidth - 240))}px`;
         menu.current.style.top = `${Math.max(12, rect.top - 135)}px`;

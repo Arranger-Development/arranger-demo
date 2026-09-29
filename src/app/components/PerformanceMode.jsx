@@ -1,22 +1,26 @@
 import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import createAudioEngine from '../../audio/createAudioEngine.js';
-import { PERFORMANCE_TRACKS as TRACKS, performanceTemplates, hasSelection, normalizePerformanceBpm } from '../performanceModel.js';
+import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, performanceTemplates, hasSelection, normalizePerformanceBpm } from '../performanceModel.js';
 import { fixedPerformancePads, replacePadBinding, createSessionEditor, readSession, writeSession, snapshotSection, createExportEntry, createArrangementImport, arrangementExportLength } from '../performanceSession.js';
 import { createSessionPlayback } from '../sessionPlayback.js';
 import { mapPerformanceKeyboard } from '../../input/performanceInput.js';
+import { createJamEffects } from '../jamEffects.js';
+import { TrackControls } from './PerformanceControls.jsx';
 import JamView from './JamView.jsx';
 import JamExportDialog from './JamExportDialog.jsx';
 import './performance.css';
 import './jamView.css';
 import './jamWorkspace.css';
 
-void [JamView, JamExportDialog];
+void [JamView, JamExportDialog, TrackControls];
 const storage = () => { try { return window.localStorage; } catch { return null; } };
 
 export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, recommendation, onBack, onImport, controlsRef, hardwareInput }) {
   const [editor] = useState(() => createSessionEditor(readSession(storage(), genreId, profileId, initialBpm, recommendation), { catalog: performanceTemplates(genreId, profileId), timbres: recommendation?.timbreByTrackId }));
   const { session, drafts, editingId } = useSyncExternalStore(editor.subscribe, editor.getSnapshot);
   const [audio] = useState(() => createAudioEngine());
+  const [effects] = useState(() => createJamEffects(audio));
+  const { selectedTrack, cutoffs } = useSyncExternalStore(effects.subscribe, effects.getSnapshot);
   const [status, setStatus] = useState({ mode: 'stopped', loading: false, playingId: null, pendingId: null });
   const [playback] = useState(() => createSessionPlayback(audio, setStatus));
   const [message, setMessage] = useState('');
@@ -64,11 +68,16 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     }
     playback.stop(); setMessage('已保存，可继续组合下一个 loop。');
   }
+  function changeMix(track, volume) {
+    const current = editor.getSnapshot().session;
+    patch({ volumes: { ...current.volumes, [track]: volume }, mutedTracks: { ...current.mutedTracks, [track]: false } });
+    audio.setPerformanceEffect(track, { volume, muted: false });
+  }
   function updateTimbre(track, value) {
     editor.edit({ timbres: { ...editor.getSnapshot().drafts[editingId].timbres, [track]: value } });
     if (locked) launchDraft(true);
   }
-  function resetPlayback() { playback.stop(); for (const track of TRACKS) audio.setPerformanceEffect(track, { cutoff: 20000 }); }
+  function resetPlayback() { effects.reset(true); playback.stop(); }
   function changeBpm(value) { const bpm = normalizePerformanceBpm(value); patch({ bpm }); playback.setTempo(bpm); }
   function connectHardware() { void audio.startAudio(); void hardwareInput?.onConnect(); }
   function openExport() {
@@ -78,10 +87,12 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   useEffect(() => { writeSession(storage(), genreId, profileId, editor.getSnapshot().session); }, [editor, genreId, profileId]);
   useEffect(() => { for (const track of TRACKS) audio.setPerformanceEffect(track, { volume: session.volumes[track], muted: session.mutedTracks[track] }); }, [audio, session.volumes, session.mutedTracks]);
   useEffect(() => {
-    const release = () => audio.resetPerformanceEffects();
+    const release = () => effects.reset(true);
     window.addEventListener('blur', release);
-    return () => { window.removeEventListener('blur', release); playback.stop(); for (const track of TRACKS) audio.setPerformanceEffect(track, { cutoff: 20000 }); };
-  }, [active, audio, playback]);
+    return () => { window.removeEventListener('blur', release); playback.stop(); effects.reset(true); };
+  }, [active, effects, playback]);
+  useEffect(() => { if (!inputActive || !locked || status.loading) effects.reset(); }, [effects, inputActive, locked, status.loading]);
+  useEffect(() => { effects.reset(); }, [effects, hardwareInput?.status]);
   useEffect(() => {
     if (!inputActive) return undefined;
     const key = (e) => {
@@ -120,6 +131,10 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     </header>
     <JamView active={active} session={session} drafts={drafts} editingId={editingId} draft={draft}
       templates={templates} status={status} message={message} playback={playback}
+      selectedTrack={selectedTrack} selectTrack={effects.select}
+      effectsPanel={<aside className="jam-effects" data-track={selectedTrack}><h2>现场效果</h2><p>当前轨道 · {LABELS[selectedTrack]}</p>
+        <TrackControls key={selectedTrack} track={selectedTrack} session={session} changeMix={changeMix} effects={effects} cutoff={cutoffs[selectedTrack]} repeatEnabled={inputActive && locked && !status.loading} />
+        <p className="jam-effect-hint">按住重复 · 松开恢复</p></aside>}
       catalog={catalog} replacePad={replacePad} triggerPad={triggerPad} selectSection={selectSection} updateTimbre={updateTimbre}
       save={save} renameSection={(id, name) => { if (!locked) { editor.rename(id, name); persist(); } }}
       removeSection={(id) => { if (!locked) { editor.remove(id); persist(); } }} />

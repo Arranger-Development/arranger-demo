@@ -11,3 +11,14 @@
 .jam-export-dialog button:disabled { opacity:.4; }
 .jam-export-dialog footer { display:flex; justify-content:flex-end; gap:12px; }
 @media(max-width:650px) { .jam-export-dialog li { flex-wrap:wrap; } .jam-workspace .performance-header { flex-wrap:wrap; } }
+.jam-workspace .jam-workbench { grid-template-columns:minmax(0,1fr) 210px; gap:20px; }
+.jam-workspace .jam-grid { --pad-size:max(44px,min(144px,calc((100cqw - 400px) / 8),calc((100cqh - 114px) / 4))); }
+.jam-effects { --pw-track:#73d49d; width:210px; border:1px solid #8c7048; border-top:4px solid var(--pw-track); border-radius:9px; background:#16120e; padding:14px; color:var(--ink); }
+.jam-effects[data-track=chord] { --pw-track:#e2a15e; }.jam-effects[data-track=bass] { --pw-track:#78b5f1; }.jam-effects[data-track=melody] { --pw-track:#c58ae0; }
+.jam-effects h2 { font-size:16px; margin:0 0 12px; }.jam-effects p { font-size:12px; color:var(--pw-track); }.jam-effects .jam-effect-hint { text-align:center; color:var(--ink-2); font-size:10px; }
+.jam-track-select { display:flex; flex-direction:column; align-items:center; gap:7px; padding:3px; border:0; border-radius:5px; color:inherit; background:transparent; }
+.jam-track-select[aria-pressed=true] { box-shadow:0 0 0 1px var(--pad-tone); }
+.jam-timbre-select { display:block; position:relative; width:32px; height:18px; text-align:center; }
+.jam-track-timbre .jam-timbre-select select { inset:0; }
+@media(max-width:900px) { .jam-workspace .jam-workbench { grid-template-columns:minmax(0,1fr) 176px; gap:10px; }.jam-effects { width:176px; padding:10px; }.jam-workspace .jam-grid { --pad-size:max(40px,min(96px,calc((100cqw - 325px) / 8),calc((100cqh - 114px) / 4))); } }
+@media(max-width:650px) { .jam-workspace { grid-template-rows:auto minmax(0,1fr); }.jam-workspace .jam-workbench { overflow:auto; }.jam-workspace .jam-body { min-height:560px; }.jam-export-dialog li strong { flex-basis:100%; } }
