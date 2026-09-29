@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>0.4.1 Jam 验收</title></head><body><div id="root"></div><script type="module">
+// Local Vite-only QA entry: exercise the real workspace without repeating media selection.
+import {createElement} from 'react';
+import {createRoot} from 'react-dom/client';
+import App from '../src/app/App.jsx';
+import '../src/index.css';
+createRoot(document.getElementById('root')).render(createElement(App,{initialView:'jam',genreId:'chill',performanceProfileId:'ai-demo-1'}));
+</script></body></html>
