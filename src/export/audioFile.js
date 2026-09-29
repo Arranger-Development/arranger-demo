@@ -148,7 +148,7 @@ function getSampleSelections(event, melodyTimbreId) {
   }
 
   const sampleFiles = event.type === 'bass'
-    ? BASS_SAMPLE_FILES
+    ? (getPerformanceSampleBank('bass', event.timbreId)?.sampleFiles ?? BASS_SAMPLE_FILES)
     : event.type === 'chord' && !event.timbreId
       ? CHORD_SAMPLE_FILES
       : getPitchedSampleBank(event.timbreId ?? melodyTimbreId).sampleFiles;
@@ -156,7 +156,7 @@ function getSampleSelections(event, melodyTimbreId) {
 
   return notes.map((note) => {
     // Tone.Sampler searches upward first when pitches are equally close.
-    const sample = findClosestSample(note, sampleFiles, Boolean(getPerformanceSampleBank('chord', event.timbreId)));
+    const sample = findClosestSample(note, sampleFiles, Boolean(getPerformanceSampleBank(event.type, event.timbreId)));
     if (!sample) return null;
     return {
       file: sample.file,

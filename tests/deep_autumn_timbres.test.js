@@ -41,9 +41,9 @@ function setup() {
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-test('24 local WAVs match source hashes and sharp filenames map to standard notes', async () => {
+test('48 local WAVs match source hashes and sharp filenames map to standard notes', async () => {
   const manifest = JSON.parse(await readFile(new URL('../public/samples/DeepAutumn/manifest.json', import.meta.url)));
-  assert.equal(manifest.length, 24);
+  assert.equal(manifest.length, 48);
   assert.equal(Object.keys(banks[drums].sampleFiles).length, 3);
   assert.equal(Object.keys(banks[chord].sampleFiles).length, 21);
   assert.deepEqual(new Set(manifest.map(x => x.file)), new Set(Object.values(banks).flatMap(x => Object.values(x.sampleFiles))));
@@ -128,7 +128,11 @@ test('WAV render requests the same local banks and leaves drum and harmony sampl
   t.after(() => { if (original) globalThis.OfflineAudioContext = original; else delete globalThis.OfflineAudioContext; });
   t.mock.method(globalThis, 'fetch', async (url) => { urls.push(url); return { ok: true, arrayBuffer: async () => new ArrayBuffer(1) }; });
   const { state } = project();
+  state.matrix.bass[0][0] = { type: 'bass', note: 'F#0', timbreId: 'deep-autumn-bass', requestedTimbreId: 'deep-autumn-bass', playbackMode: 'natural' };
+  state.matrix.melody[0][0] = { type: 'melody', note: 'D#4', timbreId: 'deep-autumn-melody', playbackMode: 'natural' };
   await renderProjectToWav(state, { chunkSeconds: 1 });
+  assert.ok(urls.some(url => url.includes('/Bass/G0.wav')));
+  assert.ok(urls.some(url => url.includes('/Melody/E4.wav')));
   assert.ok(urls.length > 3 && urls.every(url => url.includes('/samples/DeepAutumn/')));
   assert.ok(urls.some(url => url.includes('/Drums/Kick.wav')) && urls.some(url => url.includes('/Chord/CSharp3.wav')));
   assert.ok(voices.length > 0 && voices.every(voice => !voice.stopped));
@@ -137,4 +141,24 @@ test('WAV render requests the same local banks and leaves drum and harmony sampl
     chord: [[{ type: 'notes', notes: ['C3'], timbreId: chord, playbackMode: 'natural' }]],
   } });
   assert.deepEqual(urls, ['/samples/DeepAutumn/Chord/CSharp3.wav'], 'equidistant source selection matches Tone.Sampler, not the lower B2');
+});
+
+
+test('bass and melody banks preserve selected pitches and natural release in realtime and session export', async () => {
+  const { session } = project(); const section = session.sections[0];
+  // Use the supplied catalog rather than inventing a phrase identity.
+  const { performanceTemplates } = await import('../src/app/performanceModel.js');
+  const catalog = performanceTemplates('chill', profile);
+  section.selection.bass = catalog.bass[0].id; section.selection.melody = catalog.melody[0].id;
+  section.timbres.bass = 'deep-autumn-bass'; section.timbres.melody = 'deep-autumn-melody';
+  const copy = snapshotSection(section, 'chill', profile);
+  const state = createArrangementImport(session, [{id:'new',name:'new',repeat:1,snapshot:copy}]);
+  const events = collectProjectEvents(state).filter(e => ['bass','melody'].includes(e.type));
+  assert.ok(events.length); assert.ok(events.every(e => e.timbreId === `deep-autumn-${e.type}` && e.playbackMode === 'natural'));
+  const { engine, tone } = setup(); await engine.play({matrixSource:()=>state.matrix,totalBars:state.totalBars}); tone.Transport.tick(0);
+  for (const track of ['bass','melody']) {
+    const bank = engine.getMelodyBank(`deep-autumn-${track}`, track, 'natural'); assert.ok(bank.ready);
+    assert.ok(bank.sampler.hits.length); assert.ok(Object.values(bank.sampler.urls).every(url => url.includes(`/DeepAutumn/${track === 'bass' ? 'Bass' : 'Melody'}/`)));
+  }
+  await engine.stop(); assert.ok(engine.getMelodyBank('deep-autumn-bass','bass','natural').sampler.releases.length);
 });

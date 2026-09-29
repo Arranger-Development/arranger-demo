@@ -1,4 +1,4 @@
-import { DEEP_AUTUMN_DRUMS, DEEP_AUTUMN_CHORD, withPerformanceTimbre } from '../data/performanceTimbres.js';
+import { DEEP_AUTUMN_DRUMS, DEEP_AUTUMN_CHORD, DEEP_AUTUMN_BASS, DEEP_AUTUMN_MELODY, withPerformanceTimbre } from '../data/performanceTimbres.js';
 import { PERFORMANCE_TRACKS as TRACKS, emptySelection, performanceTemplates, createPerformanceMatrix, normalizePerformanceBpm, performanceStorageKey, hasSelection } from './performanceModel.js';
 import { createDefaultTrackState } from '../domain/trackInstances.js';
 import { createClipRecord } from '../domain/clipHelpers.js';
@@ -12,8 +12,8 @@ const uid = () => globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.
 export const TIMBRE_OPTIONS = {
   drums: ['soft-electronic-kit', DEEP_AUTUMN_DRUMS],
   chord: ['warm-electric-piano', DEEP_AUTUMN_CHORD],
-  bass: ['round-electric-bass', 'soft-sub-bass', 'fm-round-bass'],
-  melody: ['airy-synth-lead', 'hazy-bell-lead', 'soft-pluck-lead'],
+  bass: ['round-electric-bass', DEEP_AUTUMN_BASS],
+  melody: ['airy-synth-lead', DEEP_AUTUMN_MELODY],
 };
 export const defaultTimbres = () => Object.fromEntries(TRACKS.map((id) => [id, TIMBRE_OPTIONS[id][0]]));
 export const sessionKey = (genre, profile) => `arranger-performance:v4:${profile ?? genre}`;

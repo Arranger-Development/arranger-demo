@@ -1855,25 +1855,26 @@ export default function App({
         step,
         note,
       );
-      state.setCell(scope.trackId, selectedBar, step, nextMatrix.bass[selectedBar][step]);
+      const sound = scope.matrix.bass[selectedBar]?.find(cell => cell?.timbreId);
+      const nextCell = nextMatrix.bass[selectedBar][step];
+      const timbre = sound ? { timbreId: sound.timbreId, requestedTimbreId: sound.requestedTimbreId, playbackMode: sound.playbackMode } : {};
+      state.setCell(scope.trackId, selectedBar, step, nextCell ? { ...nextCell, ...timbre } : null);
       if (auditionNote) {
         void audioEngine.triggerBassNote(
           auditionNote,
           '16n',
           undefined,
-          { trackId: scope.trackId },
+          { trackId: scope.trackId, ...timbre },
         );
       }
     });
   }, [selectedBar, withUndoCheckpoint]);
 
   const handleBassPreview = useCallback((note) => {
-    void audioEngine.triggerBassNote(
-      note,
-      '16n',
-      undefined,
-      { trackId: useMusicStore.getState().activeTrackId },
-    );
+    const state = useMusicStore.getState();
+    const trackId = state.activeTrackId;
+    const cell = state.matrix[trackId]?.[state.selectedBar]?.find(cell => cell?.timbreId);
+    void audioEngine.triggerBassNote(note, '16n', undefined, { trackId, timbreId: cell?.timbreId, playbackMode: cell?.playbackMode });
   }, []);
 
   const handleBassGrooveTemplatePreview = useCallback((templateId) => {
