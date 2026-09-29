@@ -27,3 +27,4 @@
 .jam-loop-count button[aria-pressed=true] { background:#b38b4d; color:#1a130b; }.jam-loop-count input:disabled { opacity:.5; }.jam-loop-count small { flex-basis:100%; text-align:center; color:#ffc28d; font-size:10px; }
 .jam-saved-loop[data-dragging=true] { opacity:.45; }.jam-saved-loop[data-drop-side=before] { border-left:2px solid #f5d494; }.jam-saved-loop[data-drop-side=after] { border-right:2px solid #f5d494; }
 .jam-saved-loop .performance-loop { touch-action:pan-y; }
+.jam-workspace .jam-sequence { display:flex; align-items:center; gap:12px; }.jam-workspace .jam-loops { flex:1; min-width:0; }.jam-play-sequence { flex:none; flex-direction:column; justify-content:center; width:78px; height:85px; }.jam-play-sequence span { font-size:24px; }.jam-empty-library { flex:1; }

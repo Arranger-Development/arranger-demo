@@ -46,7 +46,7 @@ function SectionDial({ playback, section, playing, editing, pending, unsaved, on
 }
 
 export default function JamView({ active, session, drafts, editingId, draft, templates, status, message, playback,
-  triggerPad, replacePad, catalog, selectSection, updateTimbre, save, renameSection, removeSection, selectedTrack, selectTrack, effectsPanel, reorderSection, changeRepeat }) {
+  triggerPad, replacePad, catalog, selectSection, updateTimbre, save, renameSection, removeSection, selectedTrack, selectTrack, effectsPanel, reorderSection, changeRepeat, toggleSequence }) {
   const locked = status.mode !== 'stopped';
   const sectionsRef = useRef(null);
   const { drag: dragState, ...drag } = useLoopDrag({ disabled: locked, onDrop: reorderSection });
@@ -80,7 +80,7 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
                     <span className="performance-pad-top"><span className="performance-key-hint" aria-hidden="true">{key}</span>{selected ? <Check size={16} /> : <Icon size={16} />}</span>
                     <strong>{phrase?.name ?? '空位'}</strong>
                     {phrase && <PhrasePerimeterProgress playback={playback} track={track} phraseId={phrase.id}
-                      running={active && status.mode === 'jam'} inset={0} radius={9} />}
+                      running={active && status.mode !== 'stopped'} inset={0} radius={9} />}
                   </button>
                   <select className="jam-pad-replace" aria-label={`${LABELS[track]}${group ? '转场' : '主乐句'} ${group ? index - MAIN_PHRASE_SLOTS + 1 : index + 1} 更多模板`}
                     value={phrase?.id ?? ""} onChange={(e) => replacePad(track, index, e.target.value)}>
@@ -104,6 +104,10 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
       </button>
     </div>
     <section className="performance-sequence jam-sequence" aria-label="保存的 loop">
+      <button type="button" className="performance-connect jam-play-sequence" aria-label={locked ? '停止演奏' : '播放 Loop 序列'}
+        disabled={!locked && !session.sections.some(s => hasSelection(drafts[s.id]?.selection))} onClick={toggleSequence}>
+        <span>{locked ? '■' : '▶'}</span>{locked ? '停止' : '顺序播放'}
+      </button>
       {session.sections.length ? <div ref={el => { sectionsRef.current = el; drag.setScrollElement(el); }} className="performance-loops jam-loops">
         {session.sections.map((s) => <div className="jam-saved-loop" key={s.id} data-section-id={s.id} data-dragging={dragState?.id === s.id} data-drop-side={dragState?.targetId === s.id ? dragState.side : undefined}>
           <SectionDial playback={playback} section={s}

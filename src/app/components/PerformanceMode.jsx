@@ -4,6 +4,7 @@ import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, performance
 import { fixedPerformancePads, replacePadBinding, createSessionEditor, readSession, writeSession, snapshotSection, createExportEntry, createArrangementImport, arrangementExportLength } from '../performanceSession.js';
 import { createSessionPlayback } from '../sessionPlayback.js';
 import { mapPerformanceKeyboard } from '../../input/performanceInput.js';
+import { loopRepeat } from '../loopOrder.js';
 import { createJamEffects } from '../jamEffects.js';
 import { TrackControls } from './PerformanceControls.jsx';
 import JamView from './JamView.jsx';
@@ -37,7 +38,8 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const patch = (value) => { editor.patch(value); persist(); };
   const jamSnapshot = (section) => {
     const value = snapshotSection(section, genreId, profileId);
-    return value && { ...value, phraseIds: { ...section.selection } };
+    const saved = editor.getSnapshot().session.sections.find(s => s.id === section.id);
+    return value && { ...value, repeat: loopRepeat(saved ?? { kind: section.kind }), phraseIds: { ...section.selection } };
   };
   const launchDraft = (edit = false) => {
     setMessage('');
@@ -59,7 +61,16 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   }
   function selectSection(id) {
     if (!editor.getSnapshot().drafts[id]) return;
-    editor.select(id); launchDraft();
+    const current = editor.getSnapshot();
+    const snapshot = jamSnapshot(current.drafts[id]);
+    if (!playback.isActive() || !snapshot) editor.select(id);
+    playback.launch(snapshot, current.session.bpm);
+  }
+  function toggleSequence() {
+    if (playback.isActive()) { effects.reset(); playback.stop(); return; }
+    const current = editor.getSnapshot();
+    const snapshots = current.session.sections.map(s => jamSnapshot(current.drafts[s.id]));
+    setMessage(playback.sequence(snapshots, current.session.bpm) ? '' : '没有可播放的 Loop');
   }
   function save() {
     if (!hasSelection(editor.getSnapshot().drafts[editor.getSnapshot().editingId].selection)) return;
@@ -84,6 +95,9 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     resetPlayback(); setMessage(''); setCounts({});
     setExportEntries(session.sections.map(s => createExportEntry(s, genreId, profileId)));
   }
+  useEffect(() => {
+    if (status.playingId && editor.getSnapshot().drafts[status.playingId]) editor.select(status.playingId);
+  }, [editor, status.playingId]);
   useEffect(() => { writeSession(storage(), genreId, profileId, editor.getSnapshot().session); }, [editor, genreId, profileId]);
   useEffect(() => { for (const track of TRACKS) audio.setPerformanceEffect(track, { volume: session.volumes[track], muted: session.mutedTracks[track] }); }, [audio, session.volumes, session.mutedTracks]);
   useEffect(() => {
@@ -99,6 +113,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       if (e.defaultPrevented) return;
       const cmd = mapPerformanceKeyboard(e, templates);
       if (cmd) { e.preventDefault(); triggerPad(cmd.trackId, templates[cmd.trackId].findIndex((p) => p?.id === cmd.templateId)); }
+      else if (e.key === ' ' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.closest?.('input,select,textarea,button,[role=slider],[contenteditable],[popover]:popover-open')) { e.preventDefault(); toggleSequence(); }
       else if (e.key === 'Escape' && !e.target.closest?.('input,select,textarea,[contenteditable], [popover]:popover-open')) { e.preventDefault(); playback.stop(); }
     };
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
@@ -131,6 +146,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     </header>
     <JamView active={active} session={session} drafts={drafts} editingId={editingId} draft={draft}
       templates={templates} status={status} message={message} playback={playback}
+      toggleSequence={toggleSequence}
       selectedTrack={selectedTrack} selectTrack={effects.select}
       effectsPanel={<aside className="jam-effects" data-track={selectedTrack}><h2>现场效果</h2><p>当前轨道 · {LABELS[selectedTrack]}</p>
         <TrackControls key={selectedTrack} track={selectedTrack} session={session} changeMix={changeMix} effects={effects} cutoff={cutoffs[selectedTrack]} repeatEnabled={inputActive && locked && !status.loading} />
