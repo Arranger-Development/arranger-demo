@@ -71,11 +71,9 @@
 .jam-effect-recording [role=status] { font-size:12px; line-height:1.5; text-align:center; color:var(--ink-2); }
 .jam-effect-recording button:disabled { opacity:.45; }
 .jam-effects { align-self:start; }
-/* Size containment cannot infer the effects deck's intrinsic height. Reserve
-   room for recording controls; short windows scroll the body instead of letting
-   the deck overlap Save and the Loop strip. */
-.jam-workspace .jam-workbench { min-height:510px; }
-.jam-workspace .jam-body { grid-template-rows:auto minmax(510px,1fr) auto auto; overflow:auto; }
+/* Keep room for the compact deck; smaller windows can still scroll safely. */
+.jam-workspace .jam-workbench { min-height:var(--jam-workbench-min); }
+.jam-workspace .jam-body { grid-template-rows:auto minmax(var(--jam-workbench-min),1fr) auto auto; overflow:auto; }
 .jam-targets,.jam-deck-pages,.jam-arp-presets,.jam-arp-settings,.jam-chopper-pads { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; margin:8px 0; }
 .jam-deck-pages { grid-template-columns:repeat(3,minmax(0,1fr)); }
 .jam-deck button { min-width:0; padding:6px 3px; border:1px solid #8c7048; border-radius:5px; background:#241d15; color:var(--ink); font:inherit; font-size:12px; touch-action:none; }
@@ -121,3 +119,69 @@
 .jam-project-menu label { display:grid; gap:7px; margin-bottom:12px; font-size:15px; }
 .jam-project-menu select,.jam-project-menu input,.jam-project-menu button { width:100%; padding:8px; border:1px solid #947044; border-radius:5px; font:inherit; color:var(--ink); background:#30261a; }
 .jam-project-menu small { display:block; margin-top:12px; line-height:1.5; color:var(--ink-2); }
+
+/* Compact the whole workstation, retaining readable labels and square gems. */
+.jam-workspace { --jam-workbench-min:410px; padding:8px; }
+.jam-workspace .performance-header { padding:4px 16px; gap:14px; }
+.jam-workspace .performance-title h1 { margin-top:1px; }
+.jam-workspace .performance-tempo input { padding-block:3px; }
+.jam-workspace .performance-back { min-height:32px; padding-block:6px; }
+.jam-workspace .jam-project-controls { padding:4px 16px; }
+.jam-workspace .jam-project-controls .performance-connect { min-height:30px; padding-block:4px; }
+.jam-workspace .jam-body { padding:6px 14px; gap:6px; border-width:6px; }
+.jam-workspace .jam-grid { gap:6px; --pad-size:max(40px,min(132px,calc((100cqw - var(--jam-effects-width) - 176px) / 8),calc((100cqh - 124px) / 4))); }
+.jam-workspace .jam-pad-replace { height:24px; }
+.jam-workspace .jam-combination-actions { min-height:30px; }
+.jam-workspace .jam-combination-actions .performance-save { min-height:30px; padding-block:4px; }
+.jam-workspace .jam-sequence { padding-top:5px; }
+.jam-workspace .jam-loops .performance-loop { gap:2px; }
+.jam-workspace .jam-loops .performance-loop-dial { width:48px; height:48px; }
+.jam-workspace .jam-loops .performance-loop-circle { width:38px; height:38px; }
+.jam-workspace .jam-loop-count { margin-top:4px; }
+.jam-workspace .jam-loop-count input,.jam-workspace .jam-loop-count button { height:28px; }
+.jam-workspace .jam-play-sequence { height:66px; }
+.jam-workspace .jam-effects { padding:8px 14px; }
+.jam-effects h2 { margin-bottom:2px; }
+.jam-effects p { margin:3px 0; }
+.jam-effects .jam-deck-pages { margin:5px 0; }
+.jam-effects .jam-deck-pages button { padding:4px; }
+.jam-effects .dj-mixer-row { padding:4px 0; }
+.jam-effects .dj-channel-control { gap:2px; }
+.jam-effects .dj-fader-well { height:76px; }
+.jam-workspace .jam-effects input.dj-fader { height:66px; }
+.jam-effects .dj-knob { margin-top:4px; }
+.jam-effects .dj-repeat-label { margin-top:5px; }
+.jam-effects .jam-deck .dj-repeat-pad { height:28px; padding:3px 0; }
+.jam-effects .jam-brake-pad { margin-top:5px; }
+.jam-workspace .jam-effect-recording { margin-top:5px; padding-top:5px; gap:3px 6px; }
+.jam-workspace .jam-effect-recording .performance-connect { padding:4px; }
+.jam-effects .jam-expression-controls { gap:4px; padding:4px 0; }
+.jam-effects .jam-expression-controls label { grid-template-columns:1fr auto; gap:3px; font-size:14px; line-height:1.3; }
+.jam-effects .jam-expression-controls output { grid-column:2; grid-row:1; }
+.jam-effects .jam-expression-controls input { grid-column:1/-1; grid-row:2; }
+.jam-effects .jam-arp-controls { gap:6px; padding:6px 0; }
+.jam-effects .jam-arp-note-input { grid-template-columns:auto minmax(0,1fr); align-items:center; gap:8px; }
+.jam-effects .jam-arp-note-input input { padding:6px; }
+.jam-effects .jam-arp-controls [role=status]:empty { display:none; }
+.jam-effects .jam-arp-controls > .dj-repeat-pad { height:44px; }
+
+@media (max-height:780px) and (min-width:721px) {
+  .jam-workspace { --jam-workbench-min:390px; }
+  .jam-workspace .performance-header { padding-block:2px; }
+  .jam-workspace .jam-project-controls { padding-block:2px; }
+  .jam-workspace .jam-body { gap:4px; }
+  .jam-workspace .jam-loops .performance-loop-dial { width:44px; height:44px; }
+  .jam-workspace .jam-loops .performance-loop strong { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .jam-workspace .jam-effects { padding-block:6px; }
+  .jam-effects .jam-deck-pages button { padding-block:3px; }
+  .jam-effects .dj-fader-well { height:64px; }
+  .jam-workspace .jam-effects input.dj-fader { height:54px; }
+  .jam-effects .dj-knob { width:48px; height:48px; margin-top:0; }
+  .jam-effects .dj-knob-face { width:36px; height:36px; }
+  .jam-effects .dj-repeat-label { margin-top:3px; }
+  .jam-effects .jam-brake-pad { margin-top:3px; }
+  .jam-workspace .jam-effect-recording { margin-top:3px; padding-top:3px; }
+}
+
+/* Diagnostic/mixed-value messages need real space, rather than covering Save. */
+.jam-workspace:has(.jam-deck > [role=status],.jam-arp-controls [role=status]:not(:empty)) { --jam-workbench-min:440px; }
