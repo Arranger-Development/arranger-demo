@@ -279,6 +279,23 @@ export default class AudioEngine {
     this.performanceEffects?.set(track, values);
   }
 
+  setJamArpeggiator(value) { this.jamArpeggiator = value; }
+
+  async createJamArpeggioVoice(timbreId) {
+    await this.preparePerformanceEffects();
+    const sampler = this.createMelodyInputSampler(timbreId);
+    if (!sampler) throw new Error('Arpeggio sampler unavailable');
+    sampler.disconnect();
+    try {
+      await this.tone.loaded();
+      this.performanceEffects.connect(sampler, 'melody');
+      return {
+        trigger: (note, time, duration) => sampler.triggerAttackRelease(note, duration, time),
+        dispose: () => sampler.dispose(),
+      };
+    } catch (error) { sampler.dispose(); throw error; }
+  }
+
   schedulePerformanceEffect(track, values, time) {
     this.performanceEffects?.set(track, values, time);
   }
@@ -1622,6 +1639,8 @@ export default class AudioEngine {
         notifyAudiblePosition();
       }
 
+      this.performanceEffects?.clock?.(this.transportAbsoluteStep, time, transport.bpm?.value ?? DEFAULT_BPM);
+      this.jamArpeggiator?.schedule(this.transportAbsoluteStep, time, transport.bpm?.value ?? DEFAULT_BPM);
       for (const event of adapter.getEventsForStep(position.bar, position.step)) {
         if (this.audibleTrackIds && !this.audibleTrackIds.has(event.trackId)) continue;
         if (event.type === 'drums') {
@@ -1831,6 +1850,7 @@ export default class AudioEngine {
   }
 
   stopAllVoices(time = this.now()) {
+    this.jamArpeggiator?.stop();
     this.stopMelodyVoices(time);
     this.bassSampler?.releaseAll?.(time);
     this.chordSampler?.releaseAll?.(time);

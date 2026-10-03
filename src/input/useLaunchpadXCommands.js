@@ -280,7 +280,7 @@ function useLaunchpadXCommands({
     if (!modeRef.current.enabled) return;
     if (modeRef.current.performanceActive) {
       const controls = modeRef.current.performanceControlsRef?.current;
-      const command = performanceMidiRef.current.handle(event.data, controls?.templates);
+      const command = performanceMidiRef.current.handle(event.data, controls?.templates, controls?.getSurface?.());
       if (command) controls?.dispatch(command);
       return;
     }

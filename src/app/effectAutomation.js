@@ -1,9 +1,11 @@
 import { PERFORMANCE_TRACKS as TRACKS } from './performanceModel.js';
 
-export const EFFECT_PARAMETERS = ['volume', 'cutoff', 'repeat'];
-const validValue = (parameter, value) => parameter === 'repeat'
-  ? value === null || [4, 8, 16].includes(value)
-  : Number.isFinite(value) && value >= (parameter === 'volume' ? -24 : 100) && value <= (parameter === 'volume' ? 6 : 20000);
+export const EFFECT_PARAMETERS = ['volume', 'cutoff', 'repeat', 'pitch', 'reverb', 'chopper', 'brake'];
+const validValue = (parameter, value) => {
+  if (parameter === 'repeat' || parameter === 'chopper') return value === null || (parameter === 'repeat' ? [4,8,16] : [4,8,16,32]).includes(value);
+  const limits = { volume: [-24,6], cutoff: [100,20000], pitch: [-12,12], reverb: [0,1], brake: [0,1] };
+  return Number.isFinite(value) && value >= limits[parameter][0] && value <= limits[parameter][1];
+};
 
 // Optional v4 section field. A bad lane cannot discard otherwise valid music.
 export function normalizeEffectAutomation(value) {
@@ -39,7 +41,7 @@ export function effectLaneEvents(automation, track, parameter) {
   const lane = automation?.tracks?.[track]?.[parameter];
   if (!lane) return [];
   const points = [{ step: 0, value: lane.initial }, ...lane.points];
-  if (parameter === 'repeat') points.push({ step: automation.cycleSteps, value: null });
+  if (['repeat','chopper','pitch','brake'].includes(parameter)) points.push({ step: automation.cycleSteps, value: ['repeat','chopper'].includes(parameter) ? null : 0 });
   return points;
 }
 
@@ -51,7 +53,7 @@ export function mergeEffectTake(before, take) {
     tracks[track] ??= {};
     tracks[track][parameter] = { initial: lane.initial, points: simplifyEffectPoints(lane.points) };
     // Each repeater take releases at its own end, including after length edits.
-    if (parameter === 'repeat') tracks[track][parameter].points.push({ step: take.length, value: null });
+    if (['repeat','chopper','pitch','brake'].includes(parameter)) tracks[track][parameter].points.push({ step: take.length, value: ['repeat','chopper'].includes(parameter) ? null : 0 });
   }
   // Keep out-of-range old points when music is shortened, for later expansion.
   return { version: 1, cycleSteps: Math.max(before?.cycleSteps ?? 0, take.length), tracks };

@@ -189,6 +189,7 @@ export function createSessionEditor(initial, { catalog = {}, timbres } = {}) {
   return {
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, getSnapshot: () => state,
     select: (id) => state.drafts[id] && update({ editingId: id }),
+    restore: (snapshot) => update(clone(snapshot)),
     edit(patch, id = state.editingId) {
       if (!state.drafts[id]) return state;
       const draft = { ...state.drafts[id], ...clone(patch) };
@@ -205,9 +206,10 @@ export function createSessionEditor(initial, { catalog = {}, timbres } = {}) {
         name: automaticName ? `${kind === 'transition' ? '转场' : '段落'} ${nextSectionNumber(state.session.sections, kind)}` : draft.name.trim() };
       const sections = existing ? state.session.sections.map((s) => s.id === saved.id ? saved : s) : [...state.session.sections, saved];
       const next = { ...state.session, sections };
-      if (!persist(next)) return false;
-      return update({ session: next, editingId: NEW_COMBINATION_ID,
-        drafts: { ...state.drafts, [saved.id]: clone(saved), [NEW_COMBINATION_ID]: freshDraft(saved.timbres) } });
+      const nextState = { session: next, editingId: NEW_COMBINATION_ID,
+        drafts: { ...state.drafts, [saved.id]: clone(saved), [NEW_COMBINATION_ID]: freshDraft(saved.timbres) } };
+      if (!persist(next, nextState)) return false;
+      return update(nextState);
     },
     rename(id, name) {
       if (!name.trim() || !state.session.sections.some((s) => s.id === id)) return state;
@@ -238,4 +240,17 @@ export function createSessionEditor(initial, { catalog = {}, timbres } = {}) {
 export function createExportEntry(section, genre, profile) {
   return { id: uid(), name: section.name, repeat: loopRepeat(section),
     snapshot: snapshotSection(section, genre, profile) };
+}
+
+// Persistence can normalize object key order; it must not create a dirty badge.
+export function sectionDraftChanged(draft, saved) {
+  const music = section => section && ({
+    kind: section.kind,
+    selection: Object.fromEntries(TRACKS.map(t => [t, section.selection?.[t] ?? null])),
+    timbres: Object.fromEntries(TRACKS.map(t => [t, section.timbres?.[t] ?? defaultTimbres()[t]])),
+    effectAutomation: normalizeEffectAutomation(section.effectAutomation),
+  });
+  const canonical = value => JSON.stringify(value, (key, item) => item && typeof item === 'object' && !Array.isArray(item)
+    ? Object.fromEntries(Object.keys(item).sort().map(k => [k, item[k]])) : item);
+  return canonical(music(draft)) !== canonical(music(saved));
 }

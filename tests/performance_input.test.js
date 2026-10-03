@@ -61,7 +61,7 @@ test('Launchpad maps physical top rows and bottom controls; repeat/release/press
   assert.deepEqual(input.handle([0xb0,98,127],templates), {type:'togglePlayback'});
   assert.deepEqual(input.handle([0xb0,93,127],templates), {type:'page',delta:-1});
   assert.deepEqual(input.handle([0xb0,94,127],templates), {type:'page',delta:1});
-  [89,79,69,59].forEach((cc,i)=>assert.deepEqual(input.handle([0xb0,cc,127],templates),{type:'selectTrack',trackId:PERFORMANCE_TRACKS[i]}));
+  [89,79,69,59].forEach((cc,i)=>assert.deepEqual(input.handle([0xb0,cc,127],templates),{type:'selectTrack',trackId:PERFORMANCE_TRACKS[i],additive:i>0}));
   [-24,-18,-12,-9,-6,-3,0,6].forEach((value,i)=>assert.deepEqual(input.handle([0x90,41+i,127],templates),{type:'volume',value}));
   [100,250,500,1000,2000,5000,10000,20000].forEach((value,i)=>assert.deepEqual(input.handle([0x90,31+i,127],templates),{type:'cutoff',value}));
   [4,8,16].forEach((division,i)=>{
@@ -70,7 +70,7 @@ test('Launchpad maps physical top rows and bottom controls; repeat/release/press
     assert.equal(input.handle([0xa0,21+i,127],templates),null);
     assert.deepEqual(input.handle([0x80,21+i,0],templates),{type:'repeat',token,division,pressed:false});
   });
-  for (const data of [[0xb0,49,127],[0xb0,95,127],[0x90,24,127],[0x91,81,127]]) assert.equal(input.handle(data,templates),null);
+  for (const data of [[0xb0,95,127],[0x91,81,127]]) assert.equal(input.handle(data,templates),null);
   input.reset();
   assert.deepEqual(input.handle([0xb0,98,127],templates),{type:'togglePlayback'});
 });
@@ -122,8 +122,8 @@ test('Jam LEDs show eight loops, selected track, slider values, repeat ownership
   assert.equal(cc(frame,93),0); assert.equal(cc(frame,94),13);
   assert.equal(cc(frame,97),9); assert.equal(cc(createLaunchpadXPerformanceLedFrame({...base,savedAt:10},100),97),17);
   assert.equal(cc(createLaunchpadXPerformanceLedFrame({...base,storageError:true}),97),5);
-  for(const n of [24,25,26,27,28]) assert.equal(light(frame,n),0);
-  for(const n of [91,92,95,96,49,39,29,19]) assert.equal(cc(frame,n),0);
+  for(const n of [24,25,26,27,28]) assert.ok(light(frame,n)>0);
+  for(const n of [91,92,95,96]) assert.equal(cc(frame,n),0);
   const next=createLaunchpadXPerformanceLedFrame({...base,page:1,status:{mode:'stopped'}});
   assert.equal(light(next,11),13); assert.equal(light(next,13),0);
   assert.equal(light(next,22),0); assert.equal(cc(next,93),13); assert.equal(cc(next,94),0);

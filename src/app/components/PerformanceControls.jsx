@@ -44,7 +44,7 @@ function FilterKnob({ track, value, onChange }) {
     window.addEventListener('blur', end);
     return () => window.removeEventListener('blur', end);
   }, []);
-  return <div className="dj-knob" role="slider" tabIndex={0} aria-label={`${LABELS[track]}低通滤波`}
+  return <div className="dj-knob" role="slider" tabIndex={0} aria-label={`${LABELS[track]}滤波器`}
     aria-valuemin={100} aria-valuemax={20000} aria-valuenow={value} aria-valuetext={value === 20000 ? '关闭' : `${value} Hz`}
     aria-orientation="vertical" style={{ '--dj-angle': `${-135 + ((value - 100) / 19900) * 270}deg` }}
     onPointerDown={(e) => {
@@ -84,7 +84,7 @@ export function Progress({ playback, id, bars, running }) {
   return <span className="pw-progress" aria-hidden="true"><span ref={ref} /></span>;
 }
 
-export function TrackControls({ track, session, changeMix, effects, cutoff, repeatEnabled = false, beginMixEdit, commitMixEdit, repeatValue }) {
+export function TrackControls({ track, session, changeMix, effects, cutoff, repeatEnabled = false, beginMixEdit, commitMixEdit, repeatValue, hideRepeat = false, onCutoffChange }) {
   const volume = session.volumes[track];
   return <div className="dj-controls" data-track={track}>
     <div className="dj-mixer-row">
@@ -100,13 +100,13 @@ export function TrackControls({ track, session, changeMix, effects, cutoff, repe
         </div>
       </div>
       <div className="dj-channel-control">
-        <span className="dj-control-label">低通</span>
+        <span className="dj-control-label">滤波器</span>
         <output>{cutoff === 20000 ? '关闭' : cutoff >= 1000 ? `${(cutoff / 1000).toFixed(1)} kHz` : `${cutoff} Hz`}</output>
-        <FilterKnob track={track} value={cutoff} onChange={(value) => effects.cutoff(track, value)} />
+        <FilterKnob track={track} value={cutoff} onChange={onCutoffChange ?? ((value) => effects.cutoff(track, value))} />
         <span className="dj-knob-ends" aria-hidden="true">低<span>关闭</span></span>
       </div>
     </div>
-    <div className="dj-repeat-label">重复</div>
-    <RepeatPads controller={effects.repeat} track={track} bpm={session.bpm} enabled={repeatEnabled} value={repeatValue} />
+    {!hideRepeat && <><div className="dj-repeat-label">重复</div>
+    <RepeatPads controller={effects.repeat} track={track} bpm={session.bpm} enabled={repeatEnabled} value={repeatValue} /></>}
   </div>;
 }

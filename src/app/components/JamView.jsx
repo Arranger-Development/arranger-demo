@@ -1,3 +1,4 @@
+import { sectionDraftChanged } from '../performanceSession.js';
 import { PERFORMANCE_SAMPLE_BANKS } from '../../data/performanceTimbres.js';
 import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Save } from 'lucide-react';
@@ -46,7 +47,7 @@ function SectionDial({ playback, section, playing, editing, pending, unsaved, on
 }
 
 export default function JamView({ active, session, drafts, editingId, draft, templates, status, message, playback,
-  triggerPad, replacePad, catalog, selectSection, updateTimbre, save, renameSection, removeSection, selectedTrack, selectTrack, effectsPanel, reorderSection, changeRepeat, toggleSequence, recordingLocked = false }) {
+  triggerPad, replacePad, catalog, selectSection, updateTimbre, save, renameSection, removeSection, selectedTrack, selectedTracks = [selectedTrack], selectTrack, effectsPanel, reorderSection, changeRepeat, toggleSequence, recordingLocked = false }) {
   const locked = status.mode !== 'stopped';
   const sectionsRef = useRef(null);
   const { drag: dragState, ...drag } = useLoopDrag({ disabled: locked, onDrop: reorderSection });
@@ -61,8 +62,8 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
         {TRACKS.map((track) => {
           const Icon = PERFORMANCE_TRACK_ICONS[track]; void Icon;
           return <div className="performance-row jam-row" data-track={track} key={track} role="group" aria-label={`${LABELS[track]}乐句`}>
-            <div className="performance-track-label jam-track-timbre" data-selected={selectedTrack === track}>
-              <button type="button" className="jam-track-select" aria-label={`选择${LABELS[track]}效果轨道`} aria-pressed={selectedTrack === track} onClick={() => selectTrack?.(track)}>
+            <div className="performance-track-label jam-track-timbre" data-selected={selectedTracks.includes(track)}>
+              <button type="button" className="jam-track-select" aria-label={`选择${LABELS[track]}效果轨道`} aria-pressed={selectedTracks.includes(track)} onClick={() => selectTrack?.(track)}>
               <Icon size={22} aria-hidden="true" /><strong>{LABELS[track]}</strong></button><label className="jam-timbre-select" title={`切换${LABELS[track]}音色`}><ChevronDown size={12} aria-hidden="true" />
               <select disabled={recordingLocked} aria-label={`${LABELS[track]}音色`} value={TIMBRE_OPTIONS[track].includes(draft.timbres[track]) ? draft.timbres[track] : TIMBRE_OPTIONS[track][0]} onChange={(e) => updateTimbre(track, e.target.value)}>
                 {TIMBRE_OPTIONS[track].map((id, i) => <option key={id} value={id}>{PERFORMANCE_SAMPLE_BANKS[id]?.label ?? DEFAULT_TIMBRE_LABELS[id] ?? `音色 ${i + 1} · 占位`}</option>)}
@@ -111,7 +112,7 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
         {session.sections.map((s) => <div className="jam-saved-loop" key={s.id} data-section-id={s.id} data-dragging={dragState?.id === s.id} data-drop-side={dragState?.targetId === s.id ? dragState.side : undefined}>
           <SectionDial disabled={recordingLocked} playback={playback} section={s}
             playing={active && status.playingId === s.id} pending={status.pendingId === s.id} editing={editingId === s.id}
-            unsaved={JSON.stringify(drafts[s.id]) !== JSON.stringify(s)} onSelect={(e) => { if (!drag.suppressClick(e)) selectSection(s.id); }}
+            unsaved={sectionDraftChanged(drafts[s.id], s)} onSelect={(e) => { if (!drag.suppressClick(e)) selectSection(s.id); }}
             dragProps={{ onPointerDown: e => drag.begin(e, 'loop', s.id), onPointerMove: drag.move, onPointerUp: drag.end, onPointerCancel: drag.cancel, onLostPointerCapture: drag.cancel }} />
           <LoopRepeat key={`${s.id}:${s.repeat}`} section={s} disabled={locked} onChange={changeRepeat} />
           <LoopActions disabled={locked} section={s} rename={renameSection} remove={removeSection} />
