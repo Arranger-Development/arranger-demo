@@ -112,3 +112,12 @@
 .jam-arp-note-input { display:grid; gap:6px; font-size:14px; }
 .jam-arp-note-input input { font:inherit; padding:8px; color:var(--ink); background:#241d15; border:1px solid #8c7048; border-radius:5px; }
 .jam-effects .jam-arp-controls > .dj-repeat-pad { height:64px; font-size:16px; }
+
+.jam-workspace { grid-template-rows:auto auto minmax(0,1fr); }
+.jam-project-controls { display:flex; align-items:center; gap:8px; padding:8px 18px; background:#211a14; border-bottom:1px solid #9b764d55; }
+.jam-project-controls .performance-connect { padding:6px 12px; min-height:34px; }
+.jam-project-name { max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.jam-project-menu { width:min(340px,calc(100vw - 32px)); padding:18px; border:1px solid #947044; border-radius:9px; color:var(--ink); background:#211a14; box-shadow:0 12px 40px #000a; }
+.jam-project-menu label { display:grid; gap:7px; margin-bottom:12px; font-size:15px; }
+.jam-project-menu select,.jam-project-menu input,.jam-project-menu button { width:100%; padding:8px; border:1px solid #947044; border-radius:5px; font:inherit; color:var(--ink); background:#30261a; }
+.jam-project-menu small { display:block; margin-top:12px; line-height:1.5; color:var(--ink-2); }

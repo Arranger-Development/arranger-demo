@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import createAudioEngine from '../../audio/createAudioEngine.js';
 import { PERFORMANCE_LABELS as LABELS, performanceTemplates, hasSelection, normalizePerformanceBpm } from '../performanceModel.js';
-import { fixedPerformancePads, replacePadBinding, createSessionEditor, readSession, writeSession, snapshotSection, createExportEntry, createArrangementImport, arrangementExportLength } from '../performanceSession.js';
+import { fixedPerformancePads, replacePadBinding, createSessionEditor, snapshotSection, createExportEntry, createArrangementImport, arrangementExportLength } from '../performanceSession.js';
 import { createSessionPlayback } from '../sessionPlayback.js';
 import { mapPerformanceKeyboard } from '../../input/performanceInput.js';
 import { loopRepeat } from '../loopOrder.js';
@@ -11,21 +11,32 @@ import { bindJamBlankClick, returnToNewCombination } from '../jamBlankClick.js';
 import JamPerformanceDeck from './JamPerformanceDeck.jsx';
 import { createJamArpeggiator } from '../jamArpeggiator.js';
 import JamView from './JamView.jsx';
+import JamProjectControls from './JamProjectControls.jsx';
+import { createJamProjects } from '../jamProjects.js';
 import JamExportDialog from './JamExportDialog.jsx';
 import './performance.css';
 import './jamView.css';
 import './jamWorkspace.css';
 
-void [JamView, JamExportDialog, JamPerformanceDeck];
+void [JamView, JamExportDialog, JamPerformanceDeck, JamProjectControls];
 const storage = () => { try { return window.localStorage; } catch { return null; } };
 
 export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, recommendation, onBack, onImport, controlsRef, hardwareInput }) {
-  const [editor] = useState(() => createSessionEditor(readSession(storage(), genreId, profileId, initialBpm, recommendation), { catalog: performanceTemplates(genreId, profileId), timbres: recommendation?.timbreByTrackId }));
+  const [projectStore] = useState(() => createJamProjects(storage(), genreId, profileId, initialBpm, recommendation));
+  const projectLibrary = useSyncExternalStore(projectStore.subscribe, projectStore.getSnapshot);
+  const currentProject = projectLibrary.projects.find(p => p.id === projectLibrary.activeId);
+  const [editor] = useState(() => {
+    const instance = createSessionEditor(projectStore.current().workspace.session, { catalog: performanceTemplates(genreId, profileId) });
+    instance.restore(projectStore.current().workspace); return instance;
+  });
   const { session, drafts, editingId } = useSyncExternalStore(editor.subscribe, editor.getSnapshot);
   const [audio] = useState(() => createAudioEngine());
   const [effects] = useState(() => createJamEffects(audio));
   const { selectedTrack, selectedTracks } = useSyncExternalStore(effects.subscribe, effects.getSnapshot);
-  const [arp] = useState(() => createJamArpeggiator(audio));
+  const [arp] = useState(() => {
+    const instance = createJamArpeggiator(audio);
+    instance.configure(0, projectStore.current().arpNotes?.join(' ') ?? ''); return instance;
+  });
   useEffect(() => { audio.setJamArpeggiator(arp); return () => { arp.stop(); audio.setJamArpeggiator(null); }; }, [audio, arp]);
   const [status, setStatus] = useState({ mode: 'stopped', loading: false, playingId: null, pendingId: null });
   const [automation] = useState(() => createJamEffectAutomation(audio, effects, (id, effectAutomation) => editor.edit({ effectAutomation }, id)));
@@ -48,7 +59,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const draft = drafts[editingId];
   const catalog = useMemo(() => performanceTemplates(genreId, profileId), [genreId, profileId]);
   const templates = useMemo(() => fixedPerformancePads(catalog, session.pads), [catalog, session.pads]);
-  const persist = () => { if (!writeSession(storage(), genreId, profileId, editor.getSnapshot().session)) setMessage('浏览器未能保存，当前会话仍可继续使用。'); };
+  const persist = () => { if (!projectStore.save(editor.getSnapshot(), arp.getSnapshot().presets[0])) setMessage('项目保存失败，当前内容已保留，请重试。'); };
   const patch = (value) => { editor.patch(value); persist(); };
   const jamSnapshot = (section) => {
     const value = snapshotSection(section, genreId, profileId);
@@ -92,10 +103,29 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   function save() {
     if (automation.isRecording()) return;
     if (!hasSelection(editor.getSnapshot().drafts[editor.getSnapshot().editingId].selection)) return;
-    if (!editor.save((next) => writeSession(storage(), genreId, profileId, next))) {
+    if (!editor.save((next, snapshot) => projectStore.save(snapshot, arp.getSnapshot().presets[0]))) {
       setMessage('保存失败，当前组合已保留，请重试。'); return;
     }
     effects.reset(); playback.stop(); setSavedAt(performance.now()); setMessage('已保存，可继续组合下一个 loop。');
+  }
+  function saveProject() {
+    if (automation.isRecording()) return;
+    setMessage(projectStore.save(editor.getSnapshot(), arp.getSnapshot().presets[0]) ? '项目已保存，包含当前草稿。' : '项目保存失败，当前内容已保留，请重试。');
+  }
+  function openProject(id) {
+    if (automation.isRecording()) return false;
+    const ok = id ? projectStore.switchTo(id, editor.getSnapshot(), arp.getSnapshot().presets[0])
+      : projectStore.create(editor.getSnapshot(), arp.getSnapshot().presets[0]);
+    if (!ok) { setMessage('项目保存失败，已留在当前项目，请重试。'); return false; }
+    resetPlayback(); arp.stop();
+    const next = projectStore.current();
+    editor.restore(next.workspace); arp.configure(0, next.arpNotes?.join(' ') ?? '');
+    setPage(0); setExportEntries(null); setCounts({}); setSavedAt(-Infinity); setMessage(id ? `已打开「${next.name}」` : `已新建「${next.name}」，原项目已保留。`);
+    return true;
+  }
+  function renameProject(name) {
+    const ok = projectStore.rename(name);
+    setMessage(ok ? '项目已重命名。' : '重命名失败，请填写名称或检查浏览器存储。'); return ok;
   }
   function changeMix(track, volume) {
     const current = editor.getSnapshot().session;
@@ -131,7 +161,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   useEffect(() => {
     if (status.playingId && editor.getSnapshot().drafts[status.playingId]) editor.select(status.playingId);
   }, [editor, status.playingId]);
-  useEffect(() => { writeSession(storage(), genreId, profileId, editor.getSnapshot().session); }, [editor, genreId, profileId]);
+  useEffect(() => { projectStore.initialize(); }, [projectStore]);
   useEffect(() => effects.syncMix(session.volumes, session.mutedTracks), [effects, session.volumes, session.mutedTracks]);
   useEffect(() => {
     const release = () => { arp.stop(); if (automation.isRecording()) playback.cancelRecording(); automation.suspend(); };
@@ -195,12 +225,14 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       <button className="performance-connect" onClick={connectHardware}>{hardwareInput?.status === 'connected' ? 'Launchpad 已连接' : '连接 Launchpad'}</button>
       <button className="performance-connect" disabled={recordingLocked || !session.sections.length} onClick={openExport}>导出到创作模式 →</button>
     </header>
+    <JamProjectControls project={currentProject} projects={projectLibrary.projects} disabled={recordingLocked || Boolean(exportEntries)}
+      onSave={saveProject} onNew={()=>openProject(null)} onOpen={openProject} onRename={renameProject}/>
     <JamView active={active} session={session} drafts={drafts} editingId={editingId} draft={draft}
-      templates={templates} status={status} message={message} playback={playback}
+      templates={templates} status={status} message={message || projectLibrary.error} playback={playback}
       toggleSequence={toggleSequence} recordingLocked={recordingLocked}
       selectedTrack={selectedTrack} selectedTracks={selectedTracks} selectTrack={effects.toggleTrack}
       effectsPanel={<aside className="jam-effects" data-track={selectedTrack}><h2>现场效果</h2><p>{selectedTracks.length ? `效果轨道 · ${selectedTracks.map(t => LABELS[t]).join('、')}` : '未选择效果轨道'}</p>
-        <JamPerformanceDeck effects={effects} arp={arp} session={session} enabled={inputActive && locked && !status.loading} recordingLocked={recordingLocked}
+        <JamPerformanceDeck key={currentProject.id} effects={effects} arp={arp} session={session} enabled={inputActive && locked && !status.loading} recordingLocked={recordingLocked}
           changeMix={changeMix} onPage={changeEffectPage} onArpPress={pressArp} />
         <div className="jam-effect-recording" role="group" aria-label="效果录制">
           <button type="button" className="performance-connect" aria-pressed={recordingLocked}

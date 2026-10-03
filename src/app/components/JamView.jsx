@@ -1,3 +1,4 @@
+import { sectionDraftChanged } from '../performanceSession.js';
 import { PERFORMANCE_SAMPLE_BANKS } from '../../data/performanceTimbres.js';
 import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Save } from 'lucide-react';
@@ -111,7 +112,7 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
         {session.sections.map((s) => <div className="jam-saved-loop" key={s.id} data-section-id={s.id} data-dragging={dragState?.id === s.id} data-drop-side={dragState?.targetId === s.id ? dragState.side : undefined}>
           <SectionDial disabled={recordingLocked} playback={playback} section={s}
             playing={active && status.playingId === s.id} pending={status.pendingId === s.id} editing={editingId === s.id}
-            unsaved={JSON.stringify(drafts[s.id]) !== JSON.stringify(s)} onSelect={(e) => { if (!drag.suppressClick(e)) selectSection(s.id); }}
+            unsaved={sectionDraftChanged(drafts[s.id], s)} onSelect={(e) => { if (!drag.suppressClick(e)) selectSection(s.id); }}
             dragProps={{ onPointerDown: e => drag.begin(e, 'loop', s.id), onPointerMove: drag.move, onPointerUp: drag.end, onPointerCancel: drag.cancel, onLostPointerCapture: drag.cancel }} />
           <LoopRepeat key={`${s.id}:${s.repeat}`} section={s} disabled={locked} onChange={changeRepeat} />
           <LoopActions disabled={locked} section={s} rename={renameSection} remove={removeSection} />
