@@ -41,7 +41,7 @@ function SectionDial({ playback, section, playing, editing, pending, unsaved, on
       </svg>
       <span className="performance-loop-circle">{loopRepeat(section) === null ? '∞' : `×${loopRepeat(section)}`}</span>
     </span>
-    <strong>{section.name}</strong>
+    <strong title={section.name}>{section.name}</strong>
     <small>{pending ? '待播放' : playing ? '播放中' : editing ? '编辑中' : section.kind === 'transition' ? '转场' : '主段落'} · {unsaved ? '未保存' : hasSelection(section.selection) ? '已保存' : '空位'}</small>
   </button>;
 }
