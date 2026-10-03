@@ -4,7 +4,7 @@ import './djEffects.css';
 
 void [RepeatPads, FilterKnob];
 
-function RepeatPads({ controller, track, bpm, enabled }) {
+function RepeatPads({ controller, track, bpm, enabled, value }) {
   const held = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   useEffect(() => {
     if (!enabled) controller.reset();
@@ -14,7 +14,7 @@ function RepeatPads({ controller, track, bpm, enabled }) {
   }, [controller, enabled]);
   return <div className="dj-repeat-pads" role="group" aria-label={`${LABELS[track]}重复器`}>
     {[4, 8, 16].map((division) => <button type="button" key={division} disabled={!enabled}
-      className="dj-repeat-pad" aria-label={`${LABELS[track]}按住重复 1/${division}`} aria-pressed={held === division}
+      className="dj-repeat-pad" aria-label={`${LABELS[track]}按住重复 1/${division}`} aria-pressed={(value === undefined ? held : value) === division}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -84,7 +84,7 @@ export function Progress({ playback, id, bars, running }) {
   return <span className="pw-progress" aria-hidden="true"><span ref={ref} /></span>;
 }
 
-export function TrackControls({ track, session, changeMix, effects, cutoff, repeatEnabled = false, beginMixEdit, commitMixEdit }) {
+export function TrackControls({ track, session, changeMix, effects, cutoff, repeatEnabled = false, beginMixEdit, commitMixEdit, repeatValue }) {
   const volume = session.volumes[track];
   return <div className="dj-controls" data-track={track}>
     <div className="dj-mixer-row">
@@ -107,6 +107,6 @@ export function TrackControls({ track, session, changeMix, effects, cutoff, repe
       </div>
     </div>
     <div className="dj-repeat-label">重复</div>
-    <RepeatPads controller={effects.repeat} track={track} bpm={session.bpm} enabled={repeatEnabled} />
+    <RepeatPads controller={effects.repeat} track={track} bpm={session.bpm} enabled={repeatEnabled} value={repeatValue} />
   </div>;
 }

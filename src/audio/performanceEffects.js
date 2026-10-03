@@ -26,11 +26,21 @@ export async function createPerformanceEffects(engine) {
       for (const key of ['melodySampler', 'melodyInputSampler', 'melodyOneShotSampler']) route(engine[key], 'melody');
       engine.melodyTrackBanks.forEach((banks, track) => banks.forEach((bank) => route(bank.sampler, track)));
     },
-    set(track, values) {
+    set(track, values, time) {
+      const at = time ?? context.currentTime;
       const bus = buses.get(track); if (!bus) return;
-      if (values.cutoff !== undefined) bus.filter.frequency.setTargetAtTime(values.cutoff || 20000, context.currentTime, 0.015);
-      if (values.volume !== undefined) bus.gain.gain.setTargetAtTime(values.muted || values.volume <= -24 ? 0 : 10 ** (values.volume / 20), context.currentTime, 0.015);
-      if (values.held !== undefined) bus.repeat.port.postMessage({ held: values.held, seconds: (60 / values.bpm) * (4 / values.division) });
+      if (values.cutoff !== undefined) bus.filter.frequency.setTargetAtTime(values.cutoff || 20000, at, 0.015);
+      if (values.volume !== undefined) bus.gain.gain.setTargetAtTime(values.muted || values.volume <= -24 ? 0 : 10 ** (values.volume / 20), at, 0.015);
+      if (values.held !== undefined) bus.repeat.port.postMessage({ ...(Number.isFinite(time) ? { time } : {}), held: values.held, seconds: (60 / values.bpm) * (4 / values.division) });
+    },
+    cancel(track, parameter, time = context.currentTime) {
+      const bus = buses.get(track); if (!bus) return;
+      if (parameter === 'repeat') bus.repeat.port.postMessage({ cancelFrom: time });
+      else {
+        const param = parameter === 'volume' ? bus.gain.gain : bus.filter.frequency;
+        if (param.cancelAndHoldAtTime) param.cancelAndHoldAtTime(time);
+        else { const value = param.value; param.cancelScheduledValues(time); param.setValueAtTime(value, time); }
+      }
     },
     reset() { buses.forEach((bus) => { bus.repeat.port.postMessage({ reset: true }); }); },
   };

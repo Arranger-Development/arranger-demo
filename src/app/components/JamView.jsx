@@ -18,7 +18,7 @@ const DEFAULT_TIMBRE_LABELS = {
   'airy-synth-lead': '空气感合成器',
 };
 
-function SectionDial({ playback, section, playing, editing, pending, unsaved, onSelect, dragProps }) {
+function SectionDial({ playback, section, playing, editing, pending, unsaved, onSelect, dragProps, disabled }) {
   const ring = useRef(null);
   useEffect(() => {
     if (!playing) { ring.current?.setAttribute('stroke-dashoffset', '100'); return undefined; }
@@ -31,7 +31,7 @@ function SectionDial({ playback, section, playing, editing, pending, unsaved, on
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [playback, section.id, playing]);
-  return <button type="button" {...dragProps} onClick={onSelect} aria-pressed={editing}
+  return <button type="button" disabled={disabled} {...dragProps} onClick={onSelect} aria-pressed={editing}
     className={`performance-loop ${editing ? 'is-editing' : ''} ${playing ? 'is-playing' : ''} ${pending ? 'is-pending' : ''}`}>
     <span className="performance-loop-dial">
       <svg className="performance-loop-progress" viewBox="0 0 64 64" aria-hidden="true">
@@ -46,7 +46,7 @@ function SectionDial({ playback, section, playing, editing, pending, unsaved, on
 }
 
 export default function JamView({ active, session, drafts, editingId, draft, templates, status, message, playback,
-  triggerPad, replacePad, catalog, selectSection, updateTimbre, save, renameSection, removeSection, selectedTrack, selectTrack, effectsPanel, reorderSection, changeRepeat, toggleSequence }) {
+  triggerPad, replacePad, catalog, selectSection, updateTimbre, save, renameSection, removeSection, selectedTrack, selectTrack, effectsPanel, reorderSection, changeRepeat, toggleSequence, recordingLocked = false }) {
   const locked = status.mode !== 'stopped';
   const sectionsRef = useRef(null);
   const { drag: dragState, ...drag } = useLoopDrag({ disabled: locked, onDrop: reorderSection });
@@ -64,7 +64,7 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
             <div className="performance-track-label jam-track-timbre" data-selected={selectedTrack === track}>
               <button type="button" className="jam-track-select" aria-label={`选择${LABELS[track]}效果轨道`} aria-pressed={selectedTrack === track} onClick={() => selectTrack?.(track)}>
               <Icon size={22} aria-hidden="true" /><strong>{LABELS[track]}</strong></button><label className="jam-timbre-select" title={`切换${LABELS[track]}音色`}><ChevronDown size={12} aria-hidden="true" />
-              <select aria-label={`${LABELS[track]}音色`} value={TIMBRE_OPTIONS[track].includes(draft.timbres[track]) ? draft.timbres[track] : TIMBRE_OPTIONS[track][0]} onChange={(e) => updateTimbre(track, e.target.value)}>
+              <select disabled={recordingLocked} aria-label={`${LABELS[track]}音色`} value={TIMBRE_OPTIONS[track].includes(draft.timbres[track]) ? draft.timbres[track] : TIMBRE_OPTIONS[track][0]} onChange={(e) => updateTimbre(track, e.target.value)}>
                 {TIMBRE_OPTIONS[track].map((id, i) => <option key={id} value={id}>{PERFORMANCE_SAMPLE_BANKS[id]?.label ?? DEFAULT_TIMBRE_LABELS[id] ?? `音色 ${i + 1} · 占位`}</option>)}
               </select>
             </label></div>
@@ -74,7 +74,7 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
                 const available = availablePadTemplates(catalog, session.pads, track, index);
                 const key = performanceKeyLabel(track, index);
                 return <div className="jam-pad-slot" key={index}>
-                  <button type="button" className={`performance-pad ${selected ? 'is-selected' : ''}`} disabled={!phrase}
+                  <button type="button" className={`performance-pad ${selected ? 'is-selected' : ''}`} disabled={recordingLocked || !phrase}
                     aria-keyshortcuts={key} aria-label={`${LABELS[track]}：${phrase?.name ?? `空槽 ${index + 1}`}`} aria-pressed={Boolean(selected)}
                     title={phrase ? `${phrase.name} · ${phrase.barCount ?? 2} 小节 · ${key}` : '待提供素材'} onClick={() => triggerPad(track, index)}>
                     <span className="performance-pad-top"><span className="performance-key-hint" aria-hidden="true">{key}</span>{selected ? <Check size={16} /> : <Icon size={16} />}</span>
@@ -82,7 +82,7 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
                     {phrase && <PhrasePerimeterProgress playback={playback} track={track} phraseId={phrase.id}
                       running={active && status.mode !== 'stopped'} inset={0} radius={9} />}
                   </button>
-                  <select className="jam-pad-replace" aria-label={`${LABELS[track]}${group ? '转场' : '主乐句'} ${group ? index - MAIN_PHRASE_SLOTS + 1 : index + 1} 更多模板`}
+                  <select disabled={recordingLocked} className="jam-pad-replace" aria-label={`${LABELS[track]}${group ? '转场' : '主乐句'} ${group ? index - MAIN_PHRASE_SLOTS + 1 : index + 1} 更多模板`}
                     value={phrase?.id ?? ""} onChange={(e) => replacePad(track, index, e.target.value)}>
                     <option value="" disabled>{available.length ? '更多模板' : '暂无可替换模板'}</option>
                     {phrase && <option value={phrase.id} hidden disabled>{phrase.name}</option>}
@@ -98,7 +98,7 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
     </div>
     <div className="jam-combination-actions">
       <span role="status">{status.error || message || (status.loading ? '正在准备声音…' : status.pendingId ? '已排队 · 下一小节切换' : '')}</span>
-      <button type="button" className="performance-save" disabled={!hasSelection(draft.selection)} onClick={save}>
+      <button type="button" className="performance-save" disabled={recordingLocked || !hasSelection(draft.selection)} onClick={save}>
         <Save size={14} /><span>{session.sections.some((s) => s.id === editingId) ? '更新' : '保存'}{draft.kind === 'transition' ? '转场' : '段落'}</span>
       </button>
     </div>
@@ -109,7 +109,7 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
       </button>
       {session.sections.length ? <div ref={el => { sectionsRef.current = el; drag.setScrollElement(el); }} className="performance-loops jam-loops">
         {session.sections.map((s) => <div className="jam-saved-loop" key={s.id} data-section-id={s.id} data-dragging={dragState?.id === s.id} data-drop-side={dragState?.targetId === s.id ? dragState.side : undefined}>
-          <SectionDial playback={playback} section={s}
+          <SectionDial disabled={recordingLocked} playback={playback} section={s}
             playing={active && status.playingId === s.id} pending={status.pendingId === s.id} editing={editingId === s.id}
             unsaved={JSON.stringify(drafts[s.id]) !== JSON.stringify(s)} onSelect={(e) => { if (!drag.suppressClick(e)) selectSection(s.id); }}
             dragProps={{ onPointerDown: e => drag.begin(e, 'loop', s.id), onPointerMove: drag.move, onPointerUp: drag.end, onPointerCancel: drag.cancel, onLostPointerCapture: drag.cancel }} />

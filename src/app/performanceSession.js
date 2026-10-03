@@ -3,6 +3,7 @@ import { PERFORMANCE_TRACKS as TRACKS, emptySelection, performanceTemplates, cre
 import { createDefaultTrackState } from '../domain/trackInstances.js';
 import { createClipRecord } from '../domain/clipHelpers.js';
 import { insertLoop, loopRepeat } from './loopOrder.js';
+import { normalizeEffectAutomation } from './effectAutomation.js';
 import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
 
 export const SESSION_VERSION = 4;
@@ -74,11 +75,15 @@ export function readSession(storage, genre, profile, bpm, recommendation) {
     const value = JSON.parse(storage?.getItem(sessionKey(genre, profile)) ?? 'null');
     if (value?.version === SESSION_VERSION && Array.isArray(value.sections)) {
       const catalog = performanceTemplates(genre, profile);
-      const normalizeSection = (s, i) => ({ ...createSection(s.kind === 'transition' ? 'transition' : 'main', i + 1), ...s,
+      const normalizeSection = (s, i) => {
+        const section = ({ ...createSection(s.kind === 'transition' ? 'transition' : 'main', i + 1), ...s,
         id: typeof s.id === 'string' ? s.id : uid(), name: String(s.name || `段落 ${i + 1}`),
         selection: Object.fromEntries(TRACKS.map((t) => [t, catalog[t].some((p) => p.id === s.selection?.[t]) ? s.selection[t] : null])),
-        timbres: { ...defaultTimbres(), ...s.timbres }, repeat: loopRepeat(s),
+        timbres: { ...defaultTimbres(), ...s.timbres }, repeat: loopRepeat(s), effectAutomation: normalizeEffectAutomation(s.effectAutomation),
       });
+        if (!section.effectAutomation) delete section.effectAutomation;
+        return section;
+      };
       return { ...base, bpm: normalizePerformanceBpm(value.bpm),
         sections: value.sections.map(normalizeSection).filter((s) => hasSelection(s.selection)),
         pads: normalizePadBindings(catalog, value.pads),
@@ -184,10 +189,11 @@ export function createSessionEditor(initial, { catalog = {}, timbres } = {}) {
   return {
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, getSnapshot: () => state,
     select: (id) => state.drafts[id] && update({ editingId: id }),
-    edit(patch) {
-      const draft = { ...state.drafts[state.editingId], ...clone(patch) };
+    edit(patch, id = state.editingId) {
+      if (!state.drafts[id]) return state;
+      const draft = { ...state.drafts[id], ...clone(patch) };
       draft.kind = inferSectionKind(draft.selection, catalog);
-      return update({ drafts: { ...state.drafts, [state.editingId]: draft } });
+      return update({ drafts: { ...state.drafts, [id]: draft } });
     },
     save(persist = () => true) {
       const draft = state.drafts[state.editingId];

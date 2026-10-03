@@ -279,6 +279,19 @@ export default class AudioEngine {
     this.performanceEffects?.set(track, values);
   }
 
+  schedulePerformanceEffect(track, values, time) {
+    this.performanceEffects?.set(track, values, time);
+  }
+
+  cancelPerformanceEffect(track, parameter, time = this.immediate()) {
+    this.performanceEffects?.cancel(track, parameter, time);
+  }
+
+  schedulePerformanceNotification(time, callback) {
+    const draw = this.tone?.getDraw?.() ?? this.tone?.Draw;
+    if (draw?.schedule) draw.schedule(callback, time); else callback();
+  }
+
   resetPerformanceEffects() {
     for (const values of Object.values(this.performanceEffectValues ?? {})) values.held = false;
     this.performanceEffects?.reset();
