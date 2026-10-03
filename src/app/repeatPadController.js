@@ -3,10 +3,10 @@ export function createRepeatPadController(setEffect) {
   let owner = null;
   const listeners = new Set();
   const notify = () => listeners.forEach((listener) => listener());
-  const reset = () => {
+  const reset = (silent = false) => {
     if (!owner) return;
     owner = null;
-    setEffect({ held: false });
+    if (!silent) setEffect({ held: false });
     notify();
   };
   return {

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import AudioEngine, { createMelodySampleUrls } from '../src/audio/AudioEngine.js';
+import AudioEngine, { createBassSampleUrls, createMelodySampleUrls } from '../src/audio/AudioEngine.js';
 import { DEEP_AUTUMN_DRUMS as drums, DEEP_AUTUMN_CHORD as chord, PERFORMANCE_SAMPLE_BANKS as banks } from '../src/data/performanceTimbres.js';
 import { createSection, createSession, snapshotSection, createArrangementImport, readSession, sessionKey } from '../src/app/performanceSession.js';
 import { collectProjectEvents, renderProjectToWav, getEventVolume } from '../src/export/audioFile.js';
@@ -40,6 +40,85 @@ function setup() {
   return { engine, tone, players, samplers, calls };
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
+
+test('new bass and melody register measured sharp roots while old banks retain their roots', () => {
+  const expected = {
+    bass: ['E0', 'F#0', 'G#0', 'A0', 'B0', 'C#1', 'D#1', 'E1', 'F#1'],
+    melody: ['C#3', 'D#3', 'E3', 'F#3', 'G#3', 'A3', 'B3', 'C#4', 'D#4', 'E4', 'F#4', 'G#4', 'A4', 'B4', 'C#5'],
+  };
+  for (const [track, roots] of Object.entries(expected)) {
+    const urls = createMelodySampleUrls('/', `deep-autumn-${track}`);
+    assert.deepEqual(Object.keys(urls), roots);
+    for (const root of roots) {
+      assert.equal(new URL(urls[root], 'http://localhost').pathname,
+        `/samples/DeepAutumn/${track === 'bass' ? 'Bass' : 'Melody'}/${root.replace('#', '')}.wav`);
+    }
+  }
+  assert.match(createBassSampleUrls('/').C1, /\/Bass\/Bass_C1_v0.22.wav/);
+  assert.match(createBassSampleUrls('/').A0, /\/Bass\/Bass_A0_v0.22.wav/);
+  assert.match(createMelodySampleUrls('/', 'piano').C4, /\/Melody\/Melody_C4_v0.22.wav/);
+  assert.match(createMelodySampleUrls('/', 'piano').A3, /\/Melody\/Melody_A3_v0.22.wav/);
+});
+
+test('natural, sharp and out-of-range notes use corrected realtime roots and WAV transposition', async (t) => {
+  const urls = [], voices = [];
+  class Context {
+    constructor(channels, frames, rate) { this.frames = frames; this.rate = rate; this.destination = {}; }
+    createGain() { return { gain: { value: 1 }, connect() { return this; } }; }
+    createBufferSource() {
+      const voice = { playbackRate: { value: 1 }, connect() { return this; }, start() {}, stop() {} };
+      voices.push(voice); return voice;
+    }
+    async decodeAudioData() { return { duration: 1.5 }; }
+    async startRendering() { return { numberOfChannels: 2, length: this.frames, sampleRate: this.rate, getChannelData: () => new Float32Array(this.frames) }; }
+  }
+  const original = globalThis.OfflineAudioContext;
+  globalThis.OfflineAudioContext = Context;
+  t.after(() => { if (original) globalThis.OfflineAudioContext = original; else delete globalThis.OfflineAudioContext; });
+  t.mock.method(globalThis, 'fetch', async url => { urls.push(url); return { ok: true, arrayBuffer: async () => new ArrayBuffer(1) }; });
+  // Each fixture is [requested note, source root, original filename, semitone shift].
+  const cases = {
+    bass: [
+      ['C1', 'C#1', 'C1', -1], ['C#1', 'C#1', 'C1', 0],
+      ['D1', 'D#1', 'D1', -1], ['D#1', 'D#1', 'D1', 0],
+      ['F0', 'F#0', 'F0', -1], ['F#0', 'F#0', 'F0', 0],
+      ['G0', 'G#0', 'G0', -1], ['G#0', 'G#0', 'G0', 0],
+      ['E0', 'E0', 'E0', 0], ['A0', 'A0', 'A0', 0], ['B0', 'B0', 'B0', 0],
+      ['C0', 'E0', 'E0', -4], ['F#2', 'F#1', 'F1', 12],
+    ],
+    melody: [
+      ['C4', 'C#4', 'C4', -1], ['C#4', 'C#4', 'C4', 0],
+      ['D4', 'D#4', 'D4', -1], ['D#4', 'D#4', 'D4', 0],
+      ['F3', 'F#3', 'F3', -1], ['F#3', 'F#3', 'F3', 0],
+      ['G3', 'G#3', 'G3', -1], ['G#3', 'G#3', 'G3', 0],
+      ['E4', 'E4', 'E4', 0], ['A3', 'A3', 'A3', 0], ['B4', 'B4', 'B4', 0],
+      ['C3', 'C#3', 'C3', -1], ['C5', 'C#5', 'C5', -1],
+      ['C#5', 'C#5', 'C5', 0], ['B5', 'C#5', 'C5', 10],
+    ],
+  };
+  for (const [track, entries] of Object.entries(cases)) {
+    const { engine, tone } = setup();
+    for (const [note, root, file, semitones] of entries) {
+      const timbreId = `deep-autumn-${track}`;
+      const state = { totalBars: 1, bpm: 120, trackOrder: [track], matrix: {
+        [track]: [[{ type: track, note, timbreId, requestedTimbreId: timbreId, playbackMode: 'natural' }]],
+      } };
+      await engine.play({ matrixSource: () => state.matrix, totalBars: 1 });
+      tone.Transport.tick(0);
+      const sampler = engine.getMelodyBank(timbreId, track, 'natural').sampler;
+      assert.equal(sampler.hits.at(-1).note, note, 'musical note data must not be transposed');
+      const sourcePath = new URL(sampler.urls[root], 'http://localhost').pathname;
+      assert.ok(sourcePath.endsWith(`/${file}.wav`));
+      await engine.stop();
+      urls.length = 0; voices.length = 0;
+      await renderProjectToWav(state);
+      assert.deepEqual(urls, [sourcePath.replace('/arranger-demo', '')]);
+      assert.equal(voices.length, 1);
+      assert.ok(Math.abs(voices[0].playbackRate.value - 2 ** (semitones / 12)) < 1e-12,
+        `${track} ${note}: incorrect shift from ${root}`);
+    }
+  }
+});
 
 test('48 local WAVs match source hashes and sharp filenames map to standard notes', async () => {
   const manifest = JSON.parse(await readFile(new URL('../public/samples/DeepAutumn/manifest.json', import.meta.url)));
@@ -131,8 +210,8 @@ test('WAV render requests the same local banks and leaves drum and harmony sampl
   state.matrix.bass[0][0] = { type: 'bass', note: 'F#0', timbreId: 'deep-autumn-bass', requestedTimbreId: 'deep-autumn-bass', playbackMode: 'natural' };
   state.matrix.melody[0][0] = { type: 'melody', note: 'D#4', timbreId: 'deep-autumn-melody', playbackMode: 'natural' };
   await renderProjectToWav(state, { chunkSeconds: 1 });
-  assert.ok(urls.some(url => url.includes('/Bass/G0.wav')));
-  assert.ok(urls.some(url => url.includes('/Melody/E4.wav')));
+  assert.ok(urls.some(url => url.includes('/Bass/F0.wav')));
+  assert.ok(urls.some(url => url.includes('/Melody/D4.wav')));
   assert.ok(urls.length > 3 && urls.every(url => url.includes('/samples/DeepAutumn/')));
   assert.ok(urls.some(url => url.includes('/Drums/Kick.wav')) && urls.some(url => url.includes('/Chord/CSharp3.wav')));
   assert.ok(voices.length > 0 && voices.every(voice => !voice.stopped));

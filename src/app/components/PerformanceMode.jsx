@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import createAudioEngine from '../../audio/createAudioEngine.js';
-import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, performanceTemplates, hasSelection, normalizePerformanceBpm } from '../performanceModel.js';
+import { PERFORMANCE_LABELS as LABELS, performanceTemplates, hasSelection, normalizePerformanceBpm } from '../performanceModel.js';
 import { fixedPerformancePads, replacePadBinding, createSessionEditor, readSession, writeSession, snapshotSection, createExportEntry, createArrangementImport, arrangementExportLength } from '../performanceSession.js';
 import { createSessionPlayback } from '../sessionPlayback.js';
 import { mapPerformanceKeyboard } from '../../input/performanceInput.js';
 import { loopRepeat } from '../loopOrder.js';
+import { createJamEffectAutomation } from '../jamEffectAutomation.js';
 import { createJamEffects } from '../jamEffects.js';
 import { bindJamBlankClick, returnToNewCombination } from '../jamBlankClick.js';
 import { TrackControls } from './PerformanceControls.jsx';
@@ -22,9 +23,12 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const { session, drafts, editingId } = useSyncExternalStore(editor.subscribe, editor.getSnapshot);
   const [audio] = useState(() => createAudioEngine());
   const [effects] = useState(() => createJamEffects(audio));
-  const { selectedTrack, cutoffs } = useSyncExternalStore(effects.subscribe, effects.getSnapshot);
+  const { selectedTrack, cutoffs, volumes: audibleVolumes, mutedTracks: audibleMuted, repeats } = useSyncExternalStore(effects.subscribe, effects.getSnapshot);
   const [status, setStatus] = useState({ mode: 'stopped', loading: false, playingId: null, pendingId: null });
-  const [playback] = useState(() => createSessionPlayback(audio, setStatus));
+  const [automation] = useState(() => createJamEffectAutomation(audio, effects, (id, effectAutomation) => editor.edit({ effectAutomation }, id)));
+  const recording = useSyncExternalStore(automation.subscribe, automation.getSnapshot);
+  const recordingLocked = recording.phase !== 'idle';
+  const [playback] = useState(() => createSessionPlayback(audio, setStatus, automation));
   const [message, setMessage] = useState('');
   const [savedAt, setSavedAt] = useState(-Infinity);
   const [exportEntries, setExportEntries] = useState(null);
@@ -46,7 +50,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const jamSnapshot = (section) => {
     const value = snapshotSection(section, genreId, profileId);
     const saved = editor.getSnapshot().session.sections.find(s => s.id === section.id);
-    return value && { ...value, repeat: loopRepeat(saved ?? { kind: section.kind }), phraseIds: { ...section.selection } };
+    return value && { ...value, repeat: loopRepeat(saved ?? { kind: section.kind }), effectAutomation: section.effectAutomation, phraseIds: { ...section.selection } };
   };
   const launchDraft = (edit = false) => {
     setMessage('');
@@ -54,11 +58,13 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     if (next) playback.launch(next, current.session.bpm, { edit, returnAfterTransition: false }); else if (playback.isActive()) playback.stop();
   };
   function replacePad(track, index, templateId) {
+    if (automation.isRecording()) return;
     const current = editor.getSnapshot().session;
     const next = replacePadBinding(current, catalog, track, index, templateId);
     if (next !== current) patch({ pads: next.pads });
   }
   function triggerPad(track, index) {
+    if (automation.isRecording()) return;
     const current = editor.getSnapshot();
     const phrase = fixedPerformancePads(catalog, current.session.pads)[track][index];
     if (!phrase) return;
@@ -67,6 +73,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     editor.edit({ selection }); launchDraft(true);
   }
   function selectSection(id) {
+    if (automation.isRecording()) return;
     if (!editor.getSnapshot().drafts[id]) return;
     const current = editor.getSnapshot();
     const snapshot = jamSnapshot(current.drafts[id]);
@@ -80,6 +87,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     setMessage(playback.sequence(snapshots, current.session.bpm) ? '' : '没有可播放的 Loop');
   }
   function save() {
+    if (automation.isRecording()) return;
     if (!hasSelection(editor.getSnapshot().drafts[editor.getSnapshot().editingId].selection)) return;
     if (!editor.save((next) => writeSession(storage(), genreId, profileId, next))) {
       setMessage('保存失败，当前组合已保留，请重试。'); return;
@@ -89,16 +97,18 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   function changeMix(track, volume) {
     const current = editor.getSnapshot().session;
     patch({ volumes: { ...current.volumes, [track]: volume }, mutedTracks: { ...current.mutedTracks, [track]: false } });
-    audio.setPerformanceEffect(track, { volume, muted: false });
+    effects.volume(track, volume);
   }
   function updateTimbre(track, value) {
+    if (automation.isRecording()) return;
     editor.edit({ timbres: { ...editor.getSnapshot().drafts[editingId].timbres, [track]: value } });
     if (locked) launchDraft(true);
   }
   function resetPlayback() { effects.reset(true); playback.stop(); }
-  function changeBpm(value) { const bpm = normalizePerformanceBpm(value); patch({ bpm }); playback.setTempo(bpm); }
+  function changeBpm(value) { if (automation.isRecording()) return; const bpm = normalizePerformanceBpm(value); patch({ bpm }); playback.setTempo(bpm); }
   function connectHardware() { void audio.startAudio(); void hardwareInput?.onConnect(); }
   function openExport() {
+    if (automation.isRecording()) return;
     resetPlayback(); setMessage(''); setCounts({});
     setExportEntries(session.sections.map(s => createExportEntry(s, genreId, profileId)));
   }
@@ -106,14 +116,14 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     if (status.playingId && editor.getSnapshot().drafts[status.playingId]) editor.select(status.playingId);
   }, [editor, status.playingId]);
   useEffect(() => { writeSession(storage(), genreId, profileId, editor.getSnapshot().session); }, [editor, genreId, profileId]);
-  useEffect(() => { for (const track of TRACKS) audio.setPerformanceEffect(track, { volume: session.volumes[track], muted: session.mutedTracks[track] }); }, [audio, session.volumes, session.mutedTracks]);
+  useEffect(() => effects.syncMix(session.volumes, session.mutedTracks), [effects, session.volumes, session.mutedTracks]);
   useEffect(() => {
-    const release = () => effects.reset(true);
+    const release = () => { if (automation.isRecording()) playback.cancelRecording(); automation.suspend(); };
     window.addEventListener('blur', release);
     return () => { window.removeEventListener('blur', release); playback.stop(); effects.reset(true); };
-  }, [active, effects, playback]);
+  }, [active, effects, playback, automation]);
   useEffect(() => { if (!inputActive || !locked || status.loading) effects.reset(); }, [effects, inputActive, locked, status.loading]);
-  useEffect(() => { effects.reset(); }, [effects, hardwareInput?.status]);
+  useEffect(() => { automation.releaseRepeats(); }, [automation, hardwareInput?.status]);
   useEffect(() => {
     if (!inputActive) return undefined;
     const key = (e) => {
@@ -146,7 +156,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         if (command.type === 'page') setPage(Math.max(0, Math.min(Math.max(0, Math.ceil(session.sections.length / 8) - 1), page + command.delta)));
       },
       release: () => effects.reset(),
-      getSurface: () => ({ selectedTrack: effects.getSnapshot().selectedTrack, volumes: editor.getSnapshot().session.volumes, cutoffs: effects.getSnapshot().cutoffs, repeat: effects.repeat.getSnapshot(), savedAt, storageError: message.includes('失败'), version: 4, templates, sections: session.sections, drafts, editingId, page, status, progress: playback.getProgress(), beatPhase: playback.getBeatPhase() }),
+      getSurface: () => ({ selectedTrack: effects.getSnapshot().selectedTrack, volumes: effects.getSnapshot().volumes, cutoffs: effects.getSnapshot().cutoffs, repeat: effects.getSnapshot().repeats[effects.getSnapshot().selectedTrack], savedAt, storageError: message.includes('失败'), version: 4, templates, sections: session.sections, drafts, editingId, page, status, progress: playback.getProgress(), beatPhase: playback.getBeatPhase() }),
     };
     controlsRef.current = controls;
     return () => { if (controlsRef.current === controls) controlsRef.current = null; };
@@ -157,17 +167,26 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     <header className="performance-header">
       <button className="performance-connect" onClick={() => { resetPlayback(); onBack(); }}>← 创作模式</button>
       <div className="performance-title"><span className="performance-eyebrow">PROJECT ARRANGER</span><h1>Jam · 演奏</h1></div>
-      <label className="performance-tempo">BPM <input aria-label="演奏速度 BPM" type="number" min="40" max="240" value={session.bpm} onChange={(e) => changeBpm(e.target.value)} /></label>
+      <label className="performance-tempo">BPM <input aria-label="演奏速度 BPM" disabled={recordingLocked} type="number" min="40" max="240" value={session.bpm} onChange={(e) => changeBpm(e.target.value)} /></label>
       <button className="performance-connect" onClick={connectHardware}>{hardwareInput?.status === 'connected' ? 'Launchpad 已连接' : '连接 Launchpad'}</button>
-      <button className="performance-connect" disabled={!session.sections.length} onClick={openExport}>导出到创作模式 →</button>
+      <button className="performance-connect" disabled={recordingLocked || !session.sections.length} onClick={openExport}>导出到创作模式 →</button>
     </header>
     <JamView active={active} session={session} drafts={drafts} editingId={editingId} draft={draft}
       templates={templates} status={status} message={message} playback={playback}
-      toggleSequence={toggleSequence}
+      toggleSequence={toggleSequence} recordingLocked={recordingLocked}
       selectedTrack={selectedTrack} selectTrack={effects.select}
       effectsPanel={<aside className="jam-effects" data-track={selectedTrack}><h2>现场效果</h2><p>当前轨道 · {LABELS[selectedTrack]}</p>
-        <TrackControls key={selectedTrack} track={selectedTrack} session={session} changeMix={changeMix} effects={effects} cutoff={cutoffs[selectedTrack]} repeatEnabled={inputActive && locked && !status.loading} />
-        <p className="jam-effect-hint">按住重复 · 松开恢复</p></aside>}
+        <TrackControls key={selectedTrack} track={selectedTrack} session={{ ...session, volumes: audibleVolumes, mutedTracks: audibleMuted }} changeMix={changeMix} effects={effects} cutoff={cutoffs[selectedTrack]} repeatValue={repeats[selectedTrack]} repeatEnabled={inputActive && locked && !status.loading} />
+        <p className="jam-effect-hint">按住重复 · 松开恢复</p>
+        <div className="jam-effect-recording" role="group" aria-label="效果录制">
+          <button type="button" className="performance-connect" aria-pressed={recordingLocked}
+            disabled={!recordingLocked && (status.loading || !hasSelection(draft.selection))}
+            onClick={() => { if (automation.isRecording()) playback.cancelRecording(); else playback.record(jamSnapshot(editor.getSnapshot().drafts[editor.getSnapshot().editingId]), session.bpm); }}>
+            {recordingLocked ? '取消录制' : '● 录制效果'}</button>
+          <span role="status">{recording.phase === 'armed' ? (status.loading ? '正在准备声音…' : '等待录制 · 下一轮开始') : recording.phase === 'recording' ? '录制中 · 本轮结束后试听' : draft.effectAutomation ? '已录制 · 随 Loop 重放' : '录制一轮 · 保存后保留'}</span>
+          <button type="button" className="performance-connect" disabled={recordingLocked || !draft.effectAutomation}
+            onClick={() => { editor.edit({ effectAutomation: undefined }); automation.clear(editingId); }}>清除效果录制</button>
+        </div></aside>}
       catalog={catalog} replacePad={replacePad} triggerPad={triggerPad} selectSection={selectSection} updateTimbre={updateTimbre}
       reorderSection={(id, target, side) => { if (!locked) { editor.reorder(id, target, side); persist(); } }}
       changeRepeat={(id, repeat) => { if (!locked) { editor.setRepeat(id, repeat); persist(); } }}

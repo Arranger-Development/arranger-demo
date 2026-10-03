@@ -22,11 +22,14 @@ export const PERFORMANCE_SAMPLE_BANKS = Object.freeze({
   },
   [DEEP_AUTUMN_BASS]: {
     id: DEEP_AUTUMN_BASS, track: 'bass', label: '深秋贝斯', gainDb: 0,
-    sampleFiles: Object.fromEntries(['E0','F0','G0','A0','B0','C1','D1','E1','F1'].map(note => [note, `samples/DeepAutumn/Bass/${note}.wav`])),
+    // These source filenames omit sharps. Keep the legacy bass octave convention;
+    // see docs/deep-autumn-pitch-mapping.md for measured pitches and provenance.
+    sampleFiles: Object.fromEntries(['E0','F#0','G#0','A0','B0','C#1','D#1','E1','F#1'].map(note => [note, `samples/DeepAutumn/Bass/${note.replace('#', '')}.wav`])),
   },
   [DEEP_AUTUMN_MELODY]: {
     id: DEEP_AUTUMN_MELODY, track: 'melody', label: '深秋旋律', gainDb: 0,
-    sampleFiles: Object.fromEntries(['C3','D3','E3','F3','G3','A3','B3','C4','D4','E4','F4','G4','A4','B4','C5'].map(note => [note, `samples/DeepAutumn/Melody/${note}.wav`])),
+    // Register the audible roots, not the unaltered source filenames.
+    sampleFiles: Object.fromEntries(['C#3','D#3','E3','F#3','G#3','A3','B3','C#4','D#4','E4','F#4','G#4','A4','B4','C#5'].map(note => [note, `samples/DeepAutumn/Melody/${note.replace('#', '')}.wav`])),
   },
 });
 

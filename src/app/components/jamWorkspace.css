@@ -63,3 +63,15 @@
 .jam-effects .dj-knob-ends { width:68px; font-size:11px; }
 .jam-workspace .dj-repeat-pad { font-size:14px; height:48px; }
 .jam-export-dialog { font-size:16px; }
+
+.jam-effect-recording { display:grid; gap:7px; margin-top:12px; padding-top:10px; border-top:1px solid #94704466; }
+.jam-effect-recording .performance-connect { justify-content:center; padding:7px; }
+.jam-effect-recording [aria-pressed=true] { color:#ffd6bc; border-color:#ed956b; background:#4c231b; }
+.jam-effect-recording [role=status] { font-size:12px; line-height:1.5; text-align:center; color:var(--ink-2); }
+.jam-effect-recording button:disabled { opacity:.45; }
+.jam-effects { align-self:start; }
+/* Size containment cannot infer the effects deck's intrinsic height. Reserve
+   room for recording controls; short windows scroll the body instead of letting
+   the deck overlap Save and the Loop strip. */
+.jam-workspace .jam-workbench { min-height:510px; }
+.jam-workspace .jam-body { grid-template-rows:auto minmax(510px,1fr) auto auto; overflow:auto; }
