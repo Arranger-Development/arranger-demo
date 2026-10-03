@@ -46,7 +46,7 @@ function SectionDial({ playback, section, playing, editing, pending, unsaved, on
 }
 
 export default function JamView({ active, session, drafts, editingId, draft, templates, status, message, playback,
-  triggerPad, replacePad, catalog, selectSection, updateTimbre, save, renameSection, removeSection, selectedTrack, selectTrack, effectsPanel, reorderSection, changeRepeat, toggleSequence, recordingLocked = false }) {
+  triggerPad, replacePad, catalog, selectSection, updateTimbre, save, renameSection, removeSection, selectedTrack, selectedTracks = [selectedTrack], selectTrack, effectsPanel, reorderSection, changeRepeat, toggleSequence, recordingLocked = false }) {
   const locked = status.mode !== 'stopped';
   const sectionsRef = useRef(null);
   const { drag: dragState, ...drag } = useLoopDrag({ disabled: locked, onDrop: reorderSection });
@@ -61,8 +61,8 @@ export default function JamView({ active, session, drafts, editingId, draft, tem
         {TRACKS.map((track) => {
           const Icon = PERFORMANCE_TRACK_ICONS[track]; void Icon;
           return <div className="performance-row jam-row" data-track={track} key={track} role="group" aria-label={`${LABELS[track]}乐句`}>
-            <div className="performance-track-label jam-track-timbre" data-selected={selectedTrack === track}>
-              <button type="button" className="jam-track-select" aria-label={`选择${LABELS[track]}效果轨道`} aria-pressed={selectedTrack === track} onClick={() => selectTrack?.(track)}>
+            <div className="performance-track-label jam-track-timbre" data-selected={selectedTracks.includes(track)}>
+              <button type="button" className="jam-track-select" aria-label={`选择${LABELS[track]}效果轨道`} aria-pressed={selectedTracks.includes(track)} onClick={() => selectTrack?.(track)}>
               <Icon size={22} aria-hidden="true" /><strong>{LABELS[track]}</strong></button><label className="jam-timbre-select" title={`切换${LABELS[track]}音色`}><ChevronDown size={12} aria-hidden="true" />
               <select disabled={recordingLocked} aria-label={`${LABELS[track]}音色`} value={TIMBRE_OPTIONS[track].includes(draft.timbres[track]) ? draft.timbres[track] : TIMBRE_OPTIONS[track][0]} onChange={(e) => updateTimbre(track, e.target.value)}>
                 {TIMBRE_OPTIONS[track].map((id, i) => <option key={id} value={id}>{PERFORMANCE_SAMPLE_BANKS[id]?.label ?? DEFAULT_TIMBRE_LABELS[id] ?? `音色 ${i + 1} · 占位`}</option>)}

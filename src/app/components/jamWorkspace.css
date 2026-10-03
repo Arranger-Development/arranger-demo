@@ -11,8 +11,9 @@
 .jam-export-dialog button:disabled { opacity:.4; }
 .jam-export-dialog footer { display:flex; justify-content:flex-end; gap:12px; }
 @media(max-width:650px) { .jam-export-dialog li { flex-wrap:wrap; } .jam-workspace .performance-header { flex-wrap:wrap; } }
-.jam-workspace .jam-workbench { grid-template-columns:minmax(0,1fr) 224px; gap:20px; padding-right:20px; min-height:352px; }
-.jam-workspace .jam-grid { --pad-size:max(44px,min(144px,calc((100cqw - 400px) / 8),calc((100cqh - 138px) / 4))); }
+.jam-workspace { --jam-effects-width:clamp(288px,24vw,360px); }
+.jam-workspace .jam-workbench { grid-template-columns:minmax(0,1fr) var(--jam-effects-width); gap:20px; padding-right:20px; min-height:352px; }
+.jam-workspace .jam-grid { --pad-size:max(44px,min(144px,calc((100cqw - var(--jam-effects-width) - 176px) / 8),calc((100cqh - 138px) / 4))); }
 .jam-effects { --pw-track:#73d49d; width:100%; border:1px solid #8c7048; border-top:4px solid var(--pw-track); border-radius:9px; background:#16120e; padding:10px; color:var(--ink); }
 .jam-effects[data-track=chord] { --pw-track:#e2a15e; }.jam-effects[data-track=bass] { --pw-track:#78b5f1; }.jam-effects[data-track=melody] { --pw-track:#c58ae0; }
 .jam-effects h2 { font-size:19px; margin:0 0 6px; }.jam-effects p { margin:6px 0; font-size:14px; color:var(--pw-track); }.jam-effects .jam-effect-hint { text-align:center; color:var(--ink-2); font-size:12px; margin-bottom:0; }
@@ -20,7 +21,7 @@
 .jam-track-select[aria-pressed=true] { box-shadow:0 0 0 1px var(--pad-tone); }
 .jam-timbre-select { display:block; position:relative; width:32px; height:18px; text-align:center; }
 .jam-track-timbre .jam-timbre-select select { inset:0; }
-@media(max-width:900px) { .jam-workspace .jam-workbench { grid-template-columns:minmax(0,1fr) 196px; gap:10px; padding-right:10px; }.jam-effects { padding:10px; }.jam-workspace .jam-grid { --pad-size:max(40px,min(96px,calc((100cqw - 365px) / 8),calc((100cqh - 138px) / 4))); } }
+@media(max-width:900px) { .jam-workspace .jam-workbench { grid-template-columns:minmax(0,1fr) var(--jam-effects-width); gap:10px; padding-right:10px; }.jam-effects { padding:10px; }.jam-workspace .jam-grid { --pad-size:max(40px,min(96px,calc((100cqw - var(--jam-effects-width) - 145px) / 8),calc((100cqh - 138px) / 4))); } }
 @media(max-width:650px) { .jam-workspace { grid-template-rows:auto minmax(0,1fr); }.jam-workspace .jam-workbench { overflow:auto; }.jam-workspace .jam-body { min-height:560px; }.jam-export-dialog li strong { flex-basis:100%; } }
 .jam-loop-count { display:flex; justify-content:center; flex-wrap:wrap; gap:5px; margin-top:6px; }
 .jam-loop-count input,.jam-loop-count button { box-sizing:border-box; width:42px; height:32px; border:1px solid #947044; border-radius:5px; background:#211a14; color:var(--ink); text-align:center; font-family:inherit; font-size:15px; }
@@ -75,3 +76,39 @@
    the deck overlap Save and the Loop strip. */
 .jam-workspace .jam-workbench { min-height:510px; }
 .jam-workspace .jam-body { grid-template-rows:auto minmax(510px,1fr) auto auto; overflow:auto; }
+.jam-targets,.jam-deck-pages,.jam-arp-presets,.jam-arp-settings,.jam-chopper-pads { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; margin:8px 0; }
+.jam-deck-pages { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.jam-deck button { min-width:0; padding:6px 3px; border:1px solid #8c7048; border-radius:5px; background:#241d15; color:var(--ink); font:inherit; font-size:12px; touch-action:none; }
+.jam-deck button:disabled { opacity:.4; cursor:default; }
+.jam-deck button[aria-pressed=true] { border-color:#f2c66f; color:#fff2c7; background:#66502f; }
+.jam-deck .dj-repeat-pad { font-size:12px; height:38px; }
+.jam-deck p,.jam-deck small { font-size:12px; line-height:1.45; }
+.jam-expression-controls { display:grid; gap:12px; padding:12px 0; }
+.jam-expression-controls label,.jam-arp-controls details label { display:grid; gap:5px; }
+.jam-expression-controls output { float:right; }
+.jam-deck input { width:100%; min-width:0; box-sizing:border-box; }
+.jam-deck input[type=range] { accent-color:#ddba76; }
+.jam-brake-pad button { width:100%; }
+.jam-arp-controls details { margin:8px 0; }
+.jam-arp-controls details input { font:inherit; padding:5px; }
+.jam-arp-controls details label { margin-top:7px; }
+.jam-workspace .jam-effects { max-height:none; overflow:visible; padding:12px 16px; }
+.jam-fixed-effects { display:grid; grid-template-columns:3fr 4fr; gap:12px; }
+.jam-fixed-effects .jam-chopper-pads { margin:0; }
+.jam-fixed-effects .dj-repeat-label { letter-spacing:0; white-space:nowrap; }
+.jam-brake-pad { margin-top:8px; }
+.jam-effect-recording { grid-template-columns:1fr 1fr; gap:6px; margin-top:9px; padding-top:8px; }
+.jam-effect-recording [role=status] { grid-column:1/-1; grid-row:2; }
+.jam-effects .jam-deck-pages { margin:9px 0; }
+.jam-effects .jam-deck-pages button { font-size:14px; padding:7px 4px; }
+.jam-effects .jam-deck .dj-repeat-pad { height:36px; padding:6px 0; font-size:13px; }
+.jam-arp-controls details[open] { display:grid; grid-template-columns:1fr 1fr; gap:5px 10px; }
+.jam-arp-controls details summary,.jam-arp-controls details small { grid-column:1/-1; }
+@media(max-width:720px) {
+  .jam-workspace .jam-workbench { grid-template-columns:minmax(580px,1fr) var(--jam-effects-width); }
+}
+
+.jam-arp-controls { display:grid; gap:10px; padding:10px 0; }
+.jam-arp-note-input { display:grid; gap:6px; font-size:14px; }
+.jam-arp-note-input input { font:inherit; padding:8px; color:var(--ink); background:#241d15; border:1px solid #8c7048; border-radius:5px; }
+.jam-effects .jam-arp-controls > .dj-repeat-pad { height:64px; font-size:16px; }

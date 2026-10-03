@@ -8,14 +8,15 @@ import { loopRepeat } from '../loopOrder.js';
 import { createJamEffectAutomation } from '../jamEffectAutomation.js';
 import { createJamEffects } from '../jamEffects.js';
 import { bindJamBlankClick, returnToNewCombination } from '../jamBlankClick.js';
-import { TrackControls } from './PerformanceControls.jsx';
+import JamPerformanceDeck from './JamPerformanceDeck.jsx';
+import { createJamArpeggiator } from '../jamArpeggiator.js';
 import JamView from './JamView.jsx';
 import JamExportDialog from './JamExportDialog.jsx';
 import './performance.css';
 import './jamView.css';
 import './jamWorkspace.css';
 
-void [JamView, JamExportDialog, TrackControls];
+void [JamView, JamExportDialog, JamPerformanceDeck];
 const storage = () => { try { return window.localStorage; } catch { return null; } };
 
 export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, recommendation, onBack, onImport, controlsRef, hardwareInput }) {
@@ -23,7 +24,9 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const { session, drafts, editingId } = useSyncExternalStore(editor.subscribe, editor.getSnapshot);
   const [audio] = useState(() => createAudioEngine());
   const [effects] = useState(() => createJamEffects(audio));
-  const { selectedTrack, cutoffs, volumes: audibleVolumes, mutedTracks: audibleMuted, repeats } = useSyncExternalStore(effects.subscribe, effects.getSnapshot);
+  const { selectedTrack, selectedTracks } = useSyncExternalStore(effects.subscribe, effects.getSnapshot);
+  const [arp] = useState(() => createJamArpeggiator(audio));
+  useEffect(() => { audio.setJamArpeggiator(arp); return () => { arp.stop(); audio.setJamArpeggiator(null); }; }, [audio, arp]);
   const [status, setStatus] = useState({ mode: 'stopped', loading: false, playingId: null, pendingId: null });
   const [automation] = useState(() => createJamEffectAutomation(audio, effects, (id, effectAutomation) => editor.edit({ effectAutomation }, id)));
   const recording = useSyncExternalStore(automation.subscribe, automation.getSnapshot);
@@ -96,11 +99,24 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   }
   function changeMix(track, volume) {
     const current = editor.getSnapshot().session;
-    patch({ volumes: { ...current.volumes, [track]: volume }, mutedTracks: { ...current.mutedTracks, [track]: false } });
-    effects.volume(track, volume);
+    const tracks = effects.getSnapshot().selectedTracks;
+    if (!tracks.length) return;
+    patch({ volumes: { ...current.volumes, ...Object.fromEntries(tracks.map(t=>[t,volume])) }, mutedTracks: { ...current.mutedTracks, ...Object.fromEntries(tracks.map(t=>[t,false])) } });
+    tracks.forEach(t=>effects.volume(t,volume));
+  }
+  function changeEffectPage(page) { if (effects.getSnapshot().effectPage === 'arp' && page !== 'arp') arp.stop(); effects.setPage(page); }
+  function pressArp(token, index) {
+    if (!playback.isReady() || automation.isRecording()) return;
+    const current = editor.getSnapshot();
+    void arp.press(token,index,current.drafts[current.editingId].timbres.melody);
+  }
+  function toggleRecording() {
+    if (automation.isRecording()) playback.cancelRecording();
+    else { arp.stop(); const current=editor.getSnapshot(); playback.record(jamSnapshot(current.drafts[current.editingId]),current.session.bpm); }
   }
   function updateTimbre(track, value) {
     if (automation.isRecording()) return;
+    arp.stop();
     editor.edit({ timbres: { ...editor.getSnapshot().drafts[editingId].timbres, [track]: value } });
     if (locked) launchDraft(true);
   }
@@ -118,12 +134,12 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   useEffect(() => { writeSession(storage(), genreId, profileId, editor.getSnapshot().session); }, [editor, genreId, profileId]);
   useEffect(() => effects.syncMix(session.volumes, session.mutedTracks), [effects, session.volumes, session.mutedTracks]);
   useEffect(() => {
-    const release = () => { if (automation.isRecording()) playback.cancelRecording(); automation.suspend(); };
+    const release = () => { arp.stop(); if (automation.isRecording()) playback.cancelRecording(); automation.suspend(); };
     window.addEventListener('blur', release);
     return () => { window.removeEventListener('blur', release); playback.stop(); effects.reset(true); };
-  }, [active, effects, playback, automation]);
+  }, [active, effects, playback, automation, arp]);
   useEffect(() => { if (!inputActive || !locked || status.loading) effects.reset(); }, [effects, inputActive, locked, status.loading]);
-  useEffect(() => { automation.releaseRepeats(); }, [automation, hardwareInput?.status]);
+  useEffect(() => { arp.stop(); automation.releaseRepeats(); }, [automation, arp, hardwareInput?.status]);
   useEffect(() => {
     if (!inputActive) return undefined;
     const key = (e) => {
@@ -146,17 +162,25 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         if (command.type === 'togglePlayback') toggleSequence();
         if (command.type === 'stop') { effects.reset(); playback.stop(); }
         const track = effects.getSnapshot().selectedTrack;
-        if (command.type === 'selectTrack') effects.select(command.trackId);
+        if (command.type === 'selectTrack') effects.select(command.trackId, command.additive);
         if (command.type === 'volume') changeMix(track, command.value);
-        if (command.type === 'cutoff') effects.cutoff(track, command.value);
+        if (command.type === 'cutoff') effects.getSnapshot().selectedTracks.forEach(t=>effects.cutoff(t, command.value));
+        if (command.type === 'effectPage') changeEffectPage(command.page);
+        if (command.type === 'recordEffects') toggleRecording();
+        if (command.type === 'reverb') effects.reverb(command.value);
+        if (['pitch','chopper','brake'].includes(command.type)) {
+          if (!command.pressed) effects.release(command.type,command.token);
+          else if (playback.isReady()) effects.press(command.type,command.token,command.value,editor.getSnapshot().session.bpm);
+        }
+        if (command.type === 'arp') { if(command.pressed) pressArp(command.token,command.index); else arp.release(command.token); }
         if (command.type === 'repeat') {
           if (!command.pressed) effects.repeat.release(command.token);
           else if (playback.isReady()) effects.repeat.press(command.token, command.division, editor.getSnapshot().session.bpm);
         }
         if (command.type === 'page') setPage(Math.max(0, Math.min(Math.max(0, Math.ceil(session.sections.length / 8) - 1), page + command.delta)));
       },
-      release: () => effects.reset(),
-      getSurface: () => ({ selectedTrack: effects.getSnapshot().selectedTrack, volumes: effects.getSnapshot().volumes, cutoffs: effects.getSnapshot().cutoffs, repeat: effects.getSnapshot().repeats[effects.getSnapshot().selectedTrack], savedAt, storageError: message.includes('失败'), version: 4, templates, sections: session.sections, drafts, editingId, page, status, progress: playback.getProgress(), beatPhase: playback.getBeatPhase() }),
+      release: () => { arp.stop(); automation.releaseRepeats(); },
+      getSurface: () => ({ ...effects.getSnapshot(), arp: arp.getSnapshot(), recording: automation.getSnapshot(), selectedTrack: effects.getSnapshot().selectedTrack, volumes: effects.getSnapshot().volumes, cutoffs: effects.getSnapshot().cutoffs, repeat: effects.getSnapshot().repeats[effects.getSnapshot().selectedTrack], savedAt, storageError: message.includes('失败'), version: 4, templates, sections: session.sections, drafts, editingId, page, status, progress: playback.getProgress(), beatPhase: playback.getBeatPhase() }),
     };
     controlsRef.current = controls;
     return () => { if (controlsRef.current === controls) controlsRef.current = null; };
@@ -174,14 +198,14 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     <JamView active={active} session={session} drafts={drafts} editingId={editingId} draft={draft}
       templates={templates} status={status} message={message} playback={playback}
       toggleSequence={toggleSequence} recordingLocked={recordingLocked}
-      selectedTrack={selectedTrack} selectTrack={effects.select}
-      effectsPanel={<aside className="jam-effects" data-track={selectedTrack}><h2>现场效果</h2><p>当前轨道 · {LABELS[selectedTrack]}</p>
-        <TrackControls key={selectedTrack} track={selectedTrack} session={{ ...session, volumes: audibleVolumes, mutedTracks: audibleMuted }} changeMix={changeMix} effects={effects} cutoff={cutoffs[selectedTrack]} repeatValue={repeats[selectedTrack]} repeatEnabled={inputActive && locked && !status.loading} />
-        <p className="jam-effect-hint">按住重复 · 松开恢复</p>
+      selectedTrack={selectedTrack} selectedTracks={selectedTracks} selectTrack={effects.toggleTrack}
+      effectsPanel={<aside className="jam-effects" data-track={selectedTrack}><h2>现场效果</h2><p>{selectedTracks.length ? `效果轨道 · ${selectedTracks.map(t => LABELS[t]).join('、')}` : '未选择效果轨道'}</p>
+        <JamPerformanceDeck effects={effects} arp={arp} session={session} enabled={inputActive && locked && !status.loading} recordingLocked={recordingLocked}
+          changeMix={changeMix} onPage={changeEffectPage} onArpPress={pressArp} />
         <div className="jam-effect-recording" role="group" aria-label="效果录制">
           <button type="button" className="performance-connect" aria-pressed={recordingLocked}
             disabled={!recordingLocked && (status.loading || !hasSelection(draft.selection))}
-            onClick={() => { if (automation.isRecording()) playback.cancelRecording(); else playback.record(jamSnapshot(editor.getSnapshot().drafts[editor.getSnapshot().editingId]), session.bpm); }}>
+            onClick={toggleRecording}>
             {recordingLocked ? '取消录制' : '● 录制效果'}</button>
           <span role="status">{recording.phase === 'armed' ? (status.loading ? '正在准备声音…' : '等待录制 · 下一轮开始') : recording.phase === 'recording' ? '录制中 · 本轮结束后试听' : draft.effectAutomation ? '已录制 · 随 Loop 重放' : '录制一轮 · 保存后保留'}</span>
           <button type="button" className="performance-connect" disabled={recordingLocked || !draft.effectAutomation}

@@ -1,3 +1,4 @@
+import { MOMENTARY_EFFECTS, EFFECT_DEFAULTS, effectValues } from './jamEffectParameters.js';
 import { PERFORMANCE_TRACKS as TRACKS } from './performanceModel.js';
 import { EFFECT_PARAMETERS, effectLaneEvents, mergeEffectTake, normalizeEffectAutomation } from './effectAutomation.js';
 
@@ -12,7 +13,7 @@ export function createJamEffectAutomation(audio, effects, onComplete = () => {})
   const notify = (next) => { state = next; listeners.forEach(fn => fn()); };
   const baseline = (track, parameter) => {
     const values = effects.getManual(track);
-    return parameter === 'repeat' ? null : parameter === 'volume' && values.muted ? -24 : values[parameter];
+    return MOMENTARY_EFFECTS.includes(parameter) ? EFFECT_DEFAULTS[parameter] : parameter === 'volume' && values.muted ? -24 : values[parameter];
   };
   const dataFor = w => take?.id === w.snapshot.id && w.absoluteStep >= take.end
     ? mergeEffectTake(take.before, take) : replacements.has(w.snapshot.id) ? replacements.get(w.snapshot.id) : w.snapshot.effectAutomation;
@@ -23,8 +24,7 @@ export function createJamEffectAutomation(audio, effects, onComplete = () => {})
   }
   function put(track, parameter, value, time, bpm) {
     const key = keyOf(track, parameter), revision = revisions.get(key) ?? 0, request = epoch;
-    const values = parameter === 'repeat' ? { held: value !== null, division: value ?? 8, bpm }
-      : parameter === 'volume' ? { volume: value, muted: value <= -24 } : { cutoff: value };
+    const values = effectValues(parameter, value, bpm);
     audio.schedulePerformanceEffect?.(track, values, time);
     audio.schedulePerformanceNotification?.(time, () => {
       if (request === epoch && revision === (revisions.get(key) ?? 0) && active) effects.display(track, parameter, value);
@@ -34,7 +34,7 @@ export function createJamEffectAutomation(audio, effects, onComplete = () => {})
     if (suspended && parameter !== 'volume') return;
     const key = keyOf(track, parameter), override = overrides.get(key);
     if (override && override.id === w.snapshot.id && override.startStep === w.startStep && w.cycleStart < override.until) return;
-    if (parameter === 'repeat' && audible?.id === w.snapshot.id && audible?.startStep === w.startStep && effects.getSnapshot().selectedTrack === track && effects.repeat.getSnapshot() !== null) return;
+    if (MOMENTARY_EFFECTS.includes(parameter) && audible?.id === w.snapshot.id && audible?.startStep === w.startStep && effects.isHeld(track, parameter)) return;
     const data = dataFor(w), local = w.absoluteStep - w.cycleStart;
     let events = effectLaneEvents(data, track, parameter);
     if (!events.length) events = [{ step: 0, value: baseline(track, parameter) }];
@@ -94,7 +94,7 @@ export function createJamEffectAutomation(audio, effects, onComplete = () => {})
         // Boundary cancellation is timed, so the old loop remains audible until
         // the requested beat rather than stopping at scheduler lookahead time.
         for (const track of TRACKS) for (const parameter of EFFECT_PARAMETERS) audio.cancelPerformanceEffect?.(track, parameter, time);
-        for (const track of TRACKS) put(track, 'repeat', null, time, bpm);
+        for (const track of TRACKS) for (const p of MOMENTARY_EFFECTS) put(track, p, EFFECT_DEFAULTS[p], time, bpm);
         overrides.clear();
       }
       windows = windows.filter(item => item.time + item.duration >= now()); windows.push(w);
@@ -103,7 +103,7 @@ export function createJamEffectAutomation(audio, effects, onComplete = () => {})
     audible(position, absoluteStep) {
       const switched = audible && (audible.id !== position.id || audible.startStep !== position.startStep);
       audible = position;
-      if (switched) { suppressed = true; effects.repeat.reset(true); suppressed = false; }
+      if (switched) { suppressed = true; effects.resetHolds(true); suppressed = false; }
       if (!take) return;
       if (absoluteStep >= take.end) {
         const completed = take, value = mergeEffectTake(completed.before, completed);
@@ -113,29 +113,29 @@ export function createJamEffectAutomation(audio, effects, onComplete = () => {})
       } else if (absoluteStep >= take.start && state.phase !== 'recording') notify({ phase: 'recording', id: take.id });
     },
     clear(id) {
-      suppressed = true; effects.repeat.reset(); suppressed = false;
+      suppressed = true; effects.resetHolds(); suppressed = false;
       replacements.set(id, undefined);
       for (const track of TRACKS) for (const parameter of EFFECT_PARAMETERS) { reschedule(track, parameter); effects.restore(track, parameter); }
     },
     releaseRepeats() {
-      suppressed = true; effects.repeat.reset(); suppressed = false;
-      for (const track of TRACKS) {
-        manual(track, 'repeat', null);
-        audio.setPerformanceEffect(track, { held: false }); effects.display(track, 'repeat', null);
+      suppressed = true; effects.resetHolds(); suppressed = false;
+      for (const track of TRACKS) for (const p of MOMENTARY_EFFECTS) {
+        manual(track, p, EFFECT_DEFAULTS[p]); cancel(track, p);
+        audio.setPerformanceEffect(track, effectValues(p, EFFECT_DEFAULTS[p])); effects.display(track, p, EFFECT_DEFAULTS[p]);
       }
     },
     suspend() {
       cancelTake(); suspended = true;
       suppressed = true; effects.reset(true); suppressed = false;
-      for (const track of TRACKS) for (const parameter of ['cutoff', 'repeat']) {
+      for (const track of TRACKS) for (const parameter of EFFECT_PARAMETERS.filter(p => p !== 'volume')) {
         cancel(track, parameter);
-        if (parameter === 'repeat') audio.setPerformanceEffect(track, { held: false });
-        effects.display(track, parameter, parameter === 'repeat' ? null : 20000);
+        audio.setPerformanceEffect(track, effectValues(parameter, EFFECT_DEFAULTS[parameter]));
+        effects.display(track, parameter, EFFECT_DEFAULTS[parameter]);
       }
     },
     stop() {
       epoch++; active = false; take = null; audible = null; windows = []; overrides.clear(); replacements.clear(); boundary = null;
-      suppressed = true; effects.repeat.reset(); suppressed = false;
+      suppressed = true; effects.resetHolds(); suppressed = false;
       for (const track of TRACKS) for (const parameter of EFFECT_PARAMETERS) { cancel(track, parameter); effects.restore(track, parameter); }
       notify({ phase: 'idle', id: null });
     },

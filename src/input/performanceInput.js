@@ -30,42 +30,62 @@ export function mapPerformanceKeyboard(event, templates) {
 
 export const JAM_VOLUME_STEPS = [-24, -18, -12, -9, -6, -3, 0, 6];
 export const JAM_FILTER_STEPS = [100, 250, 500, 1000, 2000, 5000, 10000, 20000];
+export const JAM_PITCH_STEPS = [-12, -7, -3, -1, 1, 3, 7, 12];
+export const JAM_REVERB_STEPS = [0, 1/7, 2/7, 3/7, 4/7, 5/7, 6/7, 1];
+export const JAM_EFFECT_PAGES = ['mix', 'expression', 'arp'];
 export const JAM_TRACK_CC = [89, 79, 69, 59];
 export function nearestJamStep(steps, value) {
   return steps.reduce((best, step, index) => Math.abs(step - value) < Math.abs(steps[best] - value) ? index : best, 0);
 }
 
-// Programmer mode, channel 1. Repeated Note/CC presses and aftertouch are ignored.
+// Remember each press command: releasing after a page change uses its original role.
 export function createPerformanceMidiInput() {
-  const held = new Set();
+  const held = new Map();
   return {
     reset() { held.clear(); },
-    handle(data, templates) {
+    handle(data, templates, surface = {}) {
       const message = parseLaunchpadXMessage(data);
       if (message?.channel !== 1) return null;
       const { number, kind, pressed } = message;
       const token = `midi:${kind}:${number}`;
-      const repeater = kind === 'note' && number >= 21 && number <= 23;
       if (!pressed) {
-        held.delete(token);
-        return repeater ? { type: 'repeat', token, division: [4, 8, 16][number - 21], pressed: false } : null;
+        const original = held.get(token); held.delete(token);
+        return original?.pressed ? { ...original, pressed: false } : null;
       }
       if (held.has(token)) return null;
-      held.add(token);
+      let command = null;
       if (kind === 'control-change') {
-        if (JAM_TRACK_CC.includes(number)) return { type: 'selectTrack', trackId: PERFORMANCE_TRACKS[JAM_TRACK_CC.indexOf(number)] };
-        if (number === 93 || number === 94) return { type: 'page', delta: number === 93 ? -1 : 1 };
-        if (number === 97) return { type: 'save' };
-        if (number === 98) return { type: 'togglePlayback' };
-        return null;
+        if (JAM_TRACK_CC.includes(number)) {
+          const additive = [...held.values()].some(c => c?.type === 'selectTrack');
+          command = { type: 'selectTrack', trackId: PERFORMANCE_TRACKS[JAM_TRACK_CC.indexOf(number)], additive };
+        }
+        if ([49,39,29].includes(number)) command = { type: 'effectPage', page: JAM_EFFECT_PAGES[[49,39,29].indexOf(number)] };
+        if (number === 19) command = { type: 'recordEffects' };
+        if (number === 93 || number === 94) command = { type: 'page', delta: number === 93 ? -1 : 1 };
+        if (number === 97) command = { type: 'save' };
+        if (number === 98) command = { type: 'togglePlayback' };
+      } else {
+        const row = 8 - Math.floor(number / 10), column = number % 10 - 1;
+        if (row >= 0 && row < 4 && column >= 0 && column < 8) command = templateCommand(templates, PERFORMANCE_TRACKS[row], column);
+        if (number >= 11 && number <= 18) command = { type: 'loop', index: number - 11 };
+        if (number >= 21 && number <= 23) command = { type: 'repeat', token, division: [4,8,16][number-21], pressed: true };
+        if (number >= 24 && number <= 27) command = { type: 'chopper', token, value: [4,8,16,32][number-24], pressed: true };
+        if (number === 28) command = { type: 'brake', token, value: 1, pressed: true };
+        const page = surface.effectPage ?? 'mix';
+        if (number >= 41 && number <= 48) {
+          const index = number - 41;
+          command = page === 'mix' ? { type: 'volume', value: JAM_VOLUME_STEPS[index] }
+            : page === 'expression' ? { type: 'pitch', token, value: JAM_PITCH_STEPS[index], pressed: true }
+              : index === 0 ? { type: 'arp', token, index, pressed: true } : null;
+        }
+        if (number >= 31 && number <= 38) {
+          const index = number - 31;
+          command = page === 'mix' ? { type: 'cutoff', value: JAM_FILTER_STEPS[index] }
+            : page === 'expression' ? { type: 'reverb', value: JAM_REVERB_STEPS[index] }
+              : null;
+        }
       }
-      const row = 8 - Math.floor(number / 10), column = number % 10 - 1;
-      if (row >= 0 && row < 4 && column >= 0 && column < 8) return templateCommand(templates, PERFORMANCE_TRACKS[row], column);
-      if (number >= 11 && number <= 18) return { type: 'loop', index: number - 11 };
-      if (number >= 41 && number <= 48) return { type: 'volume', value: JAM_VOLUME_STEPS[number - 41] };
-      if (number >= 31 && number <= 38) return { type: 'cutoff', value: JAM_FILTER_STEPS[number - 31] };
-      if (repeater) return { type: 'repeat', token, division: [4, 8, 16][number - 21], pressed: true };
-      return null;
+      held.set(token, command); return command;
     },
   };
 }

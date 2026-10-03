@@ -183,3 +183,33 @@ test('a late manual touch before a queued loop switch cannot suppress the incomi
   f.scheduled.length = 0; f.effects.volume('drums', -20);
   assert.ok(f.scheduled.some(c => c.track === 'drums' && c.values.volume === -3 && c.time === 2));
 });
+
+test('new group effects record fractional actions per target and replay after the take', () => {
+  const f=fixture(); f.auto.arm(segment(),0); f.tick(0); f.effects.toggleTrack('bass');
+  f.clock(2.5); f.effects.press('pitch','bend',7,120); f.effects.reverb(.6);
+  f.clock(3.5); f.effects.release('pitch','bend'); f.effects.press('chopper','gate',32,120);
+  f.clock(4.5); f.effects.release('chopper','gate'); f.effects.press('brake','brake',1,120);
+  f.clock(5.5); f.effects.release('brake','brake'); f.tick(32);
+  const data=f.completed[0][1];
+  for(const track of ['drums','bass']) {
+    assert.deepEqual(data.tracks[track].pitch.points.slice(0,2),[{step:2.5,value:7},{step:3.5,value:0}]);
+    assert.equal(data.tracks[track].reverb.points[0].value,.6);
+    assert.equal(data.tracks[track].chopper.points[0].value,32);
+    assert.equal(data.tracks[track].brake.points[0].value,1);
+  }
+  assert.equal(data.tracks.melody,undefined);
+  f.scheduled.length=0; f.tick(34);
+  assert.ok(f.scheduled.some(e=>e.track==='bass'&&e.values.pitch===7&&e.time===34.5/8));
+  f.auto.stop();assert.equal(f.effects.getSnapshot().pitches.drums,0);assert.equal(f.effects.getSnapshot().reverbs.drums,.6);
+});
+
+test('new momentary lanes respect a held override across cycles and blur cancels future automation',()=>{
+  const snapshot=segment(); snapshot.effectAutomation.tracks.drums.pitch={initial:0,points:[{step:1,value:-12},{step:4,value:0}]};
+  snapshot.effectAutomation.tracks.drums.chopper={initial:null,points:[{step:1,value:16},{step:4,value:null}]};
+  const f=fixture(snapshot);f.tick(0);f.clock(1);f.effects.press('pitch','held',7,120);f.tick(32);f.scheduled.length=0;f.tick(33);
+  assert.ok(!f.scheduled.some(e=>e.values.pitch===-12));assert.ok(f.scheduled.some(e=>e.values.chopper===16));
+  f.effects.release('pitch','held');f.tick(64);f.tick(65);assert.ok(f.scheduled.some(e=>e.values.pitch===-12));
+  f.auto.suspend();f.scheduled.length=0;f.tick(96);f.tick(97);
+  assert.ok(!f.scheduled.some(e=>e.values.pitch!==undefined||e.values.chopper!==undefined));
+  assert.equal(f.effects.getSnapshot().choppers.drums,null);assert.equal(f.effects.getSnapshot().pitches.drums,0);
+});
