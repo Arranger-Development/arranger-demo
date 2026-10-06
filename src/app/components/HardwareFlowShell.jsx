@@ -1,4 +1,6 @@
 import { Volume2 } from 'lucide-react';
+import { createElement } from 'react';
+import { ThemeSwitcher } from './ThemeSwitcher.jsx';
 import { renderIcon } from './icons.js';
 
 const LEFT_CONTROLS = Object.freeze([
@@ -55,6 +57,7 @@ function HardwareFlowShell({
               <div className="genre-brand-lockup">
                 <span className="genre-brand-icon" aria-hidden="true">{renderIcon(Volume2)}</span>
                 <span className="genre-brand-text">Aether Synthesizers</span>
+                <div className="flow-theme-control">{createElement(ThemeSwitcher)}</div>
               </div>
               <div className="genre-title-group">
                 <p className="genre-kicker">{kicker}</p>

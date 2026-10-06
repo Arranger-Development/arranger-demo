@@ -24,7 +24,7 @@ export default function JamExportDialog({ entries, sections, onEntriesChange, on
       <button disabled={index === entries.length - 1} aria-label={`下移 ${entry.name}`} onClick={() => move(index, 1)}>↓</button>
       <button aria-label={`移除 ${entry.name}`} onClick={() => onEntriesChange(entries.filter(row => row.id !== entry.id))}>移除</button>
     </li>)}</ol>
-    <p role="status">{error || `共 ${length} 小节 · 上限 256 小节`}</p><p>将替换当前创作编排，可在创作模式撤销。</p>
+    <p className={error ? 'jam-export-error' : undefined} role="status">{error || `共 ${length} 小节 · 上限 256 小节`}</p><p>将替换当前创作编排，可在创作模式撤销。</p>
     <footer><button onClick={onClose}>取消</button><button disabled={Boolean(error) || length < 1 || length > 256} onClick={onConfirm}>展开并进入创作</button></footer>
   </dialog>;
 }

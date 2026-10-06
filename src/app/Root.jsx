@@ -7,18 +7,17 @@ import App from './App.jsx';
 import {
   ARRANGER_GENRE_IDS,
   CURRENT_GENRE_ID,
-  GENRE_OPTIONS,
   MULTIMODAL_DRUM_TEMPLATE_GENRE_ID,
   MULTIMODAL_GENRE_ID,
 } from './genreOptions.js';
-import { GenreSelectScreen } from './components/GenreSelectScreen.jsx';
+import { EntryHome } from './components/EntryHome.jsx';
 import { MultimodalFlowScreen } from './components/MultimodalFlowScreen.jsx';
 import {
   createInitialRecommendationSelections,
   createMultimodalRecommendationAppState,
   toggleRecommendationTrackSelection,
-  validateMultimodalMediaFile,
 } from './multimodalRecommendation.js';
+import { validateMultimodalInput } from './multimodalInput.js';
 import { RECOMMENDED_BPM } from '../domain/bpm.js';
 import { AI_PERFORMANCE_PROFILE_ID } from '../data/aiPerformanceTemplates.js';
 import useMusicStore from '../store/useMusicStore.js';
@@ -36,6 +35,8 @@ function Root() {
   const [initialWorkspaceView, setInitialWorkspaceView] = useState('creation');
   const [genreId, setGenreId] = useState(CURRENT_GENRE_ID);
   const [mediaFile, setMediaFile] = useState(null);
+  const [inputMode, setInputMode] = useState('text');
+  const [textPrompt, setTextPrompt] = useState('');
   const [mediaKind, setMediaKind] = useState(null);
   const [mediaError, setMediaError] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -73,7 +74,7 @@ function Root() {
   };
 
   const handleFileSelect = (file) => {
-    const validation = validateMultimodalMediaFile(file);
+    const validation = validateMultimodalInput({ mode: inputMode, file });
     setMediaError(validation.error);
     if (!validation.valid) return;
 
@@ -84,7 +85,9 @@ function Root() {
   };
 
   const handleStartAnalysis = () => {
-    if (!mediaFile) return;
+    const validation = validateMultimodalInput({ mode: inputMode, text: textPrompt, file: mediaFile });
+    setMediaError(validation.error);
+    if (!validation.valid) return;
     setAnalysisStageIndex(0);
     setView(ROOT_VIEWS.ANALYZING);
   };
@@ -116,12 +119,27 @@ function Root() {
     setView(ROOT_VIEWS.GENRE);
   };
 
+  const handleInputModeChange = (mode) => {
+    if (mode === inputMode) return;
+    setInputMode(mode);
+    setMediaFile(null);
+    setMediaKind(null);
+    setMediaError(null);
+    setPreviewUrl(null);
+  };
+
+  const handleEntryEnter = (destination) => {
+    if (destination === 'ai') {
+      handleGenreEnter(MULTIMODAL_GENRE_ID);
+      return;
+    }
+    setInitialWorkspaceView(destination);
+    handleGenreEnter(CURRENT_GENRE_ID);
+  };
+
   if (view === ROOT_VIEWS.GENRE) {
-    return createElement(GenreSelectScreen, {
-      currentGenreId: genreId,
-      onGenreEnter: handleGenreEnter,
-      entryOnly: true,
-      options: GENRE_OPTIONS.filter((option) => option.id === MULTIMODAL_GENRE_ID),
+    return createElement(EntryHome, {
+      onEnter: handleEntryEnter,
     });
   }
 
@@ -133,8 +151,12 @@ function Root() {
     return createElement(MultimodalFlowScreen, {
       bpm,
       error: mediaError,
+      inputMode,
+      textPrompt,
+      onInputModeChange: handleInputModeChange,
+      onTextPromptChange: (text) => { setTextPrompt(text); setMediaError(null); },
       file: mediaFile,
-      kind: mediaKind,
+      kind: inputMode === 'text' ? 'text' : mediaKind,
       onApply: handleApplyRecommendation,
       onBack: view === ROOT_VIEWS.UPLOAD
         ? handleBackToGenre
@@ -156,6 +178,7 @@ function Root() {
     performanceProfileId,
     initialView: initialWorkspaceView,
     recommendation: selections,
+    onHome: handleBackToGenre,
   });
 }
 

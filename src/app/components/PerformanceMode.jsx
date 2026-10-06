@@ -1,4 +1,7 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { createElement, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Home } from 'lucide-react';
+import { renderIcon } from './icons.js';
+import { ThemeSwitcher } from './ThemeSwitcher.jsx';
 import createAudioEngine from '../../audio/createAudioEngine.js';
 import { PERFORMANCE_LABELS as LABELS, performanceTemplates, hasSelection, normalizePerformanceBpm } from '../performanceModel.js';
 import { fixedPerformancePads, replacePadBinding, createSessionEditor, snapshotSection, createExportEntry, createArrangementImport, arrangementExportLength } from '../performanceSession.js';
@@ -21,7 +24,7 @@ import './jamWorkspace.css';
 void [JamView, JamExportDialog, JamPerformanceDeck, JamProjectControls];
 const storage = () => { try { return window.localStorage; } catch { return null; } };
 
-export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, recommendation, onBack, onImport, controlsRef, hardwareInput }) {
+export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, recommendation, onBack, onHome, onImport, controlsRef, hardwareInput }) {
   const [projectStore] = useState(() => createJamProjects(storage(), genreId, profileId, initialBpm, recommendation));
   const projectLibrary = useSyncExternalStore(projectStore.subscribe, projectStore.getSnapshot);
   const currentProject = projectLibrary.projects.find(p => p.id === projectLibrary.activeId);
@@ -219,6 +222,8 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   try { exportLength = arrangementExportLength(exportEntries ?? [], counts); } catch (error) { exportError = error.message; }
   return <section ref={workspaceRef} className="performance-mode jam-workspace" hidden={!active} aria-label="Jam 演奏">
     <header className="performance-header">
+      {createElement(ThemeSwitcher)}
+      {onHome ? <button className="performance-home" type="button" aria-label="返回首页" title="返回首页" disabled={recordingLocked} onClick={() => { resetPlayback(); arp.stop(); persist(); onHome(); }}>{renderIcon(Home)}</button> : null}
       <button className="performance-connect" onClick={() => { resetPlayback(); onBack(); }}>← 创作模式</button>
       <div className="performance-title"><span className="performance-eyebrow">PROJECT ARRANGER</span><h1>Jam · 演奏</h1></div>
       <label className="performance-tempo">BPM <input aria-label="演奏速度 BPM" disabled={recordingLocked} type="number" min="40" max="240" value={session.bpm} onChange={(e) => changeBpm(e.target.value)} /></label>

@@ -10,7 +10,6 @@ import {
   Copy,
   LayoutGrid,
   Redo2,
-  Settings,
   SkipBack,
   Square,
   Undo2,
@@ -24,6 +23,7 @@ import { MAX_PROJECT_BARS } from '../../domain/projectLength.js';
 import { formatDisplayPosition } from '../transportPosition.js';
 import { HardwareInputStatus } from './HardwareInputStatus.jsx';
 import { BpmControl } from './BpmControl.jsx';
+import { ThemeSwitcher } from './ThemeSwitcher.jsx';
 import { renderIcon } from './icons.js';
 import ProjectLengthControl from './ProjectLengthControl.jsx';
 
@@ -125,6 +125,8 @@ function TopBar({
   onBackToStart,
   onBpmChange = () => {},
   onNewSong = () => {},
+  onHome,
+  homeLocked = false,
   onPlayToggle,
   onCopyClip = () => {},
   onExport = () => {},
@@ -167,7 +169,7 @@ function TopBar({
       data-tutorial-target="top-bar"
     >
       <div className="brand">
-        <div className="name">Project Arranger</div>
+        <div className="name">{onHome ? <button className="brand-home" type="button" aria-label="返回首页" title="返回首页" disabled={homeLocked} onClick={onHome}>Project Arranger</button> : 'Project Arranger'}</div>
         <div className="project">v0.4.1</div>
       </div>
 
@@ -324,9 +326,7 @@ function TopBar({
         >
           Export
         </button>
-        <button className="icon-btn" aria-label="Settings" title="Settings">
-          {renderIcon(Settings)}
-        </button>
+        {createElement(ThemeSwitcher)}
       </div>
     </header>
   );

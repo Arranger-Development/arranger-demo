@@ -877,6 +877,91 @@ test('AudioEngine cancels pending free-playing attacks when input voices are cle
   assert.deepEqual(tone.calls.filter(([name]) => name.startsWith('input.')), []);
 });
 
+test('Melody audition resumes suspended and interrupted audio without rebuilding its sampler or transport', async () => {
+  for (const status of [AUDIO_STATUSES.READY, AUDIO_STATUSES.SAMPLE_FALLBACK]) {
+    for (const state of ['suspended', 'interrupted']) {
+      const tone = createFakeTone();
+      const context = { state: 'running' };
+      tone.getContext = () => context;
+      const timers = createManualTimers();
+      const sampler = {
+        volume: { value: 0 },
+        toDestination: () => sampler,
+        triggerAttack: (note) => tone.calls.push(['audition', note, context.state]),
+        releaseAll: () => {},
+      };
+      const engine = new AudioEngine({
+        tone,
+        melodyInputSamplerFactory: () => sampler,
+        playerFactory: createPlayerFactory(tone.calls),
+        scheduleTimeout: timers.scheduleTimeout,
+        cancelTimeout: timers.cancelTimeout,
+      });
+      await engine.previewMelodySequence(['C4']);
+      engine.stopMelodyPreview();
+      const bank = engine.getMelodyBank('piano');
+      engine.status = status;
+      context.state = state;
+      tone.Transport.position = '2:1:0';
+      tone.start = async () => {
+        tone.calls.push(['resume']);
+        context.state = 'running';
+      };
+
+      assert.equal(await engine.previewMelodySequence(['D4']), true);
+      timers.runThrough(0);
+      assert.deepEqual(tone.calls.filter(([name]) => name === 'audition'), [['audition', 'D4', 'running']]);
+      assert.equal(engine.getMelodyBank('piano'), bank);
+      assert.equal(tone.Transport.position, '2:1:0');
+      assert.equal(engine.status, status);
+      await engine.previewMelodySequence(['E4']);
+      assert.equal(tone.calls.filter(([name]) => name === 'resume').length, 1, 'a running context needs no further resume');
+    }
+  }
+});
+
+test('Melody audition reports a failed audio resume and can retry with its cached bank', async () => {
+  const tone = createFakeTone();
+  const rawContext = { state: 'running' };
+  tone.getContext = () => ({ rawContext });
+  const timers = createManualTimers();
+  const sampler = { toDestination: () => sampler, triggerAttack: () => {}, releaseAll: () => {} };
+  const engine = new AudioEngine({ tone, melodyInputSamplerFactory: () => sampler,
+    playerFactory: createPlayerFactory(tone.calls),
+    scheduleTimeout: timers.scheduleTimeout, cancelTimeout: timers.cancelTimeout });
+  await engine.previewMelodySequence(['C4']);
+  engine.stopMelodyPreview();
+  const bank = engine.getMelodyBank('piano');
+  rawContext.state = 'suspended';
+  tone.start = async () => { throw new Error('resume unavailable'); };
+  assert.equal(await engine.previewMelodySequence(['D4']), false);
+  assert.equal(timers.size(), 0);
+  assert.equal(engine.melodyPreviewSession, null);
+  tone.start = async () => { rawContext.state = 'running'; };
+  assert.equal(await engine.previewMelodySequence(['D4']), true);
+  assert.equal(engine.getMelodyBank('piano'), bank);
+});
+
+test('closing Melody audition during audio resume cancels its pending notes', async () => {
+  const tone = createFakeTone();
+  tone.context = { state: 'suspended' };
+  const timers = createManualTimers();
+  const sampler = { toDestination: () => sampler, triggerAttack: () => {} };
+  const engine = new AudioEngine({ tone,
+    melodyInputSamplerFactory: () => sampler,
+    scheduleTimeout: timers.scheduleTimeout, cancelTimeout: timers.cancelTimeout });
+  engine.status = AUDIO_STATUSES.READY;
+  let finishResume;
+  tone.start = () => new Promise((resolve) => { finishResume = resolve; });
+  const pending = engine.previewMelodySequence(['C4']);
+  engine.stopMelodyPreview();
+  tone.context.state = 'running';
+  finishResume();
+  assert.equal(await pending, false);
+  assert.equal(timers.size(), 0);
+  assert.equal(engine.melodyPreviewSession, null);
+});
+
 test('AudioEngine previews Melody sequences as timed input one-shots', async () => {
   const tone = createFakeTone();
   const timers = createManualTimers();
