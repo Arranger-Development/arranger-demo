@@ -133,6 +133,13 @@ function Root() {
       handleGenreEnter(MULTIMODAL_GENRE_ID);
       return;
     }
+    if (destination === 'jam') {
+      setInitialWorkspaceView('jam');
+      setPerformanceProfileId(AI_PERFORMANCE_PROFILE_ID);
+      setGenreId(MULTIMODAL_DRUM_TEMPLATE_GENRE_ID);
+      setView(ROOT_VIEWS.ARRANGER);
+      return;
+    }
     setInitialWorkspaceView(destination);
     handleGenreEnter(CURRENT_GENRE_ID);
   };
