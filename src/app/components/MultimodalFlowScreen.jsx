@@ -17,7 +17,6 @@ import {
 import { MULTIMODAL_INPUT_MODES, MULTIMODAL_TEXT_LIMIT, getMultimodalAnalysisStages, validateMultimodalInput } from '../multimodalInput.js';
 import { EntryShell } from './EntryShell.jsx';
 import { BpmControl } from './BpmControl.jsx';
-import { HardwareFlowShell } from './HardwareFlowShell.jsx';
 import { TRACK_ICONS, renderIcon } from './icons.js';
 
 const TRACK_RECOMMENDATION_COPY = Object.freeze({
@@ -206,38 +205,47 @@ function AnalyzingView({
   textPrompt,
 }) {
   const analysisStages = getMultimodalAnalysisStages(kind);
-  return (
-    <div className="multimodal-content analyzing-view">
-      <div className="analysis-media-panel" aria-hidden="true">
-        <MediaPreview file={file} kind={kind} previewUrl={previewUrl} textPrompt={textPrompt} />
-        <span className="analysis-scan-line" />
-      </div>
-      <div className="analysis-status-panel" role="status" aria-live="polite">
-        <span className="analysis-orb" aria-hidden="true">{renderIcon(Sparkles)}</span>
-        <p className="analysis-kicker mono">MULTIMODAL ANALYSIS</p>
-        <h2>{analysisStages[stageIndex]}</h2>
-        <ol className="analysis-stage-list">
-          {analysisStages.map((stage, index) => (
-            <li
-              data-state={index < stageIndex ? 'complete' : index === stageIndex ? 'active' : 'pending'}
-              key={stage}
-            >
-              <span className="analysis-stage-mark" aria-hidden="true">
-                {index < stageIndex ? renderIcon(Check) : index + 1}
-              </span>
-              <span>{stage}</span>
-            </li>
-          ))}
-        </ol>
-        <div className="analysis-progress" aria-hidden="true">
-          <span style={{ width: `${((stageIndex + 1) / analysisStages.length) * 100}%` }} />
-        </div>
-        <button className="hardware-flow-button ghost" type="button" onClick={onCancel}>
-          取消分析
-        </button>
-      </div>
+  const modeLabel = MULTIMODAL_INPUT_MODES.find((mode) => mode.id === kind)?.label ?? '素材';
+  const title = kind === 'text' ? '正在整理你的灵感' : kind === 'audio' ? '正在整理你的音频' : '正在理解你的画面';
+  return <div className="entry-analysis-body">
+    <div className="entry-analysis-heading">
+      <span className="entry-analysis-kicker"><span aria-hidden="true">{renderIcon(Sparkles)}</span>AI 创作</span>
+      <h1>{title}</h1>
+      <p>从你的灵感出发，整理风格、节奏与配器建议</p>
     </div>
-  );
+    <div className="entry-analysis-layout">
+      <section className="entry-analysis-source" aria-label="本次输入">
+        <div className="entry-analysis-source-heading">
+          <h2>你的灵感</h2>
+          <span><span aria-hidden="true">{renderIcon(INPUT_ICONS[kind] ?? FileImage)}</span>{modeLabel}输入</span>
+        </div>
+        <div className={`entry-analysis-preview ${kind}`}>
+          <MediaPreview file={file} kind={kind} previewUrl={previewUrl} textPrompt={textPrompt} />
+        </div>
+        {file ? <p className="entry-analysis-source-detail"><span title={file.name}>{file.name}</span>
+          <span>{(file.size / 1024 / 1024).toFixed(1)} MB</span></p> : <p className="entry-analysis-source-detail">保留你的描述，找到合适的音乐方向</p>}
+      </section>
+      <section className="entry-analysis-status" aria-label="分析进度">
+        <div className="entry-analysis-status-heading">
+          <h2>编曲建议生成中</h2><span>步骤 {stageIndex + 1} / {analysisStages.length}</span>
+        </div>
+        <p className="entry-analysis-current" role="status" aria-live="polite" aria-atomic="true">{analysisStages[stageIndex]}</p>
+        <ol className="entry-analysis-stages">
+          {analysisStages.map((stage, index) => <li key={stage}
+            data-state={index < stageIndex ? 'complete' : index === stageIndex ? 'active' : 'pending'}
+            aria-current={index === stageIndex ? 'step' : undefined}>
+            <span className="entry-analysis-stage-mark" aria-hidden="true">{index < stageIndex ? renderIcon(Check) : index + 1}</span>
+            <span>{stage}</span>
+            <small>{index < stageIndex ? '已完成' : index === stageIndex ? '进行中' : '待开始'}</small>
+          </li>)}
+        </ol>
+        <div className="entry-analysis-actions">
+          <span>演示编曲建议</span>
+          <button className="entry-button" type="button" onClick={onCancel}>取消分析</button>
+        </div>
+      </section>
+    </div>
+  </div>;
 }
 
 function TrackRecommendationPicker({ onTrackToggle, selectedTrackIds, timbreByTrackId }) {
@@ -323,21 +331,6 @@ function MultimodalFlowScreen({
   stageIndex,
   view,
 }) {
-  const viewMeta = {
-    upload: {
-      kicker: 'AI MULTIMODAL INPUT',
-      title: '上传画面',
-    },
-    analyzing: {
-      kicker: 'AI MULTIMODAL ENGINE',
-      title: kind === 'text' ? '正在整理灵感' : kind === 'audio' ? '正在整理音频' : '正在理解画面',
-    },
-    results: {
-      kicker: '',
-      title: 'AI音乐风格建议',
-    },
-  }[view];
-
   if (view === 'upload') return <EntryShell className={`entry-ai entry-ai-${inputMode}`} label="AI 多模态编曲" onBack={onBack}>
     <UploadView error={error} file={file} kind={kind} inputMode={inputMode} textPrompt={textPrompt}
       onInputModeChange={onInputModeChange} onTextPromptChange={onTextPromptChange}
@@ -349,32 +342,14 @@ function MultimodalFlowScreen({
       onRecommendationTrackToggle={onRecommendationTrackToggle} previewUrl={previewUrl} selections={selections} textPrompt={textPrompt} />
   </EntryShell>;
 
-  return (
-    <HardwareFlowShell
-      ariaLabel="AI 多模态编曲"
-      consoleTitle="AETHER SYNTHESIZERS - MULTIMODAL ARRANGER"
-      kicker={viewMeta.kicker}
-      screenClassName={`multimodal-screen ${view}-screen`}
-      title={viewMeta.title}
-    >
-      {view === 'analyzing' ? (
-        <AnalyzingView
-          file={file}
-          kind={kind}
-          onCancel={onCancelAnalysis}
-          previewUrl={previewUrl}
-          stageIndex={stageIndex}
-          textPrompt={textPrompt}
-        />
-      ) : null}
-
-    </HardwareFlowShell>
-  );
+  return <EntryShell className="entry-analysis" label="AI 多模态编曲" onBack={onCancelAnalysis} backLabel="返回输入">
+    <AnalyzingView file={file} kind={kind} onCancel={onCancelAnalysis} previewUrl={previewUrl}
+      stageIndex={stageIndex} textPrompt={textPrompt} />
+  </EntryShell>;
 }
 
 // JSX component references are not marked as reads by this repository's lint parser.
 void BpmControl;
-void HardwareFlowShell;
 void MediaPreview;
 void UploadView;
 void AnalyzingView;
