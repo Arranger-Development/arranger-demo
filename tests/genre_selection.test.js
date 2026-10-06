@@ -104,7 +104,7 @@ test('root owns the genre upload analysis results and arranger views', async () 
   assert.match(mainSource, /createElement\(Root\)/);
   assert.match(rootSource, /const ROOT_VIEWS = Object\.freeze/);
   assert.match(rootSource, /useState\(ROOT_VIEWS\.GENRE\)/);
-  assert.match(rootSource, /createElement\(GenreSelectScreen/);
+  assert.match(rootSource, /createElement\(EntryHome/);
   assert.match(rootSource, /createElement\(MultimodalFlowScreen/);
   assert.match(rootSource, /const \[genreId, setGenreId\] = useState\(CURRENT_GENRE_ID\)/);
   assert.match(rootSource, /ARRANGER_GENRE_IDS\.includes\(genreId\)/);

@@ -677,7 +677,8 @@ export default class AudioEngine {
     const normalizedTimbreId = this.getMelodyTimbreId(timbreId);
     const bankKey = this.getMelodyBankKey(normalizedTimbreId, playbackMode);
     const requestId = this.melodyTrackRequestIds.get(trackId) ?? 0;
-    await this.startAudio();
+    const audioStatus = await this.startAudio();
+    if (audioStatus === AUDIO_STATUSES.ERROR) return false;
     if (requestId !== (this.melodyTrackRequestIds.get(trackId) ?? 0)) return false;
 
     const banks = this.melodyTrackBanks.get(trackId) ?? new Map();
@@ -761,6 +762,17 @@ export default class AudioEngine {
       this.status === AUDIO_STATUSES.READY
       || this.status === AUDIO_STATUSES.SAMPLE_FALLBACK
     ) {
+      // Browsers can suspend an initialized context while the app is in the
+      // background. Resume it from this user action before scheduling notes.
+      const context = this.getToneContext();
+      const state = context?.state ?? context?.rawContext?.state;
+      if (state === 'suspended' || state === 'interrupted') {
+        try {
+          await this.tone?.start?.();
+        } catch {
+          return AUDIO_STATUSES.ERROR;
+        }
+      }
       return this.status;
     }
 

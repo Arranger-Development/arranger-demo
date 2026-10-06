@@ -213,6 +213,7 @@ export default function App({
   performanceProfileId = null,
   initialView = 'creation',
   recommendation = null,
+  onHome,
 }) {
   const totalBars = useMusicStore((state) => getTotalBars(state));
   const timelineBars = getTimelineBars({ totalBars });
@@ -3106,6 +3107,8 @@ export default function App({
           onExport: openExportDialog,
           onPerformanceEnter: enterPerformance,
           onNewSong: requestNewSong,
+          onHome: onHome ? () => { handleStop(); onHome(); } : undefined,
+          homeLocked: projectLengthLocked,
           onPasteClip: handlePasteClipRequestWithMelodyStop,
           onPlayToggle: handlePlayToggle,
           onStop: handleStop,
@@ -3435,6 +3438,7 @@ export default function App({
       genreId={genreId}
       profileId={performanceProfileId}
       initialBpm={bpm}
+      onHome={onHome ? () => { handleStop(); onHome(); } : undefined}
       onImport={importPerformance}
       onBack={() => {
         setPerformanceActive(false);

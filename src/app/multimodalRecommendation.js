@@ -15,6 +15,7 @@ import createInitialMatrix from '../store/createInitialMatrix.js';
 import { createChillTutorialMatrix } from '../tutorial/chillTutorialScore.js';
 
 const MULTIMODAL_MEDIA_LIMITS = Object.freeze({
+  audio: 50 * 1024 * 1024,
   image: 20 * 1024 * 1024,
   video: 200 * 1024 * 1024,
 });
@@ -33,6 +34,7 @@ const MULTIMODAL_VIDEO_TYPES = Object.freeze([
 ]);
 
 const MULTIMODAL_ACCEPT = [
+  'audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/ogg', 'audio/flac', 'audio/x-flac', '.mp3', '.wav', '.m4a', '.ogg', '.flac',
   ...MULTIMODAL_IMAGE_TYPES,
   ...MULTIMODAL_VIDEO_TYPES,
   '.mov',
@@ -172,6 +174,11 @@ function getMultimodalMediaKind(file) {
   const name = String(file?.name ?? '').toLowerCase();
 
   if (
+    ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/x-m4a', 'audio/ogg', 'audio/flac', 'audio/x-flac'].includes(type)
+    || /\.(mp3|wav|m4a|ogg|flac)$/.test(name)
+  ) return 'audio';
+
+  if (
     MULTIMODAL_IMAGE_TYPES.includes(type)
     || /\.(gif|jpe?g|png|webp)$/.test(name)
   ) return 'image';
@@ -185,7 +192,7 @@ function getMultimodalMediaKind(file) {
 function validateMultimodalMediaFile(file) {
   if (!file) {
     return {
-      error: '请选择一张图片或一段视频。',
+      error: '请选择图片、音频或视频文件。',
       kind: null,
       valid: false,
     };
@@ -194,7 +201,7 @@ function validateMultimodalMediaFile(file) {
   const kind = getMultimodalMediaKind(file);
   if (!kind) {
     return {
-      error: '暂时支持 JPEG、PNG、WebP、GIF、MP4、WebM 和 MOV。',
+      error: '暂时支持 JPEG、PNG、WebP、GIF、MP4、WebM、MOV、MP3、WAV、M4A、OGG 和 FLAC。',
       kind: null,
       valid: false,
     };
@@ -203,7 +210,7 @@ function validateMultimodalMediaFile(file) {
   const size = Number(file.size);
   if (!Number.isFinite(size) || size < 0 || size > MULTIMODAL_MEDIA_LIMITS[kind]) {
     return {
-      error: kind === 'image'
+      error: kind === 'audio' ? '音频不能超过 50MB。' : kind === 'image'
         ? '图片不能超过 20MB。'
         : '视频不能超过 200MB。',
       kind,

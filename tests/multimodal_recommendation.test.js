@@ -201,15 +201,15 @@ test('multimodal UI keeps the approved Notion analysis copy and interactive inst
     readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
   ]);
 
-  assert.match(screenSource, /accept=\{MULTIMODAL_ACCEPT\}/);
+  assert.match(screenSource, /accept=\{mode\.accept\}/);
   assert.match(screenSource, /controls[\s\S]*muted[\s\S]*playsInline/);
   assert.match(screenSource, /BpmControl/);
   assert.doesNotMatch(screenSource, /function ChoiceChips/);
   assert.match(screenSource, /function TrackRecommendationPicker/);
   assert.match(screenSource, /MULTIMODAL_RECOMMENDATION\.tracks\.slice\(0, 4\)/);
-  assert.match(screenSource, /track-recommendation-list/);
+  assert.match(screenSource, /entry-track-list/);
   assert.doesNotMatch(screenSource, /track-timbre-options|track-recommendation-change/);
-  assert.match(screenSource, /results-copy-only/);
+  assert.match(screenSource, /entry-results-body/);
   assert.match(screenSource, /showFallbackCopy=\{false\}/);
   assert.match(screenSource, /unit="bpm"/);
 
@@ -224,7 +224,7 @@ test('multimodal UI keeps the approved Notion analysis copy and interactive inst
     '整体应接近City Pop质感，音色听起来温暖、柔和；节奏中速偏慢，听起来悠闲舒缓的同时有较强的律动感，符合图中人物穿着的潮流感和街头感；旋律应偏向轻松明亮，同时有一定都市霓虹的现代感',
     'AI音乐风格建议',
     '速度和节奏',
-    '中速偏慢 |',
+    '中速偏慢',
     '4/4拍，节奏设计密集且律动感强',
     '乐器搭配',
   ].forEach((copy) => assert.match(resultsViewSource, new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))));

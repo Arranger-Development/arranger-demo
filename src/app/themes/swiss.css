@@ -1,0 +1,410 @@
+/* Shared controls are also available in the original hardware theme. */
+.theme-switcher {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 6px 10px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.theme-switcher svg { width: 16px; height: 16px; flex-shrink: 0; }
+.theme-switcher:hover { border-color: var(--ink); }
+.theme-switcher:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.flow-theme-control { display: inline-flex; flex: 0 0 auto; margin-left: auto; }
+@media (max-width: 1600px) {
+  .topbar .theme-switcher { width: 36px; padding: 6px; }
+  .topbar .theme-switcher-label { display: none; }
+}
+/* Keep the new preference control visible alongside the existing toolbar. */
+@media (min-width: 1101px) and (max-width: 1600px) {
+  .topbar .right-tools { gap: 4px; }
+  .topbar .hardware-midi-control { width: 118px; }
+  .topbar .hardware-export { padding-inline: 10px; }
+}
+@media (max-width: 1400px) {
+  .topbar .hardware-midi-control {
+    width: 68px;
+    grid-template-columns: 8px minmax(0, 1fr);
+    grid-template-rows: 1fr;
+    gap: 4px;
+    padding-inline: 6px;
+  }
+  .topbar .hardware-midi-label { display: none; }
+  .topbar .hardware-midi-message { font-size: 8px; }
+  .topbar .right-tools .save-switch { display: none; }
+}
+
+/* Swiss Grid is a paint-only override. Sizes, scrolling, positioning, transforms,
+   visibility and interaction contracts remain owned by the existing styles. */
+:root[data-theme="swiss"] {
+  color-scheme: light;
+  --bg: #f1f0ea;
+  --bg-deep: #e3e2da;
+  --surface: #faf9f4;
+  --surface-2: #eae9e1;
+  --border: #101010;
+  --border-soft: #b8b8b1;
+  --ink: #101010;
+  --ink-2: #3f3f3a;
+  --ink-3: #5d5d59;
+  --ink-4: #696962;
+  --brand: #2456db;
+  --play: #28764b;
+  --swiss-red: #e43f32;
+  --swiss-blue: #2456db;
+  --swiss-yellow: #f1c84a;
+  --c-drums: #bce0c7;
+  --c-drums-ink: #205237;
+  --c-chord: #f1beaa;
+  --c-chord-ink: #782b18;
+  --c-bass: #b9cafa;
+  --c-bass-ink: #173c99;
+  --c-melody: #e5c7e5;
+  --c-melody-ink: #6a2867;
+  --c-pad: #d3c7ef;
+  --c-pad-ink: #4a2b7e;
+  --c-vocal: #efc0b7;
+  --c-vocal-ink: #7b251b;
+  --c-sample: #eade9d;
+  --c-sample-ink: #5b4810;
+  --drum-kick: var(--swiss-blue);
+  --drum-snare: var(--swiss-red);
+  --drum-hihat: var(--swiss-yellow);
+  --hardware-control-ink: var(--ink);
+  --hardware-control-muted: var(--ink-3);
+  --hardware-control-bg: var(--surface);
+  --hardware-control-border: var(--border);
+  --hardware-chord-ink-strong: var(--c-chord-ink);
+  --hardware-copper: var(--swiss-red);
+  --hardware-gold: var(--swiss-yellow);
+  --hardware-amber: var(--swiss-blue);
+  --hardware-green: var(--play);
+  --hardware-black: var(--ink);
+  --hardware-shadow-deep: none;
+  --hardware-inset-highlight: none;
+  --hardware-button-shadow: none;
+  --melody-amethyst: var(--c-melody-ink);
+  --melody-amethyst-light: var(--c-melody);
+  --melody-plum: var(--c-melody-ink);
+  --melody-plum-deep: var(--surface);
+  --radius-sm: 0px;
+  --radius: 0px;
+  --shadow-1: none;
+  --shadow-2: none;
+  font-family: Arial, Helvetica, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* Legacy hardware declarations include late, deeply nested states. Keep this
+   reset restricted to material/typography properties; state fills follow below.
+   Foreground is inherited as a token so selected controls and their children
+   always agree, even when a legacy label defines its own literal color. */
+:root[data-theme="swiss"] *,
+:root[data-theme="swiss"] *::before,
+:root[data-theme="swiss"] *::after {
+  color: var(--swiss-foreground, var(--ink)) !important;
+  border-color: var(--border) !important;
+  border-image: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  filter: none !important;
+  font-family: Arial, Helvetica, "PingFang SC", "Microsoft YaHei", sans-serif !important;
+}
+:root[data-theme="swiss"] :is(.mono, kbd, output, .val, .lbl, .eyebrow, .crumb, .performance-eyebrow) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+}
+:root[data-theme="swiss"] :is(h1, h2, h3, .name, .track-name, .clip-name-input) { font-weight: 900; }
+:root[data-theme="swiss"] body { background: var(--bg) !important; }
+
+/* Neutral shells are shared across the many editor variants. Specific state
+   fills below take precedence over these low-specificity surface defaults. */
+:root[data-theme="swiss"] :where(
+  [class*="-panel"], [class*="-head"], [class*="-card"], [class*="-frame"],
+  [class*="-dialog"], [class*="-workspace"], [class*="-section"], [class*="-readout"],
+  .scale-notes, .beat-cells, .chord-rhythm-step-grid, .chord-rhythm-beat-group,
+  .tpl-confirm-template, .chord-variant-detail, .chord-step-harmony-options,
+  .rhythm-step-ruler
+) { background: var(--surface) !important; }
+/* Icon names such as file-headphone are not panel surfaces. */
+:root[data-theme="swiss"] svg { background: transparent !important; }
+:root[data-theme="swiss"] input[type="range"] { accent-color: var(--swiss-blue) !important; }
+
+/* Main surfaces: the global selector reaches React portals and native dialogs. */
+:root[data-theme="swiss"] :is(
+  .app, .app-main, .workspace, .timeline-col, .timeline-body, .editor,
+  .seq-body, .drum-seq-body, .genre-gate, .genre-hardware, .genre-console,
+  .genre-screen, .performance-mode, .performance-body, .jam-effects,
+  .keyboard-strip, .chord-template-workspace-body, .chord-variant-popover-body,
+  .recommendation-console, .recommendation-track-console, .upload-view,
+  .analysis-view, .results-view, .multimodal-dropzone
+) { background: var(--bg) !important; }
+:root[data-theme="swiss"] :is(
+  .topbar, .tracks-col, .track, .editor-head, .scale-rail, .beat-group,
+  .drum-step-group, .genre-side-rail, .genre-card, .genre-gate-head,
+  .tutorial-panel, .tutorial-library, .tutorial-library-panel, .tutorial-library-card,
+  .tutorial-panel-header, .tutorial-footer, .performance-header, .jam-project-controls,
+  .tpl-picker, .gtpl-picker, .scale-picker, .tpl-head, .tpl-card, .gtpl-card, .sctpl-card,
+  .chord-template-workspace, .chord-template-card, .chord-style-preset-card,
+  .chord-step-harmony-popover, .chord-variant-popover, .chord-rhythm-step-label,
+  .chord-template-card-chords, .chord-template-mini-groove, .chord-template-mini-beat-group,
+  .chord-step-harmony-option, .chord-step-harmony-current, .chord-step-harmony-section,
+  .track-recommendation, .track-recommendation-row, .track-recommendation-focus,
+  .results-summary, .upload-card, .multimodal-media-frame, .results-media-frame,
+  .bpm-popover, .bpm-popover-head, .hardware-status-display, .stat,
+  .track-manager, .track-manager-section, .track-manager-track, .track-delete-confirm,
+  .export-dialog, .tpl-confirm-dialog, .new-song-confirm-dialog, .clip-paste-confirm-dialog,
+  .melody-record-confirm-dialog, .jam-export-dialog, .section-editor-dialog,
+  .jam-loop-menu, .jam-project-menu, .clear-confirm-dialog
+) { background: var(--surface) !important; }
+:root[data-theme="swiss"] :is(.topbar, .editor-head, .performance-header, .genre-gate-head) {
+  border-bottom: 2px solid var(--border);
+}
+:root[data-theme="swiss"] :is(.genre-hardware, .app-main) { border-color: var(--border); }
+:root[data-theme="swiss"] .genre-hardware { clip-path: none; }
+:root[data-theme="swiss"] :is(.genre-gem-socket, .multimodal-upload-icon, .results-copy-overview, .results-advice-grid, .results-advice-card, .recommendation-static, .recommendation-bpm-panel, .recommendation-structure, .recommendation-details, .results-summary-meta span) { background: var(--surface) !important; }
+:root[data-theme="swiss"] .genre-status { background: var(--swiss-yellow) !important; }
+:root[data-theme="swiss"] .genre-side-rail { background: transparent !important; }
+:root[data-theme="swiss"] .genre-art-image { mix-blend-mode: normal; }
+:root[data-theme="swiss"] .ai-entry-screen .genre-art-frame { background: var(--swiss-blue) !important; }
+:root[data-theme="swiss"] :is(.grid, .track-editor-target, .editor-hardware-shell, .stats) { background: var(--bg) !important; }
+:root[data-theme="swiss"] .grid {
+  background-image: linear-gradient(to right, rgb(16 16 16 / .5) 1px, transparent 1px), linear-gradient(to right, rgb(16 16 16 / .12) 1px, transparent 1px) !important;
+  background-size: calc(100% / var(--bars)) 100%, calc(100% / var(--bars) / 4) 100%;
+}
+:root[data-theme="swiss"] .hardware-midi-dot { background: var(--border-soft) !important; }
+:root[data-theme="swiss"] .hardware-midi-control[data-status="connected"] .hardware-midi-dot { background: var(--play) !important; }
+:root[data-theme="swiss"] .hardware-midi-control:is([data-status="denied"], [data-status="error"]) .hardware-midi-dot { background: var(--swiss-red) !important; }
+:root[data-theme="swiss"] :is(input, select, textarea)[aria-invalid="true"] { border-color: var(--swiss-red) !important; outline: 1px solid var(--swiss-red); }
+:root[data-theme="swiss"] .export-option-primary .export-option-icon { background: transparent !important; }
+:root[data-theme="swiss"] .play-glyph {
+  border-top-color: transparent !important;
+  border-bottom-color: transparent !important;
+  border-left-color: currentColor !important;
+}
+:root[data-theme="swiss"] :is(.transport, .brand, .track-material-layer, .clip-skin) {
+  background: transparent !important;
+}
+:root[data-theme="swiss"] :is(
+  .genre-hardware, .genre-console, .genre-screen, .app-main, .topbar, .editor,
+  .track, .clip, .genre-gem-socket, .genre-control-button, .genre-knob, .key-switch
+)::before,
+:root[data-theme="swiss"] :is(
+  .genre-hardware, .genre-console, .genre-screen, .app-main, .topbar, .editor,
+  .track, .clip, .genre-gem-socket, .genre-control-button, .genre-knob, .key-switch
+)::after { background: transparent !important; border-color: transparent !important; }
+
+/* Standard controls, then explicit semantic states. Only paint is overridden. */
+:root[data-theme="swiss"] :where(button, input, select, textarea, .key-switch, .clip-chip, .ks-letter, .drum-pad-key) {
+  background: var(--surface) !important;
+  accent-color: var(--swiss-blue);
+}
+:root[data-theme="swiss"] :is(button, input, select, textarea, [role="slider"]):focus-visible {
+  outline: 2px solid var(--swiss-blue) !important;
+  outline-offset: 3px;
+}
+:root[data-theme="swiss"] :where(button:hover:not(:disabled):not([aria-disabled="true"])) {
+  background: var(--surface-2) !important;
+}
+:root[data-theme="swiss"] :is(button:disabled, button[aria-disabled="true"]) {
+  opacity: .45;
+}
+:root[data-theme="swiss"] :is(
+  .theme-switcher, .t-btn, .key-switch, .btn-template, .editor-close,
+  .performance-connect, .performance-save, .performance-back, .performance-play,
+  .fill-empty-clips, .hardware-flow-button, .genre-gem-button, .scale-arrow,
+  .track-page-btn, .track-manager-open, .jam-deck button
+) { border: 1px solid var(--border); }
+:root[data-theme="swiss"] :is(
+  .t-btn.play, .hardware-export, .performance-play, .hardware-flow-button.primary,
+  .upload-primary, .recommendation-apply, .export-option-primary,
+  .melody-style-actions .primary,
+  .tpl-confirm-apply, .new-song-confirm-apply, .clip-paste-confirm-apply,
+  .melody-record-confirm-dialog .primary, .chord-template-workspace-apply
+) {
+  --swiss-foreground: #fff;
+  background: var(--swiss-blue) !important;
+}
+:root[data-theme="swiss"] :is(
+  .t-btn.play, .hardware-export, .performance-play, .hardware-flow-button.primary,
+  .upload-primary, .recommendation-apply, .export-option-primary,
+  .melody-style-actions .primary,
+  .tpl-confirm-apply, .new-song-confirm-apply, .clip-paste-confirm-apply,
+  .melody-record-confirm-dialog .primary, .chord-template-workspace-apply
+):hover:not(:disabled) { background: #173c99 !important; }
+:root[data-theme="swiss"] :is(.t-btn.play.active, .performance-play[aria-pressed="true"], .danger) {
+  --swiss-foreground: #fff;
+  background: #b52e24 !important;
+}
+:root[data-theme="swiss"] :is(.melody-record-button.recording, .drums-record-button.recording, .jam-effect-recording button[aria-pressed="true"]) {
+  --swiss-foreground: #fff;
+  background: #b52e24 !important;
+  outline: 2px solid var(--border);
+  outline-offset: -2px;
+}
+:root[data-theme="swiss"] :is(.theme-switcher[aria-pressed="true"], .tutorial-switch[data-active="true"]) {
+  --swiss-foreground: #fff;
+  background: var(--ink) !important;
+}
+:root[data-theme="swiss"] .theme-switcher[aria-pressed="true"]:hover { background: #3f3f3a !important; }
+:root[data-theme="swiss"] :is(.save-switch .dot, .hardware-input-dot, .performance-connection-light.is-connected) {
+  background: var(--play) !important;
+}
+:root[data-theme="swiss"] :is(
+  .power-gem, .fill-gem, .genre-gem, .genre-brand-icon, .genre-knob,
+  .genre-control-button, .genre-control-light, .volume-knob, .vol .knob
+) { background: var(--swiss-blue) !important; }
+:root[data-theme="swiss"] .genre-brand-icon { --swiss-foreground: #fff; }
+:root[data-theme="swiss"] :is(.genre-card[data-selected="true"], .track.selected) {
+  background: color-mix(in srgb, var(--track-color, var(--swiss-blue)) 18%, var(--surface)) !important;
+  outline: 2px solid var(--border);
+  outline-offset: -2px;
+}
+:root[data-theme="swiss"] :is(.track .ic, .track .bar .fill) {
+  background: var(--track-color) !important;
+}
+:root[data-theme="swiss"] :is(.vol .bar, .volume-control, .bpm-meter, .bpm-value) { background: var(--surface-2) !important; }
+:root[data-theme="swiss"] .clip {
+  --swiss-foreground: var(--track-ink, var(--ink));
+  background: var(--track-color, var(--c-drums)) !important;
+}
+:root[data-theme="swiss"] .clip.selected { outline: 2px solid var(--ink); outline-offset: -2px; }
+:root[data-theme="swiss"] :is(.clip i, .clip-mini-step.on, .clip .note, .clip .mini-note) { background: var(--track-ink, var(--ink)) !important; }
+:root[data-theme="swiss"] :is(.timeline-ruler, .ruler, .track-header) { background: var(--surface) !important; }
+:root[data-theme="swiss"] :is(.timeline-cell, .bar-cell, .hover-row, .lane) { background: transparent !important; }
+:root[data-theme="swiss"] :is(.playhead, .ruler-playhead, .ruler-playhead::before) { background: var(--swiss-red) !important; }
+:root[data-theme="swiss"] .editor-resizer { background: var(--border) !important; }
+:root[data-theme="swiss"] .editor-resizer-grip { background: var(--surface) !important; }
+
+/* Step, pitch and keyboard states remain distinct from the surrounding panels. */
+:root[data-theme="swiss"] :is(.drum-step, .drum-template-step, .pitch-step-cell, .chord-cell, .chord-rhythm-step) {
+  background: var(--surface) !important;
+  border: 1px solid var(--border);
+}
+:root[data-theme="swiss"] [data-instrument="kick"] { --swiss-step: var(--drum-kick); }
+:root[data-theme="swiss"] [data-instrument="snare"] { --swiss-step: var(--drum-snare); }
+:root[data-theme="swiss"] [data-instrument="hihat"] { --swiss-step: var(--drum-hihat); }
+:root[data-theme="swiss"] :is(.drum-step.active, .drum-dot, .drum-template-step.on) {
+  background: var(--swiss-step, var(--swiss-blue)) !important;
+}
+:root[data-theme="swiss"] :is(.melody-cell.active, .melody-note-key.playing, .ks-key.playing) { background: var(--c-melody) !important; }
+:root[data-theme="swiss"] :is(.bass-cell.active, .bass-cell.previewing, .bass-note-key.playing) { background: var(--c-bass) !important; }
+:root[data-theme="swiss"] :is(.chord-cell.active, .chord-rhythm-step.active, .chord-note-key.playing, .add-chord-btn.filled) { background: var(--c-chord) !important; }
+:root[data-theme="swiss"] .chord-rhythm-step[aria-pressed="true"] { background: var(--c-chord) !important; }
+:root[data-theme="swiss"] .chord-rhythm-step::before { background: transparent !important; }
+:root[data-theme="swiss"] .chord-rhythm-step::after { background: var(--surface-2) !important; }
+:root[data-theme="swiss"] .chord-rhythm-step[aria-pressed="true"]::after { background: var(--c-chord-ink) !important; }
+:root[data-theme="swiss"] .chord-rhythm-badge { background: var(--c-chord) !important; }
+:root[data-theme="swiss"] .chord-rhythm-status-lamp { background: var(--swiss-blue) !important; }
+:root[data-theme="swiss"] :is(.pitch-step-cell.playing, .drum-step.drag-over, .pitch-step-cell.previewing) {
+  outline: 2px solid var(--swiss-blue);
+  outline-offset: -2px;
+}
+:root[data-theme="swiss"] :is(.note-key, .ks-key) { background: var(--surface) !important; }
+:root[data-theme="swiss"] :is(.note-key.sharp, .ks-key.sharp) {
+  --swiss-foreground: #fff;
+  background: var(--ink) !important;
+}
+:root[data-theme="swiss"] .ks-key.sharp .ks-letter { background: transparent !important; }
+:root[data-theme="swiss"] :is(.note-key.root, .note-key.scale-tone, .ks-key.scale-tone) {
+  --swiss-foreground: var(--ink);
+  background: var(--surface-2) !important;
+}
+:root[data-theme="swiss"] :is(.note-key.playing, .ks-key.playing) { --swiss-foreground: var(--ink); background: var(--c-melody) !important; }
+:root[data-theme="swiss"] .piano-roll-row-indicator { background: color-mix(in srgb, var(--swiss-blue) 12%, transparent) !important; }
+:root[data-theme="swiss"] :is(.tpl-card.selected, .gtpl-card.selected, .sctpl-card.selected, .bass-template-groove-card.selected, .melody-scale-card.selected, .melody-timbre-card.selected, .chord-template-card.selected, .chord-step-harmony-option.selected, .chord-style-preset-card.selected) {
+  background: var(--surface-2) !important;
+  outline: 2px solid var(--swiss-blue);
+  outline-offset: -2px;
+}
+:root[data-theme="swiss"] :is(.chord-template-progression-options, .chord-template-groove-options) > button[aria-pressed="true"],
+:root[data-theme="swiss"] :is(.chord-step-harmony-option.is-current, .chord-step-harmony-option.is-launchpad-selected) {
+  background: var(--surface-2) !important;
+  outline: 2px solid var(--swiss-blue);
+  outline-offset: -2px;
+}
+:root[data-theme="swiss"] :is([class$="-tag"], .chord-template-card-head > span) { background: var(--surface-2) !important; }
+:root[data-theme="swiss"] :is(.chord-template-mini-beat-group > span, .gtpl-rhythm span, .chord-template-card-chord) { background: var(--surface-2) !important; }
+:root[data-theme="swiss"] :is(.chord-template-mini-beat-group > span.on, .gtpl-rhythm span.on) { background: var(--swiss-blue) !important; }
+:root[data-theme="swiss"] :is(.sctpl-notes, .sctpl-note) { background: var(--surface-2) !important; }
+:root[data-theme="swiss"] .sctpl-note.scale-tone { background: var(--c-melody) !important; }
+:root[data-theme="swiss"] :is(.chord-step-harmony-arrow, .chord-step-harmony-tones > span) { background: var(--surface-2) !important; }
+:root[data-theme="swiss"] .chord-step-passing-availability { background: var(--swiss-yellow) !important; }
+:root[data-theme="swiss"] .melody-timbre-name-row > span { background: var(--swiss-yellow) !important; }
+
+/* Upload/analysis/results retain their existing geometry and media content. */
+:root[data-theme="swiss"] :is([role="alert"], [class$="-error"], [class*="-error "], .upload-error, .export-dialog-error, .performance-warning, .performance-connection-error, .multimodal-error) { --swiss-foreground: #a32620; }
+:root[data-theme="swiss"] :is(.analysis-orb, .analysis-progress, .analysis-scan-line) { background: var(--surface-2) !important; }
+:root[data-theme="swiss"] :is(.analysis-progress span, .analysis-scan-line, .upload-icon) { background: var(--swiss-blue) !important; }
+:root[data-theme="swiss"] .track-recommendation-row[data-selected="true"] { background: var(--surface-2) !important; outline: 2px solid var(--swiss-blue); outline-offset: -2px; }
+:root[data-theme="swiss"] :is(.track-recommendation-icon, .track-recommendation-badge, .recommendation-track-icon) { background: var(--c-bass) !important; }
+
+/* Jam pads, mixers and the live effects deck. Progress geometry is preserved. */
+:root[data-theme="swiss"] .jam-effects { --pw-track: var(--c-drums-ink); }
+:root[data-theme="swiss"] .jam-effects[data-track="chord"] { --pw-track: var(--c-chord-ink); }
+:root[data-theme="swiss"] .jam-effects[data-track="bass"] { --pw-track: var(--c-bass-ink); }
+:root[data-theme="swiss"] .jam-effects[data-track="melody"] { --pw-track: var(--c-melody-ink); }
+:root[data-theme="swiss"] .performance-pad { border: 1px solid var(--border); }
+:root[data-theme="swiss"] .performance-pad.is-selected { background: var(--pad-tone) !important; outline: 2px solid var(--border); outline-offset: -2px; }
+:root[data-theme="swiss"] .jam-track-select[aria-pressed="true"] { background: var(--pad-tone) !important; outline: 2px solid var(--border); outline-offset: -2px; }
+:root[data-theme="swiss"] .jam-loop-count button[aria-pressed="true"] { background: var(--c-bass) !important; outline: 2px solid var(--swiss-blue); outline-offset: -2px; }
+:root[data-theme="swiss"] :is(.performance-loop-circle, .dj-fader-well, .dj-fader-scale span, .dj-knob-face, .dj-knob::before) { background: var(--surface) !important; }
+:root[data-theme="swiss"] :is(.performance-loop-circle, .dj-knob, .dj-knob-face, .dj-knob::before) { border-radius: 50% !important; }
+:root[data-theme="swiss"] .performance-loop.is-playing .performance-loop-circle { background: var(--c-bass) !important; outline: 2px solid var(--swiss-blue); }
+:root[data-theme="swiss"] .performance-loop.is-editing .performance-loop-circle::after { background: var(--swiss-blue) !important; }
+:root[data-theme="swiss"] .performance-loop.is-pending .performance-loop-circle { border-style: dashed; }
+:root[data-theme="swiss"] .jam-workspace :is(nav button[aria-pressed="true"], .jam-deck button[aria-pressed="true"], .dj-repeat-pad[aria-pressed="true"]) {
+  background: var(--c-bass) !important;
+  outline: 2px solid var(--swiss-blue);
+  outline-offset: -2px;
+}
+:root[data-theme="swiss"] :is(.dj-pad-led, .dj-knob-face > span) { background: var(--pw-track) !important; }
+:root[data-theme="swiss"] .dj-fader::-webkit-slider-runnable-track { background: var(--border) !important; }
+:root[data-theme="swiss"] .dj-fader::-moz-range-track { background: var(--border) !important; }
+:root[data-theme="swiss"] .dj-fader::-webkit-slider-thumb { background: var(--swiss-blue) !important; border: 1px solid var(--border); }
+:root[data-theme="swiss"] .dj-fader::-moz-range-thumb { background: var(--swiss-blue) !important; border: 1px solid var(--border); }
+:root[data-theme="swiss"] .jam-workspace .jam-effects input.dj-fader { background: transparent !important; }
+:root[data-theme="swiss"] .jam-expression-controls input[type="range"]::-webkit-slider-thumb { background: var(--swiss-blue) !important; border: 1px solid var(--border); box-shadow: none; }
+:root[data-theme="swiss"] .jam-expression-controls input[type="range"]::-moz-range-thumb { background: var(--swiss-blue) !important; border: 1px solid var(--border); box-shadow: none; }
+
+/* Teach with a static, high-contrast boundary rather than glowing materials. */
+:root[data-theme="swiss"] :is(.tutorial-target-active, .tutorial-control-target, .tutorial-cell-target, .tutorial-cell-source, .tutorial-bar-target, .tutorial-playhead-target) {
+  animation: none !important;
+  outline: 3px solid var(--swiss-blue) !important;
+  outline-offset: -3px;
+}
+:root[data-theme="swiss"] :is(.tutorial-cell-target, .tutorial-cell-source, .tutorial-control-target) { background: #e1e8ff !important; --swiss-foreground: var(--ink); }
+:root[data-theme="swiss"] :is(.tutorial-bar-completed, .tutorial-playhead-completed, .tutorial-control-complete) { outline: 2px solid var(--play); outline-offset: -2px; }
+:root[data-theme="swiss"] :is(.tutorial-directory-button.active, .tutorial-primary, .tutorial-primary-button) { background: var(--swiss-yellow) !important; }
+:root[data-theme="swiss"] .chill-coachmark { background: var(--surface) !important; border: 2px solid var(--border); }
+:root[data-theme="swiss"] :is(.chill-coachmark-primary, .tutorial-library-primary, .chill-stage-item.active .chill-stage-number) { background: var(--swiss-yellow) !important; }
+:root[data-theme="swiss"] .chill-stage-number { background: var(--surface-2) !important; }
+:root[data-theme="swiss"] .chill-tutorial-target { animation: none !important; outline: 3px solid var(--swiss-blue) !important; outline-offset: -3px; }
+:root[data-theme="swiss"] .melody-record-count-in { --swiss-foreground: var(--ink); background: rgb(241 240 234 / .92) !important; }
+:root[data-theme="swiss"] :is(.tutorial-panel-header::before, .tutorial-pointer, .tutorial-count-in) { background: var(--swiss-blue) !important; --swiss-foreground: #fff; }
+:root[data-theme="swiss"] :is([class*="confirm-overlay"], .export-dialog-overlay, .track-manager-overlay, .track-delete-confirm-overlay) { background: rgb(16 16 16 / .35) !important; }
+:root[data-theme="swiss"] dialog::backdrop { background: rgb(16 16 16 / .35) !important; backdrop-filter: none !important; }
+
+@media (max-width: 980px) {
+  .theme-switcher-label { display: none; }
+  .theme-switcher { width: 36px; padding: 6px; }
+}
+@media (max-width: 650px) {
+  /* A header row can scroll without losing its theme or transport controls. */
+  .performance-header > .theme-switcher { order: 10; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .theme-switcher { transition: none; }
+}
