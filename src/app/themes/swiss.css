@@ -114,7 +114,8 @@
 :root[data-theme="swiss"] *::after {
   color: var(--swiss-foreground, var(--ink)) !important;
   border-color: var(--border) !important;
-  border-image: none !important;
+  /* Use the longhand: production minification drops `none` from the shorthand. */
+  border-image-source: none !important;
   border-radius: 0 !important;
   box-shadow: none !important;
   text-shadow: none !important;
