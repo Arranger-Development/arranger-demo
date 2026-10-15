@@ -6,6 +6,18 @@ export async function createPerformanceEffects(engine) {
   if (!context?.audioWorklet || !globalThis.AudioWorkletNode) throw new Error('演出效果需要支持 AudioWorklet 的浏览器，请使用最新版 Chrome 或 Edge。');
   await context.audioWorklet.addModule(new URL('./beat-repeat.js?no-inline', import.meta.url).href);
   await context.audioWorklet.addModule(new URL('./jam-expression.js?no-inline', import.meta.url).href);
+  // Individually safe tracks can exceed full scale when their transients overlap.
+  // Keep the same mix balance with fixed headroom, then catch louder combinations
+  // (including effect tails and boosted faders) on one shared output bus.
+  const master = context.createGain();
+  master.gain.value = 10 ** (-6 / 20);
+  const peakProtection = context.createDynamicsCompressor();
+  peakProtection.threshold.value = -3;
+  peakProtection.knee.value = 0;
+  peakProtection.ratio.value = 20;
+  peakProtection.attack.value = 0.003;
+  peakProtection.release.value = 0.1;
+  master.connect(peakProtection).connect(context.destination);
   const impulse = context.createBuffer(2, Math.ceil(context.sampleRate * 2.4), context.sampleRate);
   let seed = 7381;
   for (let c = 0; c < 2; c++) {
@@ -24,7 +36,7 @@ export async function createPerformanceEffects(engine) {
     const filter = context.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 20000; filter.Q.value = 0.7;
     const gain = context.createGain();
     input.connect(repeat).connect(expression).connect(filter);
-    filter.connect(dry).connect(gain); filter.connect(verb).connect(wet).connect(gain); gain.connect(context.destination);
+    filter.connect(dry).connect(gain); filter.connect(verb).connect(wet).connect(gain); gain.connect(master);
     return [id, { input, repeat, expression, filter, gain, wet, dry }];
   }));
   const routed = new WeakSet();

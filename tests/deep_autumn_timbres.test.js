@@ -176,6 +176,37 @@ test('real-time banks play original pitches and natural tails through selected c
   engine.disposeTrack('drums'); assert.equal(engine.drumTrackBanks.has('drums'), false); assert.ok(kick.disposed);
 });
 
+test('dense drum retriggers crossfade old tails and schedule velocity changes at each hit, including half steps', async () => {
+  const { engine, tone } = setup();
+  const ramps = [];
+  await engine.startAudio();
+  await engine.prepareDrumTimbre(drums);
+  const kick = engine.drumTrackBanks.get('drums').get(drums).players.get('kick');
+  // An immediate shared-volume write would alter a tail before its next hit.
+  kick.volume = {
+    get value() { return 0; },
+    set value(_) { assert.fail('hit volume must use the audio clock'); },
+    linearRampTo(value, duration, time) { ramps.push({ value, duration, time }); },
+  };
+  const matrix = { drums: [[{ instruments: ['kick'], requestedTimbreId: drums, drumHits: [
+    { instrument: 'kick', offsetSteps: 0, durationSteps: .5, velocity: 1 },
+    { instrument: 'kick', offsetSteps: .5, durationSteps: .5, velocity: .5 },
+  ] }]] };
+  await engine.play({ matrixSource: () => matrix, totalBars: 1, bpm: 100 });
+  tone.Transport.tick(1);
+  assert.deepEqual(kick.hits,[1,1.075]);
+  assert.deepEqual(ramps,[
+    { value: -3, duration: .002, time: 1 },
+    { value: -3 + 20 * Math.log10(.5), duration: .002, time: 1.075 },
+  ]);
+  assert.ok(kick.fadeOut >= .003 && kick.fadeOut <= .005, 'a few milliseconds of release prevent abrupt tail cuts');
+  assert.ok(kick.fadeIn > 0 && kick.fadeIn <= .001, 'the new hit retains its percussive attack');
+  const defaultKick = engine.drumPlayers.get('kick');
+  assert.equal(defaultKick.fadeOut,kick.fadeOut,'both drum banks use the same retrigger protection');
+  await engine.stop();
+  assert.ok(kick.stops.length > 0,'stop must still release the bank');
+});
+
 test('drum bank failure cleans up and retries; deletion or stop during loading never starts obsolete playback', async () => {
   const { engine, tone, players, calls } = setup();
   await engine.startAudio();

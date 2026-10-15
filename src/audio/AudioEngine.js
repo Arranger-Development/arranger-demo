@@ -24,6 +24,9 @@ const SAMPLE_ASSET_VERSION = 'sample-refresh-20260608';
 const CHORD_SAMPLE_DURATION = '2s';
 const MAX_LIVE_INPUT_LATENCY_SECONDS = 0.25;
 const LAUNCHPAD_LIVE_INPUT_BIAS_SECONDS = 0.012;
+const DRUM_FADE_IN_SECONDS = 0.0005;
+const DRUM_FADE_OUT_SECONDS = 0.004;
+const DRUM_VOLUME_RAMP_SECONDS = 0.002;
 
 function createRootOctaveSampleFiles({ directory, prefix, roots, octaves, sampleVersion = 'v0.22' }) {
   return Object.freeze(Object.fromEntries(
@@ -156,6 +159,16 @@ function applyVolume(node, volume) {
   }
 
   node.set?.({ volume });
+}
+
+function applyDrumHitVolume(player, volume, time) {
+  // Transport callbacks run ahead of the audible beat. Do not change a playing
+  // tail's gain immediately when scheduling the next (possibly softer) hit.
+  if (typeof player.volume?.linearRampTo === 'function') {
+    player.volume.linearRampTo(volume, DRUM_VOLUME_RAMP_SECONDS, time);
+  } else {
+    applyVolume(player, volume);
+  }
 }
 
 function disposeAudioNode(node, time) {
@@ -578,12 +591,20 @@ export default class AudioEngine {
   }
 
   createPlayer(url, instrument) {
-    if (this.playerFactory) return this.playerFactory(url, instrument);
-    if (!this.tone?.Player) {
+    if (!this.playerFactory && !this.tone?.Player) {
       throw new Error('Tone Player is unavailable');
     }
 
-    return new this.tone.Player(url);
+    const player = this.playerFactory
+      ? this.playerFactory(url, instrument)
+      : new this.tone.Player(url);
+    // Tone.Player restarts the current source on another hit. A short overlap
+    // avoids cutting a nonzero kick waveform straight to zero on dense rolls.
+    if (player) {
+      player.fadeIn = DRUM_FADE_IN_SECONDS;
+      player.fadeOut = DRUM_FADE_OUT_SECONDS;
+    }
+    return player;
   }
 
   createFallbackSynth() {
@@ -880,7 +901,7 @@ export default class AudioEngine {
     if (bank && !player) return false;
     if (player?.start) {
       try {
-        applyVolume(player, volume + (bank?.gainDb ?? 0));
+        applyDrumHitVolume(player, volume + (bank?.gainDb ?? 0), time);
         player.start(time);
         return true;
       } catch {

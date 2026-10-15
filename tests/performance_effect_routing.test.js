@@ -10,9 +10,13 @@ test('each audible track routes through its own repeat/filter/gain and only the 
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'AudioWorkletNode');
   Object.defineProperty(globalThis, 'AudioWorkletNode', { configurable: true, value: class {} });
   t.after(() => { if (previous) Object.defineProperty(globalThis, 'AudioWorkletNode', previous); else delete globalThis.AudioWorkletNode; });
-  const filters = [], repeats = [], expressions = [], modules = [];
+  const filters = [], repeats = [], expressions = [], modules = [], compressors = [];
   const context = { sampleRate: 1024, createBuffer: (channels,length)=>({getChannelData:()=>new Float32Array(length)}), createConvolver:node, currentTime: 1, destination: node(), audioWorklet: { async addModule(url) { modules.push(url); } },
-    createGain: node, createBiquadFilter() { const n = node(); filters.push(n); return n; } };
+    createGain: node, createBiquadFilter() { const n = node(); filters.push(n); return n; },
+    createDynamicsCompressor() {
+      const n = { ...node(), ...Object.fromEntries(['threshold','knee','ratio','attack','release'].map(p => [p,param()])) };
+      compressors.push(n); return n;
+    } };
   const engine = { async startAudio() {}, getToneContext: () => ({rawContext: context,
     createAudioWorkletNode(name) { const n = node(); n.messages = []; n.port = {postMessage: m => n.messages.push(m)}; if(name==='arranger-beat-repeat') repeats.push(n); else {n.parameters=new Map(['pitch','chopper','brake','clock'].map(p=>[p,param()]));expressions.push(n);} return n; }}),
     drumPlayers: new Map([['kick',node()]]), fallbackSynth: node(), bassSampler: node(), chordSampler: node(), chordSynth: node(),
@@ -24,12 +28,23 @@ test('each audible track routes through its own repeat/filter/gain and only the 
   assert.equal(input.outputs[0],repeats[1]);
   assert.equal(repeats[1].outputs[0],expressions[1]);
   assert.equal(expressions[1].outputs[0],filters[1]);
-  assert.equal(filters[1].outputs[0].outputs[0].outputs[0],context.destination);
+  const trackGains = filters.map(filter => filter.outputs[0].outputs[0]);
+  const master = trackGains[0].outputs[0];
+  assert.ok(trackGains.every(gain => gain.outputs.length === 1 && gain.outputs[0] === master), 'all four tracks share one protected output');
+  assert.ok(filters.every((filter, i) => filter.outputs[1].outputs[0].outputs[0] === trackGains[i]), 'reverb tails also pass through the protected output');
+  assert.equal(master.gain.value,10 ** (-6 / 20));
+  assert.equal(compressors.length,1);
+  assert.deepEqual(master.outputs,[compressors[0]]);
+  assert.deepEqual(compressors[0].outputs,[context.destination]);
+  assert.deepEqual(Object.fromEntries(['threshold','knee','ratio','attack','release'].map(p => [p,compressors[0][p].value])), {
+    threshold: -3, knee: 0, ratio: 20, attack: 0.003, release: 0.1,
+  });
   assert.equal(engine.melodyTrackBanks.get('chord').get('piano').sampler.outputs[0],input);
   assert.notEqual(engine.bassSampler.outputs[0],input);
   effects.set('chord',{cutoff:600,volume:-6,held:true,bpm:120,division:8});
   assert.deepEqual(filters.map(f=>f.frequency.value),[20000,600,20000,20000]);
   assert.ok(Math.abs(filters[1].outputs[0].outputs[0].gain.value-10**(-6/20))<1e-9);
+  assert.equal(master.gain.value,10 ** (-6 / 20), 'track volume edits must not remove the shared headroom');
   assert.deepEqual(repeats.map(r=>r.messages.length),[0,1,0,0]);
   assert.deepEqual(repeats[1].messages[0],{held:true,seconds:.25});
   effects.set('chord',{held:false}); assert.equal(repeats[1].messages.at(-1).held,false);
