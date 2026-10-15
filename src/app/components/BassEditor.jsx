@@ -1,3 +1,5 @@
+import UserTemplatePicker from './UserTemplatePicker.jsx';
+void UserTemplatePicker;
 import {
   AudioWaveform,
   Trash2,
@@ -156,6 +158,7 @@ function BassEditor({
         </div>
 
         <div className="tools">
+          {createElement(UserTemplatePicker, { trackId: 'bass', disabled: tutorialLocked })}
           <button
             className={grooveButtonClassName}
             ref={grooveTriggerRef}

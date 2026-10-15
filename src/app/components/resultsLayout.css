@@ -1,0 +1,74 @@
+/* Only the AI result page uses this compact layout. */
+.entry-results.entry-surface { display:grid; grid-template-rows:56px 28px minmax(0,1fr); row-gap:8px; padding:0 32px 16px; }
+.entry-results .entry-header { min-height:56px; }
+.entry-results .entry-header::before { inset:0 -32px; }
+.entry-results .entry-brand { font-size:20px; gap:12px; }
+.entry-results .entry-brand svg { width:26px; height:26px; }
+.entry-results .theme-switcher { min-height:34px; padding:6px 12px; font-size:13px; }
+.entry-results .entry-back { justify-self:start; min-height:28px; margin:0; font-size:14px; }
+.entry-results .entry-content { padding:0; min-height:0; }
+.entry-results .entry-results-body { height:100%; display:grid; grid-template-rows:44px 144px minmax(236px,1fr) 44px; gap:12px; }
+.entry-results .entry-results-heading { margin:0; gap:16px; align-items:center; }
+.entry-results .entry-results-heading h1 { font-size:25px; line-height:1.15; margin:0 0 4px; }
+.entry-results .entry-results-heading p { font-size:13px; line-height:1.4; }
+.entry-results .entry-results-demo { margin:0; font-size:11px; }
+.entry-results .entry-results-overview { grid-template-columns:210px minmax(0,1fr); gap:24px; padding:0 0 12px; min-height:0; }
+.entry-results .entry-results-source { min-height:0; }
+.entry-results .entry-results-preview { min-height:0; height:116px; }
+.entry-results .entry-results-preview :is(img,video) { height:116px; }
+.entry-results .multimodal-text-preview { padding:12px; font-size:14px !important; line-height:1.6; max-height:116px; overflow:hidden; }
+.entry-results .entry-results-filename { margin:4px 0 0; font-size:11px; }
+.entry-results .entry-results-copy { grid-template-columns:1fr 1fr; gap:24px; }
+.entry-results .entry-results-body h2 { font-size:14px; line-height:20px; margin:0 0 6px; }
+.entry-results .entry-results-copy p { font-size:14px; line-height:21px; }
+.entry-results .entry-result-excerpt { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:4; overflow:hidden; }
+.entry-results .entry-excerpt-expand { border:0; background:transparent; color:var(--entry-accent); font-size:12px; padding:4px 0; text-decoration:underline; }
+.entry-results .entry-results-settings { grid-template-columns:minmax(340px,.9fr) minmax(0,1fr); gap:32px; padding:0; align-items:center; }
+.entry-results .entry-tempo-heading,.entry-results .entry-instruments-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+.entry-results .entry-tempo-heading h2,.entry-results .entry-instruments-heading h2 { margin:0; }
+.entry-results .entry-tempo-heading > span,.entry-results .entry-instruments-heading > span { font-size:11px; color:var(--entry-muted); }
+.entry-results .ai-music-knobs { display:flex; align-items:start; justify-content:center; gap:28px; padding:4px 0; }
+.entry-results .rotary-control { width:160px; gap:6px; }
+.entry-results .rotary-label { height:24px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:13px; }
+.entry-results .rotary-knob { width:116px; height:116px; }
+.entry-results .rotary-face { width:96px; height:96px; }
+.entry-results .rotary-knob:focus-visible { outline-color:var(--entry-accent); }
+.entry-results .rotary-value { font-size:25px; line-height:30px; }
+.entry-results .rotary-ticks { width:150px; font-size:10px; line-height:14px; }
+.entry-results .key-mode-toggle { display:inline-flex; gap:0; border:1px solid var(--entry-line); border-radius:4px; overflow:hidden; }
+.entry-results .key-mode-toggle button { font-size:10px; line-height:16px; border:0; padding:1px 5px; color:var(--entry-muted); background:transparent; }
+.entry-results .key-mode-toggle button[aria-pressed=true] { color:var(--entry-ground); background:var(--entry-accent); }
+.entry-results .entry-track-list { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.entry-results .entry-track-choice { min-height:96px; padding:12px; gap:5px; }
+.entry-results .entry-track-choice[aria-pressed=true] { padding-top:10px; }
+.entry-results .entry-track-choice strong { font-size:15px; }
+.entry-results .entry-track-icon svg { width:22px; height:22px; }
+.entry-results .entry-track-choice small { font-size:11px; }
+.entry-results .entry-results-actions { padding:8px 0 0; align-items:center; gap:12px; }
+.entry-results .entry-results-actions .entry-button { min-height:36px; min-width:180px; padding:6px 16px; font-size:14px; }
+.entry-results .entry-copy-dialog { --tj-panel:var(--entry-ground); --tj-card:var(--entry-ground); --tj-border:var(--entry-line); width:min(680px,90vw); max-height:80dvh; overflow:auto; }
+.entry-results .entry-copy-dialog p { display:block; white-space:pre-wrap; overflow-wrap:anywhere; font-size:15px; line-height:1.7; }
+:root[data-theme=swiss] .entry-results .key-mode-toggle { border-radius:0; }
+:root[data-theme=swiss] .entry-results .key-mode-toggle button[aria-pressed=true] { --swiss-foreground:var(--ink); background:var(--swiss-yellow,#f2d658) !important; }
+@media(min-height:850px) and (min-width:901px) {
+  .entry-results .rotary-knob { width:138px; height:138px; }
+  .entry-results .rotary-face { width:116px; height:116px; }
+}
+@media(max-width:900px), (max-height:639px) {
+  .entry-results.entry-surface { display:block; height:100dvh; padding:0 20px 24px; }
+  .entry-results .entry-back { margin:8px 0; }
+  .entry-results .entry-header::before { inset:0 -20px; }
+  .entry-results .entry-results-body { height:auto; grid-template-rows:auto; gap:20px; }
+  .entry-results .entry-results-heading { flex-direction:row; }
+  .entry-results .entry-results-settings { grid-template-columns:1fr; gap:20px; }
+  .entry-results .entry-results-overview { grid-template-columns:160px minmax(0,1fr); }
+  .entry-results .entry-results-copy { grid-template-columns:1fr; gap:12px; }
+  .entry-results .entry-results-actions { flex-direction:row; }
+}
+@media(max-width:540px) {
+  .entry-results .entry-results-heading { align-items:start; flex-direction:column; }
+  .entry-results .entry-results-overview { grid-template-columns:1fr; }
+  .entry-results .ai-music-knobs { gap:8px; }
+  .entry-results .entry-results-actions { flex-direction:column; }
+  .entry-results .entry-results-actions .entry-button { width:100%; }
+}

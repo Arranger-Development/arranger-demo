@@ -239,10 +239,12 @@ test('Drums editor exposes the dedicated write workflow and keeps no-clip record
   assert.match(drumSource, /播放到每个小节时才会清空/);
   assert.match(drumSource, /event\.key !== 'Escape'/);
   assert.match(drumSource, /等待首次击打创建 Clip/);
-  assert.match(drumSource, /DRUM_INPUT_CELLS\.map/);
-  assert.match(drumSource, /onPointerDown=\{\(event\) => \{/);
-  assert.match(drumSource, /onPadInput\(pad\.instrument, event\.timeStamp\)/);
-  assert.match(drumSource, /if \(event\.detail === 0\)/);
+  const gridSource = await readFile(new URL('../src/app/components/DrumStepGrid.jsx', import.meta.url), 'utf8');
+  assert.match(drumSource, /createElement\(DrumStepGrid/);
+  assert.match(gridSource, /DRUM_INPUT_CELLS\.map/);
+  assert.match(gridSource, /onPointerDown=\{\(event\) => \{/);
+  assert.match(gridSource, /onPadInput\?\.\(pad\.instrument, event\.timeStamp\)/);
+  assert.match(gridSource, /if \(event\.detail === 0\)/);
   assert.match(bottomEditorSource, /selectedClipId \|\| drumsWriting/);
   assert.match(bottomEditorSource, /hasClip: Boolean\(selectedClipId\)/);
   assert.match(bottomEditorSource, /onPadInput: onDrumsPadInput/);

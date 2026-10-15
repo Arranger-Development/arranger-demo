@@ -14,19 +14,19 @@ function Hold({ label, disabled, pressed, onPress, onRelease }) {
     onKeyUp={e=>{if([' ','Enter'].includes(e.key)){e.preventDefault();e.stopPropagation();onRelease(`key:${e.key}`);}}} onBlur={releaseKeys}>{label}</button>;
 }
 
-export default function JamPerformanceDeck({effects,arp,session,enabled,recordingLocked,changeMix,onPage,onArpPress}) {
+export default function JamPerformanceDeck({effects,arp,session,enabled,recordingLocked,changeMix,onPage,onArpPress,onArpConfigure}) {
   const fx=useSyncExternalStore(effects.subscribe,effects.getSnapshot), ar=useSyncExternalStore(arp.subscribe,arp.getSnapshot);
   const track=fx.selectedTrack, hasTargets=fx.selectedTracks.length>0;
   const mixed=Object.values(EFFECT_FIELDS).some(field=>fx.selectedTracks.some(t=>fx[field][t]!==fx[field][track]));
   const momentary=(parameter,value,label)=> <Hold key={`${parameter}:${value}`} label={label} disabled={!enabled||!hasTargets} pressed={fx[EFFECT_FIELDS[parameter]][track]===value}
     onPress={token=>effects.press(parameter,`${parameter}:${value}:${token}`,value,session.bpm)} onRelease={token=>effects.release(parameter,`${parameter}:${value}:${token}`)}/>;
   return <div className="jam-deck">
-    <p className="jam-effect-hint">点击轨道头选中／取消 · 可选多轨</p>
+    <p className="jam-effect-hint">选择效果目标 · 可选多轨</p>
     {mixed&&<p role="status">多轨参数不同 · 显示{LABELS[track]}</p>}
     <div className="jam-deck-pages" role="group" aria-label="中间两行功能页">
       {[['mix','混音'],['expression','表现'],['arp','琶音']].map(([id,label])=><button type="button" key={id} aria-pressed={fx.effectPage===id} onClick={()=>onPage(id)}>{label}</button>)}
     </div>
-    {!hasTargets&&<p role="status">点击左侧轨道头选择效果目标</p>}
+    {!hasTargets&&<p role="status">在上方选择效果目标</p>}
     {hasTargets&&fx.effectPage==='mix'&&<TrackControls track={track} session={{...session,volumes:fx.volumes,mutedTracks:fx.mutedTracks}} changeMix={changeMix} effects={effects} cutoff={fx.cutoffs[track]} hideRepeat
       onCutoffChange={value=>fx.selectedTracks.forEach(t=>effects.cutoff(t,value))}/>}
     {hasTargets&&fx.effectPage==='expression'&&<div className="jam-expression-controls">
@@ -42,11 +42,11 @@ export default function JamPerformanceDeck({effects,arp,session,enabled,recordin
     {fx.effectPage==='arp'&&<div className="jam-arp-controls">
       <label className="jam-arp-note-input">配置音组
         <input aria-label="琶音音组" disabled={recordingLocked} defaultValue={ar.presets[0]?.join(' ')??''} placeholder="C4 E4 G4"
-          onChange={e=>{e.target.setCustomValidity('');arp.configure(0,e.target.value);}} onBlur={e=>{if(!arp.configure(0,e.target.value)){e.target.setCustomValidity('填写1–8个音符，范围C3–B5，例如C4 E4 G4');e.target.reportValidity();}}}/>
+          onChange={e=>{e.target.setCustomValidity('');arp.configure(0,e.target.value);}} onBlur={e=>{if(!arp.configure(0,e.target.value)){e.target.setCustomValidity('填写1–8个音符，范围C3–B5，例如C4 E4 G4');e.target.reportValidity();}else onArpConfigure?.(arp.getSnapshot().presets[0]);}}/>
       </label>
       <Hold label="按住琶音" disabled={!enabled||recordingLocked||!ar.presets[0]} pressed={ar.index===0}
         onPress={token=>onArpPress(`arp:${token}`,0)} onRelease={token=>arp.release(`arp:${token}`)}/>
-      <small>{recordingLocked ? '效果录制中暂不可用' : !ar.presets[0] ? '先填写音组，例如 C4 E4 G4' : !enabled ? '先播放组合或 Loop，再按住琶音' : '旋律轨音色 · 松开停止'}</small>
+      <small>{recordingLocked ? '效果录制中暂不可用' : !ar.presets[0] ? '先填写音组，例如 C4 E4 G4' : !enabled ? '先播放组合，再按住琶音' : '旋律轨音色 · 松开停止'}</small>
       <span role="status">{ar.loading?'正在准备琶音…':ar.error}</span>
     </div>}
     <div className="jam-fixed-effects"><div><div className="dj-repeat-label">Repeater · 重复</div><div className="dj-repeat-pads">

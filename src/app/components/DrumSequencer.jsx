@@ -1,3 +1,5 @@
+import UserTemplatePicker from './UserTemplatePicker.jsx';
+void UserTemplatePicker;
 import {
   AudioWaveform,
   Play,
@@ -17,7 +19,7 @@ import {
   getDrumTemplatesForGenre,
 } from '../../data/drumStyleTemplates.js';
 import { STEPS_PER_BAR } from '../../domain/musicConstants.js';
-import { DRUM_INPUT_CELLS } from '../../input/drumsInputLayout.js';
+import DrumStepGrid from './DrumStepGrid.jsx';
 import {
   DRUM_SEQUENCER_ROWS,
   isDrumsStepActive,
@@ -36,14 +38,6 @@ import { renderIcon } from './icons.js';
 import { TrackBarPager } from './TrackBarPager.jsx';
 
 const STEP_NUMBERS = Array.from({ length: STEPS_PER_BAR }, (_, index) => index + 1);
-const STEPS_PER_BEAT_GROUP = 4;
-const STEP_GROUPS = Array.from(
-  { length: Math.ceil(STEP_NUMBERS.length / STEPS_PER_BEAT_GROUP) },
-  (_, groupIndex) => STEP_NUMBERS.slice(
-    groupIndex * STEPS_PER_BEAT_GROUP,
-    (groupIndex + 1) * STEPS_PER_BEAT_GROUP,
-  ),
-);
 const DRAG_THRESHOLD_PX = 6;
 const EMPTY_TEMPLATE_PREVIEW = async () => 'empty';
 const NOOP_TEMPLATE_PREVIEW_STOP = () => {};
@@ -495,6 +489,7 @@ function DrumSequencer({
         </div>
 
         <div className="tools">
+          {createElement(UserTemplatePicker, { trackId: 'drums', disabled: tutorialLocked })}
           <button
             className={templateButtonClassName}
             ref={templateTriggerRef}
@@ -575,72 +570,7 @@ function DrumSequencer({
           onPreviousBar,
           trackId: 'drums',
         }, (
-          <div className="drum-sequencer-grid">
-            <div className="drum-row-labels" role="group" aria-label="虚拟鼓垫">
-              <div className="drum-row-label-spacer" aria-hidden="true" />
-              {DRUM_INPUT_CELLS.map((pad) => (
-                <button
-                  className="drum-row-label drum-performance-pad"
-                  type="button"
-                  data-instrument={pad.instrument}
-                  disabled={tutorialLocked}
-                  key={pad.instrument}
-                  aria-label={`${pad.label} 鼓垫，键盘 ${pad.keyLabel}`}
-                  onClick={(event) => {
-                    if (event.detail === 0) {
-                      onPadInput(pad.instrument, event.timeStamp);
-                    }
-                  }}
-                  onPointerDown={(event) => {
-                    if (event.button === 0) {
-                      onPadInput(pad.instrument, event.timeStamp);
-                    }
-                  }}
-                >
-                  <span className="drum-dot" data-instrument={pad.instrument} />
-                  <span className="drum-pad-label">{pad.label}</span>
-                  <kbd className="drum-pad-key">{pad.keyLabel}</kbd>
-                </button>
-              ))}
-            </div>
-
-            <div className="drum-steps drum-step-groups">
-              {STEP_GROUPS.map((stepGroup, groupIndex) => (
-                <section
-                  className="drum-step-group"
-                  aria-label={`Beat ${groupIndex + 1}`}
-                  key={groupIndex}
-                >
-                  <header className="drum-beat-header">
-                    <span className="drum-beat-label mono">
-                      BEAT
-                      {' '}
-                      {groupIndex + 1}
-                    </span>
-                    <div className="drum-beat-position-row" aria-hidden="true">
-                      {stepGroup.map((stepNumber, beatStepIndex) => (
-                        <span
-                          className="drum-step-number mono"
-                          key={stepNumber}
-                        >
-                          {beatStepIndex + 1}
-                        </span>
-                      ))}
-                    </div>
-                  </header>
-                  {DRUM_SEQUENCER_ROWS.map((row) => (
-                    <div
-                      className="drum-beat-row"
-                      data-instrument={row.id}
-                      key={row.id}
-                    >
-                      {stepGroup.map((stepNumber) => renderDrumStep(row, stepNumber))}
-                    </div>
-                  ))}
-                </section>
-              ))}
-            </div>
-          </div>
+          createElement(DrumStepGrid, {renderStep:renderDrumStep, disabled:tutorialLocked, onPadInput})
         ))}
       </div>
 

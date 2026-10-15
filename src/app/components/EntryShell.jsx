@@ -2,6 +2,7 @@ import { AudioLines, ArrowLeft } from 'lucide-react';
 import { ThemeSwitcher } from './ThemeSwitcher.jsx';
 import { renderIcon } from './icons.js';
 import './entry.css';
+import './entryFlowLayout.css';
 
 export function EntryShell({ children, onBack, backLabel = '返回首页', className = '', label = '创作入口' }) {
   return (

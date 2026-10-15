@@ -259,10 +259,15 @@ function createMatrixPlaybackAdapter(matrixSource, options = {}) {
           ?? getTrackTypeFromInstanceId(trackId)
         ) === trackType)
         .flatMap((trackId) => {
-          const cell = matrix?.[trackId]?.[bar]?.[step] ?? null;
+          const phraseLength = source?.phraseBars?.[trackId];
+          const sourceBar = Number.isInteger(phraseLength) && phraseLength > 0 ? bar % phraseLength : bar;
+          const cell = matrix?.[trackId]?.[sourceBar]?.[step] ?? null;
           let events = [];
           if (trackType === 'drums') {
-            events = extractDrumsInstruments(cell).map((instrument) => (
+            events = Array.isArray(cell?.drumHits) ? cell.drumHits.filter(hit => extractDrumsInstruments(cell).includes(hit.instrument)).map(hit => ({
+              ...createDrumsEvent(bar, step, hit.instrument, cell),
+              timingOffset: hit.offsetSteps, durationSteps: hit.durationSteps, velocity: hit.velocity,
+            })) : extractDrumsInstruments(cell).map((instrument) => (
               createDrumsEvent(bar, step, instrument, cell)
             ));
           } else if (trackType === 'bass') {

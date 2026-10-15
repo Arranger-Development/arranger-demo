@@ -4,12 +4,12 @@ import { JAM_VOLUME_STEPS, JAM_FILTER_STEPS, JAM_TRACK_CC, JAM_PITCH_STEPS, JAM_
 const TRACK_COLORS = { drums: [19, 18, 17], chord: [11, 10, 9], bass: [43, 42, 41], melody: [51, 50, 49] };
 export function createLaunchpadXPerformanceLedFrame(surface = {}, now = 0) {
   const { templates = {}, sections = [], drafts = {}, editingId, page = 0, status = {}, beatPhase = 0,
-    selectedTrack = 'drums', selectedTracks = [selectedTrack], effectPage = 'mix', pitches = {}, reverbs = {}, choppers = {}, brakes = {}, arp = {}, recording = {}, volumes = {}, cutoffs = {}, repeat = null, savedAt = -Infinity, storageError = false } = surface;
+    selectedTrack = 'drums', selectedTracks = [selectedTrack], effectPage = 'mix', pitches = {}, reverbs = {}, choppers = {}, brakes = {}, arp = {}, recording = {}, volumes = {}, cutoffs = {}, repeat = null, savedAt = -Infinity, storageError = false, version, selection = {}, pageCount = 1, canSave = false } = surface;
   const notes = new Map(), controls = new Map();
   const active = status.mode && status.mode !== 'stopped';
   PERFORMANCE_TRACKS.forEach((track, row) => {
     templates[track]?.slice(0, 8).forEach((phrase, index) => {
-      if (phrase) notes.set((8 - row) * 10 + index + 1, TRACK_COLORS[track][drafts[editingId]?.selection[track] === phrase.id ? 2 : 0]);
+      if (phrase) notes.set((8 - row) * 10 + index + 1, TRACK_COLORS[track][(version === 5 ? selection[track] : drafts[editingId]?.selection[track]) === phrase.id ? 2 : 0]);
     });
     controls.set(JAM_TRACK_CC[row], TRACK_COLORS[track][selectedTracks.includes(track) ? 2 : 0]);
   });
@@ -32,7 +32,7 @@ export function createLaunchpadXPerformanceLedFrame(surface = {}, now = 0) {
     }
   }
   [49,39,29].forEach((cc,i)=>controls.set(cc,['mix','expression','arp'][i]===effectPage?3:1));
-  controls.set(19,recording.phase==='recording'?5:recording.phase==='armed'?(Math.floor(now/300)%2?5:0):7);
+  controls.set(19,version === 5 ? 0 : recording.phase==='recording'?5:recording.phase==='armed'?(Math.floor(now/300)%2?5:0):7);
   [4,8,16,32].forEach((division,index)=>notes.set(24+index,active&&!status.loading&&hasTargets?(choppers[selectedTrack]===division?3:37):0));
   notes.set(28,active&&!status.loading&&hasTargets?(brakes[selectedTrack]?3:5):0);
   [4, 8, 16].forEach((division, index) => notes.set(21 + index, active && !status.loading && hasTargets ? color[repeat === division ? 2 : 0] : 0));
@@ -42,9 +42,9 @@ export function createLaunchpadXPerformanceLedFrame(surface = {}, now = 0) {
       : status.loading && section.id === status.requestedId ? (Math.floor(now / 300) % 2 ? 15 : 0)
       : section.id === editingId ? 15 : 13));
   controls.set(93, page > 0 ? 13 : 0);
-  controls.set(94, (page + 1) * 8 < sections.length ? 13 : 0);
-  controls.set(97, storageError ? 5 : now - savedAt < 700 ? 17 : hasSelection(drafts[editingId]?.selection) ? 9 : 0);
-  controls.set(98, status.loading ? (Math.floor(now / 300) % 2 ? 7 : 5) : active ? 5 : sections.length ? 17 : 0);
+  controls.set(94, (version === 5 ? page + 1 < pageCount : (page + 1) * 8 < sections.length) ? 13 : 0);
+  controls.set(97, storageError ? 5 : now - savedAt < 700 ? 17 : (version === 5 ? canSave : hasSelection(drafts[editingId]?.selection)) ? 9 : 0);
+  controls.set(98, status.loading ? (Math.floor(now / 300) % 2 ? 7 : 5) : active ? 5 : (version === 5 ? hasSelection(selection) || canSave : sections.length) ? 17 : 0);
   const frame = [];
   for (let row = 8; row >= 1; row--) for (let col = 1; col <= 8; col++) frame.push([0x90, row * 10 + col, notes.get(row * 10 + col) ?? 0]);
   for (const cc of [91,92,93,94,95,96,97,98,89,79,69,59,49,39,29,19]) frame.push([0xb0, cc, controls.get(cc) ?? 0]);

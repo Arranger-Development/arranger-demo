@@ -1,3 +1,5 @@
+import UserTemplatePicker from './UserTemplatePicker.jsx';
+void UserTemplatePicker;
 import {
   createElement,
   useCallback,
@@ -731,6 +733,7 @@ function ChordEditor({
         </div>
 
         <div className="tools chord-rhythm-tools">
+          {createElement(UserTemplatePicker, { trackId: 'chord', disabled: tutorialLocked })}
           <button
             className={[
               'chord-template-workspace-trigger',

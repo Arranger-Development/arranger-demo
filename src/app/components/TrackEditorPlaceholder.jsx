@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { ClipNameInput } from './ClipNameInput.jsx';
 import { TRACK_ICONS, renderIcon } from './icons.js';
 import { TrackBarPager } from './TrackBarPager.jsx';
+import UserTemplatePicker from './UserTemplatePicker.jsx';
 
 function TrackEditorPlaceholder({
   activeTrackId,
@@ -13,6 +14,7 @@ function TrackEditorPlaceholder({
   onNextBar = () => {},
   onPreviousBar = () => {},
   onRenameClip,
+  tutorialLocked = false,
 }) {
   return (
     <section className="editor" data-screen-label="Track Editor">
@@ -26,6 +28,7 @@ function TrackEditorPlaceholder({
             {createElement(ClipNameInput, { clipName, onRenameClip })}
           </div>
         </div>
+        {['drums','chord','bass','melody'].includes(activeTrackType) && createElement(UserTemplatePicker, { trackId:activeTrackType, disabled:tutorialLocked })}
       </header>
       {createElement(TrackBarPager, {
         canPageBars,
