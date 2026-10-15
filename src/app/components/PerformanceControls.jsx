@@ -36,7 +36,7 @@ function RepeatPads({ controller, track, bpm, enabled, value }) {
   </div>;
 }
 
-function FilterKnob({ track, value, onChange }) {
+function FilterKnob({ track, value, onChange, disabled = false }) {
   const drag = useRef(null);
   const update = (next) => onChange(Math.max(100, Math.min(20000, Math.round(next / 100) * 100)));
   const end = () => { drag.current = null; };
@@ -44,19 +44,20 @@ function FilterKnob({ track, value, onChange }) {
     window.addEventListener('blur', end);
     return () => window.removeEventListener('blur', end);
   }, []);
-  return <div className="dj-knob" role="slider" tabIndex={0} aria-label={`${LABELS[track]}滤波器`}
+  return <div className="dj-knob" role="slider" tabIndex={disabled ? -1 : 0} aria-label={`${LABELS[track]}滤波器`} aria-disabled={disabled}
     aria-valuemin={100} aria-valuemax={20000} aria-valuenow={value} aria-valuetext={value === 20000 ? '关闭' : `${value} Hz`}
     aria-orientation="vertical" style={{ '--dj-angle': `${-135 + ((value - 100) / 19900) * 270}deg` }}
     onPointerDown={(e) => {
-      if (e.button !== 0 || drag.current) return;
+      if (disabled || e.button !== 0 || drag.current) return;
       e.preventDefault(); e.currentTarget.focus(); e.currentTarget.setPointerCapture(e.pointerId);
       drag.current = { id: e.pointerId, y: e.clientY, value };
     }}
     onPointerMove={(e) => {
       const start = drag.current;
-      if (start?.id === e.pointerId) update(start.value + (start.y - e.clientY) * (19900 / 150));
+      if (!disabled && start?.id === e.pointerId) update(start.value + (start.y - e.clientY) * (19900 / 150));
     }} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onBlur={end}
     onKeyDown={(e) => {
+      if (disabled) return;
       const steps = { ArrowUp: 100, ArrowRight: 100, ArrowDown: -100, ArrowLeft: -100, PageUp: 1000, PageDown: -1000 };
       if (e.key in steps) { e.preventDefault(); update(value + steps[e.key]); }
       else if (['Home', 'End', ' ', 'Enter'].includes(e.key)) {
@@ -84,7 +85,7 @@ export function Progress({ playback, id, bars, running }) {
   return <span className="pw-progress" aria-hidden="true"><span ref={ref} /></span>;
 }
 
-export function TrackControls({ track, session, changeMix, effects, cutoff, repeatEnabled = false, beginMixEdit, commitMixEdit, repeatValue, hideRepeat = false, onCutoffChange }) {
+export function TrackControls({ track, session, changeMix, effects, cutoff, repeatEnabled = false, beginMixEdit, commitMixEdit, repeatValue, hideRepeat = false, onCutoffChange, disabled = false }) {
   const volume = session.volumes[track];
   return <div className="dj-controls" data-track={track}>
     <div className="dj-mixer-row">
@@ -93,7 +94,7 @@ export function TrackControls({ track, session, changeMix, effects, cutoff, repe
         <output>{session.mutedTracks[track] || volume === -24 ? '静音' : `${volume} dB`}</output>
         <div className="dj-fader-well">
           <span className="dj-fader-scale" aria-hidden="true"><span>+6</span><span>0</span><span>−24</span></span>
-          <input className="dj-fader" aria-label={`${LABELS[track]}音量`} type="range" min="-24" max="6" step="1" value={volume}
+          <input className="dj-fader" aria-label={`${LABELS[track]}音量`} type="range" min="-24" max="6" step="1" value={volume} disabled={disabled}
             onPointerDown={beginMixEdit} onPointerUp={commitMixEdit} onPointerCancel={commitMixEdit}
             onKeyDown={beginMixEdit} onKeyUp={commitMixEdit} onBlur={commitMixEdit}
             onChange={(e) => changeMix(track, Number(e.target.value))} />
@@ -102,11 +103,11 @@ export function TrackControls({ track, session, changeMix, effects, cutoff, repe
       <div className="dj-channel-control">
         <span className="dj-control-label">滤波器</span>
         <output>{cutoff === 20000 ? '关闭' : cutoff >= 1000 ? `${(cutoff / 1000).toFixed(1)} kHz` : `${cutoff} Hz`}</output>
-        <FilterKnob track={track} value={cutoff} onChange={onCutoffChange ?? ((value) => effects.cutoff(track, value))} />
+        <FilterKnob track={track} value={cutoff} disabled={disabled} onChange={onCutoffChange ?? ((value) => effects.cutoff(track, value))} />
         <span className="dj-knob-ends" aria-hidden="true">低<span>关闭</span></span>
       </div>
     </div>
     {!hideRepeat && <><div className="dj-repeat-label">重复</div>
-    <RepeatPads controller={effects.repeat} track={track} bpm={session.bpm} enabled={repeatEnabled} value={repeatValue} /></>}
+    <RepeatPads controller={effects.repeat} track={track} bpm={session.bpm} enabled={repeatEnabled && !disabled} value={repeatValue} /></>}
   </div>;
 }

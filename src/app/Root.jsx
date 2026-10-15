@@ -4,6 +4,7 @@ import {
   useState,
 } from 'react';
 import App from './App.jsx';
+import { createWorkspaceEntryState } from './workspaceEntry.js';
 import {
   ARRANGER_GENRE_IDS,
   CURRENT_GENRE_ID,
@@ -14,7 +15,6 @@ import { EntryHome } from './components/EntryHome.jsx';
 import { MultimodalFlowScreen } from './components/MultimodalFlowScreen.jsx';
 import {
   createInitialRecommendationSelections,
-  createMultimodalRecommendationAppState,
   toggleRecommendationTrackSelection,
 } from './multimodalRecommendation.js';
 import { validateMultimodalInput } from './multimodalInput.js';
@@ -96,7 +96,9 @@ function Root() {
   const handleApplyRecommendation = (destination = 'creation') => {
     setInitialWorkspaceView(destination);
     setPerformanceProfileId(AI_PERFORMANCE_PROFILE_ID);
-    useMusicStore.setState(createMultimodalRecommendationAppState({ bpm, selections }));
+    useMusicStore.setState(createWorkspaceEntryState(useMusicStore.getInitialState(), {
+      destination, recommendation: { bpm, selections },
+    }), true);
     getJamTemplateProjects(MULTIMODAL_DRUM_TEMPLATE_GENRE_ID, AI_PERFORMANCE_PROFILE_ID, bpm).patch({ bpm });
     setGenreId(MULTIMODAL_DRUM_TEMPLATE_GENRE_ID);
     setView(ROOT_VIEWS.ARRANGER);
@@ -135,6 +137,7 @@ function Root() {
       handleGenreEnter(MULTIMODAL_GENRE_ID);
       return;
     }
+    useMusicStore.setState(createWorkspaceEntryState(useMusicStore.getInitialState(), { destination }), true);
     if (destination === 'jam') {
       setInitialWorkspaceView('jam');
       setPerformanceProfileId(AI_PERFORMANCE_PROFILE_ID);

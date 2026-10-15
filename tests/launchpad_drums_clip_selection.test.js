@@ -5,6 +5,7 @@ import useMusicStore from '../src/store/useMusicStore.js';
 
 beforeEach(() => {
   useMusicStore.setState(useMusicStore.getInitialState(), true);
+  useMusicStore.getState().createClip('drums', 0);
   useMusicStore.getState().selectClip('drums-bar-0');
 });
 

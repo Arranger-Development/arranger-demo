@@ -1,3 +1,4 @@
+import { getJamPadBinding } from './jamPadLayout.js';
 import { PERFORMANCE_TRACKS } from '../app/performanceModel.js';
 import { parseLaunchpadXMessage } from './launchpadXProtocol.js';
 
@@ -59,11 +60,20 @@ export function createPerformanceMidiInput() {
           const additive = [...held.values()].some(c => c?.type === 'selectTrack');
           command = { type: 'selectTrack', trackId: PERFORMANCE_TRACKS[JAM_TRACK_CC.indexOf(number)], additive };
         }
-        if ([49,39,29].includes(number)) command = { type: 'effectPage', page: JAM_EFFECT_PAGES[[49,39,29].indexOf(number)] };
+        if (surface.version !== 5 && [49,39,29].includes(number)) command = { type: 'effectPage', page: JAM_EFFECT_PAGES[[49,39,29].indexOf(number)] };
         if (number === 19 && surface.version !== 5) command = { type: 'recordEffects' };
         if (number === 93 || number === 94) command = { type: 'page', delta: number === 93 ? -1 : 1 };
         if (number === 97) command = { type: 'save' };
         if (number === 98) command = { type: 'togglePlayback' };
+      } else if (surface.version === 5) {
+        const pad = getJamPadBinding(number);
+        if (pad?.trackId) command = templateCommand(templates, pad.trackId, pad.index);
+        else if (pad && ['reverb', 'cutoff', 'volume'].includes(pad.type)) {
+          const steps = { reverb: JAM_REVERB_STEPS, cutoff: JAM_FILTER_STEPS, volume: JAM_VOLUME_STEPS };
+          command = { type: pad.type, value: steps[pad.type][pad.index] };
+        } else if (pad) {
+          command = { type: pad.type, token, pressed: true, ...(pad.type === 'repeat' ? { division: pad.division } : { value: pad.value }) };
+        }
       } else {
         const row = 8 - Math.floor(number / 10), column = number % 10 - 1;
         if (row >= 0 && row < 4 && column >= 0 && column < 8) command = templateCommand(templates, PERFORMANCE_TRACKS[row], column);

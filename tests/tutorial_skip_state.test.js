@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createTutorialSkipAppState } from '../src/app/tutorialSkipState.js';
+import { createLegacyTutorialEntryState } from '../src/app/workspaceEntry.js';
 import useMusicStore from '../src/store/useMusicStore.js';
 
 test('tutorial skip enters an empty arrangement without the seeded drums clip', () => {
-  const initialState = useMusicStore.getInitialState();
+  const initialState = createLegacyTutorialEntryState(useMusicStore.getInitialState());
   const skippedState = createTutorialSkipAppState(initialState);
 
   assert.deepEqual(initialState.clips.ids, ['drums-bar-0']);

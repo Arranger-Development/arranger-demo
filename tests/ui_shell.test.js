@@ -137,7 +137,7 @@ test('skeuomorphic workbench structure exposes hardware shell affordances', asyn
   assert.match(topBarSource, /<button\s+className="btn-new"\s+aria-label="New song"\s+title="New song"\s+type="button"\s+onClick=\{onNewSong\}>/);
   assert.doesNotMatch(topBarSource, /renderIcon\(Plus\)/);
   assert.doesNotMatch(topBarSource, />\s*New Song\s*</);
-  assert.match(appSource, /const handleNewSong = useCallback\(\(\) => \{[\s\S]*const initialAppState = useMusicStore\.getInitialState\(\);[\s\S]*useMusicStore\.setState\(initialAppState, true\);/);
+  assert.match(appSource, /const handleNewSong = useCallback\(\(\) => \{[\s\S]*const initialAppState = createWorkspaceEntryState\(useMusicStore\.getInitialState\(\)\);[\s\S]*useMusicStore\.setState\(initialAppState, true\);/);
   assert.match(appSource, /onNewSong:\s*requestNewSong/);
   assert.match(topBarSource, /className="hardware-status-display"/);
   assert.match(topBarSource, /className="key-switch tutorial-switch"/);
@@ -253,7 +253,7 @@ test('app shell renders the v0.22 arranger tracks and eight-bar timeline', async
   assert.match(source, /onPointerDown=\{handleEditorResizePointerDown\}/);
   assert.match(source, /onKeyDown=\{handleEditorResizeKeyDown\}/);
   assert.match(source, /className="editor-resizer-grip"/);
-  assert.match(source, /<\/main>[\s\S]*className="editor-resizer"[\s\S]*createElement\(BottomEditor/);
+  assert.match(source, /<\/main>[\s\S]*className="editor-resizer"[\s\S]*(?:createElement\(BottomEditor|<BottomEditor)/);
   assert.match(editorResizeSource, /case 'ArrowUp':/);
   assert.match(editorResizeSource, /case 'ArrowDown':/);
   assert.match(editorResizeSource, /case 'Home':/);
@@ -680,12 +680,12 @@ test('timeline add clip controls switch the persistent editor by track row', asy
   assert.match(drumSequencerSource, /选择律动模板/);
   assert.match(drumSequencerSource, /drum-template-picker/);
   assert.match(drumSequencerSource, /drum-template-card/);
-  assert.match(drumSequencerSource, /DRUM_TEMPLATE_HIT_LABELS/);
-  assert.match(drumSequencerSource, /getDrumTemplateHitLabel\(\s*template,\s*row\.id,\s*stepIndex,?\s*\)/);
-  assert.match(drumSequencerSource, /drum-template-beat-markers/);
-  assert.match(drumSequencerSource, /drum-template-hit-label/);
-  assert.match(drumSequencerSource, /data-hit-label=\{hitLabel \?\? undefined\}/);
-  assert.doesNotMatch(drumSequencerSource, /drum-template-(?:legend|row-icon)/);
+  const drumTemplateRhythmSource = await readFile(new URL('../src/app/components/DrumTemplateRhythm.jsx', import.meta.url), 'utf8');
+  assert.match(drumSequencerSource, /<DrumTemplateRhythm hits=\{getDrumTemplatePreviewHits\(template\)\}/);
+  assert.match(drumTemplateRhythmSource, /drum-template-beat-markers/);
+  assert.match(drumTemplateRhythmSource, /drum-template-hit-label/);
+  assert.match(drumTemplateRhythmSource, /data-hit-label=\{hitLabel \?\? undefined\}/);
+  assert.doesNotMatch(drumTemplateRhythmSource, /drum-template-(?:legend|row-icon)/);
   assert.match(drumSequencerSource, /getDrumTemplatesForGenre\(genreId\)/);
   assert.match(drumSequencerSource, /drumTemplates\.map\(\(template\) =>/);
   assert.match(drumSequencerSource, /handleTemplatePreview\(template\.id\)/);
@@ -813,7 +813,7 @@ test('bass and melody share the reusable PianoRoll component', async () => {
     );
 
     assert.match(source, /import \{ PianoRoll \} from '\.\/PianoRoll\.jsx';/);
-    assert.match(source, /createElement\(PianoRoll,/);
+    assert.match(source, /(?:createElement\(PianoRoll,|<PianoRoll\b)/);
     assert.doesNotMatch(source, /notes\.flatMap|className="scale-notes-viewport"|pitch-step-cell/);
     assert.doesNotMatch(source, /MoreHorizontal|aria-label="More"/);
   }
@@ -947,7 +947,7 @@ test('app exposes the melody editor and keeps melody as the internal track id', 
   assert.doesNotMatch(melodyEditorSource, /const \[melodyRailOctave,\s*setMelodyRailOctave\]/);
   assert.doesNotMatch(melodyEditorSource, /clampMelodyRailOctave/);
   assert.doesNotMatch(melodyEditorSource, /DEFAULT_MELODY_RAIL_OCTAVE/);
-  assert.match(melodyEditorSource, /createElement\(PianoRoll,\s*\{/);
+  assert.match(melodyEditorSource, /(?:createElement\(PianoRoll,\s*\{|<PianoRoll\s+\{\.\.\.\{)/);
   assert.match(melodyEditorSource, /activeNoteIds:\s*activePlayedNotes/);
   assert.match(melodyEditorSource, /autoRevealActiveNote:\s*true/);
   assert.doesNotMatch(melodyEditorSource, /flushSync|setPlayingKeys/);
@@ -1091,7 +1091,7 @@ test('app exposes the bass editor and existing-clip groove template workflow', a
   assert.match(bassEditorSource, /getTutorialControlRole/);
   assert.match(bassEditorSource, /Bass · Phrase/);
   assert.match(bassEditorSource, /BASS EDITOR - BAR/);
-  assert.match(bassEditorSource, /createElement\(PianoRoll,\s*\{/);
+  assert.match(bassEditorSource, /(?:createElement\(PianoRoll,\s*\{|<PianoRoll\s+\{\.\.\.\{)/);
   assert.match(bassEditorSource, /initialTopNote:\s*'D1'/);
   assert.match(bassEditorSource, /notes:\s*BASS_NOTES/);
   assert.match(bassEditorSource, /onCellToggle:\s*onBassStepToggle/);

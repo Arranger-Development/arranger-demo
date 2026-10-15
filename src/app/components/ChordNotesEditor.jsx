@@ -8,7 +8,7 @@ import { PianoRoll } from './PianoRoll.jsx';
 import { TrackBarPager } from './TrackBarPager.jsx';
 import { renderIcon } from './icons.js';
 import './ChordNotesEditor.css';
-import UserTemplatePicker from './UserTemplatePicker.jsx';
+import { UserTemplateMenu } from './UserTemplatePicker.jsx';
 
 export function ChordNotesEditor({
   matrix, selectedBar, clipName, trackName, onNoteToggle, onNotePreview,
@@ -27,7 +27,7 @@ export function ChordNotesEditor({
           </div>
         </div>
         <div className="tools">
-          {createElement(UserTemplatePicker, { trackId:'chord', disabled })}
+          {createElement(UserTemplateMenu, { trackId:'chord', disabled })}
           <button className="btn-template drum-clear-action" disabled={disabled} onClick={onClearBar}>清空本小节</button>
           <button className="btn-template drum-clear-action" disabled={disabled} onClick={onClearTrack}>清空整轨</button>
           <button className="editor-close" aria-label="Close editor" onClick={onClose}>{renderIcon(X)}</button>

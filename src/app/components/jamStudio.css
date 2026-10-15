@@ -132,7 +132,7 @@
   .jam-studio .studio-main { gap:10px; }
   .jam-studio .studio-gallery { gap:10px 32px; }
   .jam-studio .studio-instrument-art { width:min(128px,25cqh); height:min(128px,25cqh); }
-  .jam-studio .studio-editor { gap:4px; }
+  .jam-studio .studio-editor { gap:3px; }
   .jam-studio .studio-heading { min-height:28px; }
   .jam-studio[data-editing=true] .studio-instrument-art { width:46px; height:46px; }
   .jam-studio[data-editing=true] .studio-gallery { padding-bottom:8px; }
@@ -199,3 +199,49 @@
 }
 @media(hover:none) { .jam-studio .studio-template .studio-template-tools { visibility:visible; } }
 @media(prefers-reduced-motion:reduce) { .jam-studio .studio-editor { animation:none; } }
+
+/* Fixed instrument positions: only the editing state changes within this row. */
+.jam-studio .studio-instrument[data-track=drums] { --studio-track-tone:var(--c-drums,var(--tj-accent)); }
+.jam-studio .studio-instrument[data-track=chord] { --studio-track-tone:var(--c-chord,var(--tj-accent)); }
+.jam-studio .studio-instrument[data-track=bass] { --studio-track-tone:var(--c-bass,var(--tj-accent)); }
+.jam-studio .studio-instrument[data-track=melody] { --studio-track-tone:var(--c-melody,var(--tj-accent)); }
+.jam-studio[data-editing=true] .studio-heading { flex-shrink:0; }
+.jam-studio[data-editing=true] .studio-main { gap:8px; }
+.jam-studio[data-editing=true] .studio-instrument-top { height:56px; flex-shrink:0; padding:4px 20px 4px 6px; border-radius:4px; }
+.jam-studio[data-editing=true] .studio-instrument[data-active=true] .studio-instrument-top {
+  background:color-mix(in srgb,var(--studio-track-tone) 9%,transparent);
+  box-shadow:inset 0 -2px var(--studio-track-tone);
+}
+.jam-studio[data-editing=true] .studio-instrument[data-active=true] .studio-instrument-label strong { text-decoration-color:var(--studio-track-tone); }
+.jam-studio .studio-editing-state { font-size:9px; line-height:12px; color:var(--ink); }
+.jam-studio .studio-editing-state:empty { display:none; }
+:root[data-theme=swiss] .jam-studio[data-editing=true] .studio-instrument-top { border-radius:0; }
+
+/* All seven effects share one deck; only this aside scrolls when space is tight. */
+.jam-studio .studio-effects { overflow-x:hidden; overscroll-behavior:contain; }
+.jam-studio .studio-effects h2 { margin:4px 0 8px; }
+.jam-studio .studio-effects .effect-targets { margin:6px 0; }
+.jam-studio .studio-effects .jam-effect-hint { margin:4px 0 8px; }
+.jam-studio .studio-effects .dj-mixer-row { padding:2px 0; }
+.jam-studio .studio-effects .dj-fader-well { height:68px; }
+.jam-studio .studio-effects input.dj-fader { height:58px; }
+.jam-studio .jam-effect-group-title { margin:0 0 4px; font-size:10px; line-height:14px; color:var(--tj-muted); font-weight:600; }
+.jam-studio .jam-effect-slider { display:grid; grid-template-columns:1fr auto; align-items:center; gap:5px; font-size:11px; line-height:15px; margin-top:8px; }
+.jam-studio .jam-effect-slider output { grid-column:2; font-size:10px; font-variant-numeric:tabular-nums; }
+.jam-studio .jam-effect-slider input { grid-column:1 / -1; margin:0; }
+.jam-studio .jam-pitch-hint { display:block; margin-top:4px; font-size:9px; color:var(--tj-muted); }
+.jam-studio .jam-effect-status { margin:6px 0; font-size:10px; color:var(--tj-muted); }
+.jam-studio .jam-performance-group { margin-top:6px; padding-top:6px; border-top:1px solid var(--studio-line); }
+.jam-studio .jam-performance-group .jam-effect-slider { margin-top:4px; }
+.jam-studio .jam-performance-group .jam-fixed-effects { border:0; padding-top:0; margin-top:6px; gap:4px; }
+.jam-studio .studio-effects .jam-brake-pad { margin-top:6px; }
+.jam-studio .jam-deck .dj-knob[aria-disabled=true],.jam-studio .jam-effect-slider input:disabled { opacity:.4; cursor:default; }
+@media(max-height:680px) {
+  .jam-studio .jam-effect-group-title { margin-bottom:4px; }
+  .jam-studio .jam-performance-group { margin-top:8px; padding-top:8px; }
+  .jam-studio .jam-effect-slider { margin-top:6px; gap:3px; }
+}
+@media(max-width:839px) {
+  .jam-studio[data-editing=true] .studio-instrument-top { height:44px; }
+  .jam-studio .studio-editor { gap:6px; }
+}

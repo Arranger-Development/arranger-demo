@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DIAL_DRUM_PRESETS, getDialDrumPreset } from '../src/data/dialDrumPresets.js';
 import { createMatrixPlaybackAdapter } from '../src/audio/matrixPlaybackAdapter.js';
 import { toggleDrumsCellInstrument } from '../src/domain/drumsCells.js';
-import { createJamTemplateProjects, getJamTemplateProjects, jamTemplateProjectsKey, jamCombinationSnapshot, applyUserTemplate } from '../src/app/jamTemplateProjects.js';
+import { createJamTemplateProjects, getJamTemplateProjects, jamTemplateProjectsKey, jamCombinationSnapshot, applyUserTemplate, sortUserTemplatesForCreation } from '../src/app/jamTemplateProjects.js';
 import { createSession, createSessionEditor, TIMBRE_OPTIONS } from '../src/app/performanceSession.js';
 import { createJamProjects } from '../src/app/jamProjects.js';
 import createInitialMatrix from '../src/store/createInitialMatrix.js';
@@ -102,14 +102,14 @@ test('unreadable new storage is never silently overwritten; failed saves retain 
   store.patch({draft:draft()}); assert.equal(store.save(),false);
   assert.equal(storage.getItem(key),'broken'); assert.ok(store.current().workspace.draft);
 });
-test('new Jam pads trigger saved templates and keep legacy loop/record slots dark', () => {
+test('new Jam pads trigger saved templates and replace legacy loop/record controls', () => {
   const templates={drums:[{id:'saved-drum'}]}, surface={version:5,templates,selection:{drums:'saved-drum'},page:0,pageCount:2,status:{mode:'jam'}};
   const input=createPerformanceMidiInput();
   assert.deepEqual(input.handle([0x90,81,127],templates,surface),{type:'template',trackId:'drums',templateId:'saved-drum'});
-  assert.equal(input.handle([0x90,11,127],templates,surface),null);
+  assert.equal(input.handle([0x90,11,127],templates,surface).type,'repeat');
   assert.equal(input.handle([0xb0,19,127],templates,surface),null);
   const frame=createLaunchpadXPerformanceLedFrame(surface);
-  assert.equal(frame.find(m=>m[0]===0x90&&m[1]===11)[2],0);
+  assert.notEqual(frame.find(m=>m[0]===0x90&&m[1]===11)[2],0);
   assert.equal(frame.find(m=>m[0]===0xb0&&m[1]===19)[2],0);
   assert.notEqual(frame.find(m=>m[0]===0xb0&&m[1]===94)[2],0);
 });
@@ -211,4 +211,49 @@ test('a legacy single editor draft is adopted by its track without discarding it
   store.patch({draft:draft()});
   const restored=createJamTemplateProjects(storage,'pop',null,100);
   assert.deepEqual(restored.current().workspace.draftsByTrack.drums.bars,draft().bars);
+});
+
+
+test('creation template order is a projection: newest saves first, legacy and invalid stamps fall back to reverse insertion', () => {
+  const templates = Object.freeze([
+    Object.freeze({id:'old-a'}), Object.freeze({id:'old-b'}),
+    Object.freeze({id:'invalid',savedAt:'100'}), Object.freeze({id:'saved-a',savedAt:1}),
+    Object.freeze({id:'saved-b',savedAt:2}),
+  ]);
+  assert.deepEqual(sortUserTemplatesForCreation(templates).map(p=>p.id),['saved-b','saved-a','invalid','old-b','old-a']);
+  assert.deepEqual(templates.map(p=>p.id),['old-a','old-b','invalid','saved-a','saved-b']);
+});
+
+test('all four creation libraries persist recent saves without changing Jam slot positions; rename does not reorder', () => {
+  const storage=memory(),store=createJamTemplateProjects(storage,'pop',null,100);
+  for(const track of ['drums','chord','bass','melody']) {
+    const d={...draft(),trackId:track};
+    const first=store.saveTemplate(d,'First'),second=store.saveTemplate(d,'Second');
+    assert.deepEqual(sortUserTemplatesForCreation(store.current().workspace.templates[track]).map(p=>p.id),[second.id,first.id]);
+    store.saveTemplate(d,'Updated',first.id);
+    const raw=store.current().workspace.templates[track];
+    assert.deepEqual(raw.map(p=>p.id),[first.id,second.id],'Jam bindings retain their indices');
+    assert.deepEqual(sortUserTemplatesForCreation(raw).map(p=>p.id),[first.id,second.id]);
+    const stamp=raw[1].savedAt;
+    store.renameTemplate(track,second.id,'Renamed');
+    const restored=createJamTemplateProjects(storage,'pop',null,100).current().workspace.templates[track];
+    assert.equal(restored[1].savedAt,stamp);
+    assert.deepEqual(sortUserTemplatesForCreation(restored).map(p=>p.id),[first.id,second.id]);
+  }
+});
+
+test('old v2 libraries gain save ordering lazily and failed saves never move a template or advance its stamp', () => {
+  const storage=memory(),store=createJamTemplateProjects(storage,'pop',null,100);
+  const first=store.saveTemplate(draft(),'One'),second=store.saveTemplate(draft(),'Two');
+  const raw=JSON.parse(storage.getItem(jamTemplateProjectsKey('pop',null)));
+  for(const template of raw.projects[0].workspace.templates.drums) delete template.savedAt;
+  storage.setItem(jamTemplateProjectsKey('pop',null),JSON.stringify(raw));
+  const old=createJamTemplateProjects(storage,'pop',null,100);
+  assert.deepEqual(sortUserTemplatesForCreation(old.current().workspace.templates.drums).map(p=>p.id),[second.id,first.id]);
+  old.saveTemplate(draft(),'One saved',first.id);
+  assert.deepEqual(sortUserTemplatesForCreation(old.current().workspace.templates.drums).map(p=>p.id),[first.id,second.id]);
+  const before=structuredClone(old.current().workspace.templates.drums);
+  storage.setItem=()=>{throw new Error('quota');};
+  assert.equal(old.saveTemplate(draft(),'Two fails',second.id),null);
+  assert.deepEqual(old.current().workspace.templates.drums,before);
 });

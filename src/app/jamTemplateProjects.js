@@ -10,6 +10,13 @@ const copy = value => structuredClone(value);
 const uid = () => globalThis.crypto.randomUUID();
 const byTrack = make => Object.fromEntries(TRACKS.map(t => [t, make(t)]));
 export const jamTemplateProjectsKey = (genre, profile) => `arranger-jam-projects:v2:${profile ?? genre}`;
+// Creation-mode presentation only: array positions remain the Jam pad bindings.
+export function sortUserTemplatesForCreation(templates) {
+  const savedAt = template => Number.isSafeInteger(template.savedAt) && template.savedAt > 0 ? template.savedAt : 0;
+  return templates.map((template, index) => ({ template, index }))
+    .sort((a, b) => savedAt(b.template) - savedAt(a.template) || b.index - a.index)
+    .map(({ template }) => template);
+}
 export function validTemplate(template) {
   return TRACKS.includes(template?.trackId) && typeof template.id === 'string'
     && Array.isArray(template.bars) && template.bars.length > 0 && template.bars.length <= MAX_PROJECT_BARS
@@ -99,7 +106,10 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
       const names = new Set(current().workspace.templates[t].map(p => p.name));
       let number = 1;
       while (names.has(`${label}${number}`)) number++;
-      const template = { ...copy(draft), timbreId:current().workspace.timbres?.[t] ?? draft.timbreId, id: id ?? uid(), name: name.trim() || `${label}${number}`, barCount: draft.bars.length };
+      const savedAt = current().workspace.templates[t].reduce((latest, p) => (
+        Number.isSafeInteger(p.savedAt) && p.savedAt > 0 ? Math.max(latest, p.savedAt) : latest
+      ), 0) + 1;
+      const template = { ...copy(draft), timbreId:current().workspace.timbres?.[t] ?? draft.timbreId, id: id ?? uid(), name: name.trim() || `${label}${number}`, barCount: draft.bars.length, savedAt };
       if (!validTemplate(template)) return null;
       const before = current().workspace.templates;
       const templates = copy(before);

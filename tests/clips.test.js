@@ -5,19 +5,16 @@ import useMusicStore from '../src/store/useMusicStore.js';
 
 beforeEach(() => {
   useMusicStore.setState(useMusicStore.getInitialState(), true);
+  // Clip-operation cases explicitly start with one existing clip.
+  useMusicStore.getState().createClip('drums', 0);
+  useMusicStore.setState({ selectedClipId: null });
 });
 
-test('clips slice starts with drums only and does not preseed chord clips', () => {
+test('clips slice starts empty on every track', () => {
+  useMusicStore.setState(useMusicStore.getInitialState(), true);
   const state = useMusicStore.getState();
-
-  assert.deepEqual(state.clips.ids, ['drums-bar-0']);
-  assert.deepEqual(state.clips.byId['drums-bar-0'], {
-    id: 'drums-bar-0',
-    trackId: 'drums',
-    bar: 0,
-    name: 'Drum 01',
-  });
-  assert.equal(state.getClipForTrackBar('chord', 0), null);
+  assert.deepEqual(state.clips, { ids: [], byId: {} });
+  assert.equal(TRACK_IDS.every(track => state.getClipForTrackBar(track, 0) === null), true);
 });
 
 test('getClipForTrackBar returns a clip for one track and bar only', () => {

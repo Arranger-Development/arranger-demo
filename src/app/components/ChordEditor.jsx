@@ -370,6 +370,7 @@ function ChordEditor({
   const [confirmApplyOpen, setConfirmApplyOpen] = useState(false);
   const [harmonyPanel, setHarmonyPanel] = useState(null);
   const [harmonyPreviewOptionKey, setHarmonyPreviewOptionKey] = useState(null);
+  const userTemplatePreviewRef = useRef(null);
   const previewRunRef = useRef(0);
   const harmonyPreviewRunRef = useRef(0);
   const harmonyAnchorRefs = useRef(new Map());
@@ -512,6 +513,7 @@ function ChordEditor({
   };
 
   const handlePreview = async () => {
+    userTemplatePreviewRef.current?.stop();
     const previewId = legacyTemplateMode ? 'legacy' : 'style-selection';
     if (previewingTemplateId === previewId) {
       stopPreview();
@@ -733,7 +735,6 @@ function ChordEditor({
         </div>
 
         <div className="tools chord-rhythm-tools">
-          {createElement(UserTemplatePicker, { trackId: 'chord', disabled: tutorialLocked })}
           <button
             className={[
               'chord-template-workspace-trigger',
@@ -962,6 +963,7 @@ function ChordEditor({
             'chord-template-workspace-body',
             legacyTemplateMode ? '' : 'chord-style-selection-workspace-body',
           ].filter(Boolean).join(' ')}>
+            {workspaceOpen && <UserTemplatePicker trackId="chord" disabled={tutorialLocked} ref={userTemplatePreviewRef} onBeforePreview={stopPreview} onApplied={closeWorkspace} />}
             {legacyTemplateMode ? (
               <>
             <div className="chord-template-workspace-label progression">

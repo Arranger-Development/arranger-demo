@@ -87,6 +87,11 @@ function createProgressForStepIndex(stepIndex) {
 
 function createDirectoryAppState(initialState, stepIndex) {
   let clips = cloneValue(initialState.clips);
+  const firstDrum = createClipRecord('drums', 0);
+  if (!clips.byId[firstDrum.id]) {
+    clips.ids.push(firstDrum.id);
+    clips.byId[firstDrum.id] = firstDrum;
+  }
   let matrix = cloneValue(initialState.matrix);
 
   if (shouldPrepareAtLeast(stepIndex, TUTORIAL_STEP_IDS.CHORD_FILL_TRACK_CLIPS)) {

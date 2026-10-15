@@ -1,3 +1,4 @@
+import { createLegacyTutorialEntryState, createWorkspaceEntryState } from './workspaceEntry.js';
 import { JamTemplateContext } from './JamTemplateContext.js';
 import { getJamTemplateProjects, applyUserTemplate } from './jamTemplateProjects.js';
 import { getChordCellNotes, toggleChordNoteCell } from '../domain/chordCells.js';
@@ -96,6 +97,7 @@ import {
   getMelodyRhythmTemplate,
 } from './melodyRhythmTemplates.js';
 import { BottomEditor } from './components/BottomEditor.jsx';
+void BottomEditor;
 import { ExportDialog } from './components/ExportDialog.jsx';
 import { Timeline } from './components/Timeline.jsx';
 import { TopBar } from './components/TopBar.jsx';
@@ -691,7 +693,7 @@ export default function App({
     stopDrumsRecording({ stopTransport: false });
     stopMelodyRecording();
     withUndoCheckpoint(() => {
-      const initialAppState = useMusicStore.getInitialState();
+      const initialAppState = createWorkspaceEntryState(useMusicStore.getInitialState());
       const initialTutorialProgress = createTutorialState();
 
       clearTutorialAutoAdvanceTimer();
@@ -1883,6 +1885,11 @@ export default function App({
     void audioEngine.triggerBassNote(note, '16n', undefined, { trackId, timbreId: cell?.timbreId, playbackMode: cell?.playbackMode });
   }, []);
 
+  const handleBassGrooveTemplatePreviewStop = useCallback(() => {
+    handleStop();
+    audioEngine.stopAllVoices();
+  }, [handleStop]);
+
   const handleBassGrooveTemplatePreview = useCallback((templateId) => {
     const state = useMusicStore.getState();
     const scope = createTrackActionScope(state);
@@ -2592,7 +2599,7 @@ export default function App({
   ]);
 
   const resetLegacyTutorialSession = useCallback(() => {
-    const initialAppState = useMusicStore.getInitialState();
+    const initialAppState = createLegacyTutorialEntryState(useMusicStore.getInitialState());
     const initialTutorialProgress = createTutorialState();
     useMusicStore.setState(initialAppState, true);
     setCurrentTutorialStepIndex(0);
@@ -3340,11 +3347,12 @@ export default function App({
         >
           <span className="editor-resizer-grip" aria-hidden="true" />
         </div>
-        {createElement(BottomEditor, {
+        <BottomEditor {...{
           activeTrackId,
           activeTrackName,
           activeTrackType,
           activeTutorialTarget,
+          showLegacyDrumTemplates: tutorialModeActive && activeTutorialId === TUTORIAL_IDS.LEGACY_BASICS,
           tutorialLocked: activeTutorialLocked,
           tutorialTargets: activeTutorialTargets,
           isPlaying,
@@ -3373,6 +3381,7 @@ export default function App({
           onBassPreview: handleBassPreview,
           onBassStepToggle: handleBassStepToggle,
           onBassGrooveTemplatePreview: handleBassGrooveTemplatePreview,
+          onBassGrooveTemplatePreviewStop: handleBassGrooveTemplatePreviewStop,
           onBassGrooveTemplateApply: handleBassGrooveTemplateApply,
           onCloseEditor: handleCloseEditor,
           onClearBass: handleClearBass,
@@ -3409,7 +3418,7 @@ export default function App({
           onDrumsWriteToggle: handleDrumsWriteToggle,
           selectedBar,
           selectedClipId,
-        })}
+        }} />
         {chillTutorialActive ? (
           <ChillTutorialOverlay
             alreadyApplied={chillTutorialSession.completedStepIds?.includes(chillTutorialStep.id)}

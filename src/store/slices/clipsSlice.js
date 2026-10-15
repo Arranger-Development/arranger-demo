@@ -46,14 +46,7 @@ function isValidClipLocation(state, trackId, bar) {
 }
 
 function createInitialClips() {
-  const initialClips = [
-    createClipRecord('drums', 0),
-  ];
-
-  return {
-    ids: initialClips.map((clip) => clip.id),
-    byId: Object.fromEntries(initialClips.map((clip) => [clip.id, clip])),
-  };
+  return { ids: [], byId: {} };
 }
 
 function findClipForTrackBar(clips, trackId, bar) {

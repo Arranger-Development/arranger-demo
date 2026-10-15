@@ -1,44 +1,78 @@
-import TemplateDialog from './TemplateDialog.jsx';
-void TemplateDialog;
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useProjectTemplates } from '../JamTemplateContext.js';
 import { PERFORMANCE_LABELS } from '../performanceModel.js';
-import { jamCombinationSnapshot } from '../jamTemplateProjects.js';
+import { jamCombinationSnapshot, sortUserTemplatesForCreation } from '../jamTemplateProjects.js';
 import createAudioEngine from '../../audio/createAudioEngine.js';
 import { createSessionPlayback } from '../sessionPlayback.js';
 import './templateJam.css';
+import TemplateDialog from './TemplateDialog.jsx';
+import UserTemplateCard from './UserTemplateCard.jsx';
+void TemplateDialog;
+void UserTemplatePicker;
+void UserTemplateCard;
 
-export default function UserTemplatePicker({ trackId, disabled = false }) {
-  const { project, applyTemplate, hasTemplateDestinationContent, preparePreview } = useProjectTemplates();
-  const [open,setOpen] = useState(false), [pending,setPending] = useState(null), [error,setError] = useState(''), [previewId,setPreviewId] = useState(null);
+export const EMPTY_DRUM_TEMPLATES_MESSAGE = '还没有鼓模板，在 Jam 中创作并保存后会显示在这里。';
+
+// Empty clips and the literal-note Chord editor have no built-in template panel.
+// Keep their saved-phrase access behind the regular template entry as well.
+export function UserTemplateMenu({ trackId, disabled = false }) {
+  const { project } = useProjectTemplates();
+  const [open, setOpen] = useState(false);
+  if (trackId !== 'drums' && !project?.workspace.templates[trackId]?.length) return null;
+  const label = { drums: '选择律动模板', chord: '选择和弦模板', bass: '选择Bass弹奏律动模板', melody: '选择 Melody 风格模板' }[trackId];
+  return <>
+    <button className="btn-template-groove" type="button" disabled={disabled} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(true)}>{label}</button>
+    {open && <TemplateDialog className="creation-template-dialog" titleId={`saved-${trackId}-title`} onClose={() => setOpen(false)}>
+      <h2 id={`saved-${trackId}-title`}>{PERFORMANCE_LABELS[trackId]}模板</h2>
+      <UserTemplatePicker trackId={trackId} emptyMessage={trackId === 'drums' ? EMPTY_DRUM_TEMPLATES_MESSAGE : undefined} disabled={disabled} onApplied={() => setOpen(false)} />
+      <button type="button" onClick={() => setOpen(false)}>关闭</button>
+    </TemplateDialog>}
+  </>;
+}
+
+// Mounted inside the editor's existing template panel, never in a second dialog.
+export default function UserTemplatePicker(props) {
+  const context = useProjectTemplates();
+  if (!context.project?.workspace.templates[props.trackId]?.length) return props.emptyMessage ? <p className="user-template-empty">{props.emptyMessage}</p> : null;
+  return <UserTemplateSection key={context.project.id} {...props} context={context} />;
+}
+
+void UserTemplateSection;
+function UserTemplateSection({ trackId, disabled = false, context, ref, onBeforePreview, onApplied }) {
+  const { project, applyTemplate, hasTemplateDestinationContent, preparePreview } = context;
+  const [pending, setPending] = useState(null), [error, setError] = useState(''), [previewId, setPreviewId] = useState(null);
   const player = useRef(null);
-  const stop = () => { player.current?.stop(); setPreviewId(null); };
+  const stop = useCallback(() => { player.current?.stop(); setPreviewId(null); }, []);
+  useImperativeHandle(ref, () => ({ stop }), [stop]);
   useEffect(() => () => player.current?.stop(), []);
-  useEffect(() => {
-    const key = e => { if (e.key === 'Escape' && open) { e.preventDefault(); player.current?.stop(); setPreviewId(null); setPending(null); setOpen(false); } };
-    window.addEventListener('keydown',key); return () => window.removeEventListener('keydown',key);
-  }, [open]);
-  if (!project) return null;
+  const templates = sortUserTemplatesForCreation(project.workspace.templates[trackId]);
   function apply(template) {
-    try { stop(); applyTemplate(template); setPending(null); setOpen(false); setError(''); }
-    catch(e) { setError(e.message); }
+    try {
+      stop(); onBeforePreview?.();
+      applyTemplate(template); setPending(null); setError(''); onApplied?.();
+    } catch (e) { setError(e.message); }
+  }
+  function requestApply(template) {
+    stop(); setError('');
+    if (hasTemplateDestinationContent(template)) setPending(template);
+    else apply(template);
   }
   function preview(template) {
     if (previewId === template.id) { stop(); return; }
-    preparePreview?.();
-    player.current ??= createSessionPlayback(createAudioEngine(), value => { if (value.error) setError(value.error); });
-    const w = { ...project.workspace, selection: Object.fromEntries(['drums','chord','bass','melody'].map(t => [t,null])) };
-    const snapshot = jamCombinationSnapshot(w,template,true);
-    player.current.launch(snapshot,w.bpm,{ edit:true,quantize:'step' }); setPreviewId(template.id);
+    onBeforePreview?.(); preparePreview?.(); setError('');
+    player.current ??= createSessionPlayback(createAudioEngine(), value => {
+      if (value.error) { setError(value.error); setPreviewId(null); }
+    });
+    const snapshot = jamCombinationSnapshot(project.workspace, template, true);
+    player.current.launch(snapshot, project.workspace.bpm, { edit: true, quantize: 'step' });
+    setPreviewId(template.id);
   }
-  return <div className="user-template-picker"><button type="button" disabled={disabled} onClick={() => { setOpen(true); setError(''); }}>我的模板</button>
-    {open && <TemplateDialog className="template-picker-dialog" titleId={`my-${trackId}-templates-title`} onClose={() => { stop(); setPending(null); setOpen(false); }}>
-      <h2 id={`my-${trackId}-templates-title`}>我的{PERFORMANCE_LABELS[trackId]}模板</h2><p className="template-picker-project">{project.name}</p>
-      {pending ? <><p>目标小节已有内容，应用「{pending.name}」会覆盖这些小节。</p><button type="button" onClick={() => apply(pending)}>应用模板</button><button type="button" onClick={() => setPending(null)}>返回列表</button></> : <div className="template-picker-list">{project.workspace.templates[trackId].length ? project.workspace.templates[trackId].map(template => <div key={template.id} style={{ display:'contents' }}>
-        <button type="button" onClick={() => hasTemplateDestinationContent(template) ? setPending(template) : apply(template)}>{template.name} · {template.bars.length}小节</button>
-        <button type="button" aria-label={`试听${template.name}`} aria-pressed={previewId === template.id} onClick={() => preview(template)}>{previewId === template.id ? '停止' : '试听'}</button>
-      </div>) : <p>在Jam中保存模板后，会显示在这里。</p>}</div>}
-      <p role="status">{error}</p><button type="button" onClick={() => { stop(); setPending(null); setOpen(false); }}>关闭</button>
-    </TemplateDialog>}
-  </div>;
+  return <section className="user-template-section" aria-label={`我的${PERFORMANCE_LABELS[trackId]}模板`}>
+    {pending ? <div className="user-template-confirm" role="group" aria-label="确认覆盖模板">
+      <p>目标小节已有内容，应用「{pending.name}」会覆盖这些小节。</p>
+      <button type="button" disabled={disabled} onClick={() => apply(pending)}>确认应用</button>
+      <button type="button" onClick={() => setPending(null)}>取消</button>
+    </div> : <div className="user-template-list">{templates.map(template => <UserTemplateCard template={template} key={template.id} disabled={disabled} playing={previewId === template.id} onApply={requestApply} onPreview={preview} />)}</div>}
+    {error && <p className="user-template-error" role="alert">{error}</p>}
+  </section>;
 }

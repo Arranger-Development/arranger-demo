@@ -116,6 +116,7 @@ function MelodyEditor({
   );
   const [selectedTimbreId, setSelectedTimbreId] = useState(melodyTimbreId);
   const [timbreActionState, setTimbreActionState] = useState('idle');
+  const userTemplatePreviewRef = useRef(null);
   const stylePickerRef = useRef(null);
   const styleTriggerRef = useRef(null);
   const timbreRequestIdRef = useRef(0);
@@ -247,6 +248,7 @@ function MelodyEditor({
     setSelectedTimbreId(timbreId);
   };
   const handleCurrentCombinationPreview = async () => {
+    userTemplatePreviewRef.current?.stop();
     if (!selectedStyleTemplate || !selectedTimbre) return;
     const requestId = ++timbreRequestIdRef.current;
     onMelodyPreviewStop();
@@ -315,7 +317,6 @@ function MelodyEditor({
         </div>
 
         <div className="tools">
-          {createElement(UserTemplatePicker, { trackId: 'melody', disabled: tutorialLocked })}
           <button
             className={[
               'btn-template-groove',
@@ -518,7 +519,7 @@ function MelodyEditor({
               aria-label="关闭二级菜单"
               title="关闭二级菜单"
               type="button"
-              onClick={() => setPickerMode(null)}
+              onClick={closePicker}
             >
               {renderIcon(X)}
             </button>
@@ -532,6 +533,7 @@ function MelodyEditor({
             </div>
 
             <div className="melody-scale-options" id="styleList" aria-label="选择 Melody 风格模板">
+              {pickerMode === 'style' && <UserTemplatePicker trackId="melody" disabled={tutorialLocked || workflowLocked} ref={userTemplatePreviewRef} onBeforePreview={resetTimbreAction} onApplied={closePicker} />}
               {Object.values(MELODY_SCALES).map((styleTemplate) => {
                 const styleCardRole = getTutorialControlRole(
                   tutorialTargets,

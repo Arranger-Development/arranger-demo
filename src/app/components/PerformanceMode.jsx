@@ -17,7 +17,6 @@ import { defaultTimbres, snapshotSection, TIMBRE_OPTIONS } from '../performanceS
 import { getDialDrumPreset } from '../../data/dialDrumPresets.js';
 import { PERFORMANCE_SAMPLE_BANKS } from '../../data/performanceTimbres.js';
 import { createJamEffects } from '../jamEffects.js';
-import { createJamArpeggiator } from '../jamArpeggiator.js';
 import { createSessionPlayback } from '../sessionPlayback.js';
 import createAudioEngine from '../../audio/createAudioEngine.js';
 import { toggleDrumsCellInstrument, getDrumsCellInstruments } from '../../domain/drumsCells.js';
@@ -40,12 +39,11 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const [audio] = useState(() => createAudioEngine());
   const [effects] = useState(() => createJamEffects(audio));
   const fx = useSyncExternalStore(effects.subscribe, effects.getSnapshot);
-  const [arp] = useState(() => createJamArpeggiator(audio));
   const [status, setStatus] = useState({ mode: 'stopped', loading: false });
   const [playback] = useState(() => createSessionPlayback(audio, setStatus));
   const [editingTrack, setEditingTrack] = useState(null);
   const [solo, setSolo] = useState(false), [message, setMessage] = useState(''), [pendingEditor, setPendingEditor] = useState(null);
-  const [audition] = useState(() => createJamAudition(playback, {readWorkspace:() => projectStore.current().workspace, readDraft:() => projectStore.current().workspace.draft, onSoloChange:setSolo, stopArp:() => arp.stop()}));
+  const [audition] = useState(() => createJamAudition(playback, {readWorkspace:() => projectStore.current().workspace, readDraft:() => projectStore.current().workspace.draft, onSoloChange:setSolo}));
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [showEffects, setShowEffects] = useState(false);
   const [history, setHistory] = useState({ undo: [], redo: [] });
@@ -61,9 +59,10 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   useLayoutEffect(() => {
     const before = artPositions.current;
     artPositions.current = null;
+    if (!before) return;
     animations.current.forEach(animation => animation.cancel());
     animations.current = [];
-    if (!before || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     for (const t of TRACKS) {
       const node = artNodes.current[t], from = before[t], to = node?.getBoundingClientRect();
       if (!from || !to?.width) continue;
@@ -111,7 +110,8 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     if (t === 'drums' && !next.params) next.params = {strength:50,groove:50};
     audition.release();
     if (editingTrack) histories.current[editingTrack] = history;
-    captureArt(); projectStore.setDraft(next); setEditingTrack(t); setSolo(false);
+    if (!editingTrack) captureArt();
+    projectStore.setDraft(next); setEditingTrack(t); setSolo(false);
     setHistory(force || template && existing?.editingTemplateId !== template.id ? {undo:[],redo:[]} : histories.current[t] ?? {undo:[],redo:[]});
     effects.select(t); setMessage(''); setEditBar(0);
   }
@@ -170,23 +170,18 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     projectStore.setTimbre(t,timbreId);
     if (playback.isActive()) launch('step',null,false);
   }
-  function pressArp(token, index) {
-    if (playback.isReady()) void arp.press(token,index,w.timbres?.melody ?? (draft?.trackId === 'melody' ? draft.timbreId : jamCombinationSnapshot(w)?.timbres.melody));
-  }
   function changeMix(track, value) {
     const targets = effects.getSnapshot().selectedTracks;
     const current = projectStore.current().workspace;
     projectStore.patch({ volumes: { ...current.volumes, ...Object.fromEntries(targets.map(t => [t,value])) }, mutedTracks: { ...current.mutedTracks, ...Object.fromEntries(targets.map(t => [t,false])) } });
     targets.forEach(t => effects.volume(t,value));
   }
-  function changeEffectPage(next) { if (effects.getSnapshot().effectPage === 'arp' && next !== 'arp') arp.stop(); effects.setPage(next); }
   function openProject(id) {
     if (!projectStore.save()) return false;
     if (!(id ? projectStore.switchTo(id) : projectStore.create())) return false;
     audition.stop(); effects.reset(true); histories.current = {}; setEditingTrack(null); setSolo(false); setPage(0); setMessage(''); return true;
   }
-  useEffect(() => { audio.setJamArpeggiator(arp); return () => { playback.stop(); arp.stop(); audio.setJamArpeggiator(null); }; }, [audio, arp, playback]);
-  useEffect(() => { arp.configure(0,project.arpNotes?.join(' ') ?? ''); }, [arp, project.id, project.arpNotes]);
+  useEffect(() => () => { playback.stop(); effects.resetHolds(); }, [effects, playback]);
   useEffect(() => {
     const t = solo ? audition.getTrack() : null;
     effects.syncMix(t ? {...w.volumes,[t]:w.mutedTracks[t] || w.volumes[t] <= -24 ? 0 : w.volumes[t]} : w.volumes,
@@ -194,10 +189,11 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   }, [effects,w.volumes,w.mutedTracks,solo,audition]);
   useEffect(() => { if (status.error) audition.release({resume:false}); }, [status.error,audition]);
   useEffect(() => {
-    if (!active) { audition.stop(); effects.resetHolds(); }
-    const release = () => { arp.stop(); effects.resetHolds(); };
+    if (!active) audition.stop();
+    if (!active || !running || status.loading) effects.resetHolds();
+    const release = () => effects.resetHolds();
     window.addEventListener('blur',release); return () => window.removeEventListener('blur',release);
-  }, [active,playback,arp,effects,audition]);
+  }, [active,running,status.loading,effects,audition]);
   useEffect(() => {
     if (!active) return;
     const handler = e => {
@@ -222,7 +218,6 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         if (cmd.type === 'stop') { audition.stop(); effects.reset(); }
         if (cmd.type === 'page') setPage(Math.max(0,Math.min(pageCount-1,effectivePage+cmd.delta)));
         if (cmd.type === 'selectTrack') effects.select(cmd.trackId,cmd.additive);
-        if (cmd.type === 'effectPage') changeEffectPage(cmd.page);
         if (cmd.type === 'volume') changeMix(track,cmd.value);
         if (cmd.type === 'cutoff') effects.getSnapshot().selectedTracks.forEach(t => effects.cutoff(t,cmd.value));
         if (cmd.type === 'reverb') effects.reverb(cmd.value);
@@ -230,17 +225,15 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           if (!cmd.pressed) effects.release(cmd.type,cmd.token); else if (playback.isReady()) effects.press(cmd.type,cmd.token,cmd.value,w.bpm);
         }
         if (cmd.type === 'repeat') { if (!cmd.pressed) effects.repeat.release(cmd.token); else if (playback.isReady()) effects.repeat.press(cmd.token,cmd.division,w.bpm); }
-        if (cmd.type === 'arp') { if (cmd.pressed) pressArp(cmd.token,cmd.index); else arp.release(cmd.token); }
       },
-      release: () => { arp.stop(); effects.resetHolds(); },
+      release: () => effects.resetHolds(),
       getSurface: () => ({ ...effects.getSnapshot(), version: 5, templates, selection: w.selection,
-        page: effectivePage, pageCount, sections: [], status, beatPhase: playback.getBeatPhase(), arp: arp.getSnapshot(),
+        page: effectivePage, pageCount, sections: [], status, beatPhase: playback.getBeatPhase(),
         repeat: effects.getSnapshot().repeats[effects.getSnapshot().selectedTrack], savedAt, canSave: Boolean(draft), storageError: Boolean(library.error) }),
     };
     controlsRef.current = controls; return () => { if (controlsRef.current === controls) controlsRef.current = null; };
   });
   const previewBar = Math.min(editBar,(draft?.bars.length ?? 1)-1);
-  const orderedTracks = editingTrack ? [editingTrack,...TRACKS.filter(t => t !== editingTrack)] : TRACKS;
   const canPlay = Boolean(draft || TRACKS.some(t => w.selection[t]));
   return <section className="performance-mode jam-workspace template-jam jam-studio" hidden={!active} aria-label="Jam 演奏" data-editing={Boolean(draft)}>
     <header className="performance-header">
@@ -256,10 +249,10 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     <div ref={workbench} className="template-jam-workbench studio-workbench">
       <main className="studio-main">
         <div className="studio-heading"><div><span className="performance-eyebrow">YOUR SOUND, YOUR WAY</span><h2>{draft ? `${LABELS[editingTrack]} · 乐句编辑` : '乐句工作台'}</h2></div><p>{draft ? '切换乐器，草稿会保留' : '单击选择 / 取消 · 点笔编辑'}</p>{draft && <button type="button" className="studio-text-button studio-collapse-compact" onClick={finishEditor}><ArrowLeft size={13}/> 收起编辑</button>}<button type="button" className="studio-effects-toggle" aria-expanded={showEffects} aria-controls="jam-studio-effects" onClick={() => setShowEffects(open => !open)}>现场效果</button></div>
-        <div className="studio-gallery" aria-label="四轨乐器与模板">{orderedTracks.map(t => <section className="studio-instrument" data-track={t} data-active={editingTrack === t} key={t} aria-label={`${LABELS[t]}模板`}>
+        <div className="studio-gallery" aria-label="四轨乐器与模板">{TRACKS.map(t => <section className="studio-instrument" data-track={t} data-active={editingTrack === t} key={t} aria-label={`${LABELS[t]}模板`}>
           <div className="studio-instrument-top"><button type="button" className="studio-instrument-open" aria-label={`创作${LABELS[t]}模板`} onClick={() => openEditor(t)} aria-expanded={editingTrack === t}>
             <span className="studio-instrument-art" data-art-track={t} ref={node => {artNodes.current[t]=node;}}><img src={ART[t]} alt="" draggable={false} decoding="async"/></span>
-            {draft && <span className="studio-instrument-label"><strong>{LABELS[t]}</strong><small>{w.templates[t].length ? `${w.templates[t].length} 个乐句` : '开始创作'}</small></span>}
+            {draft && <span className="studio-instrument-label"><strong>{LABELS[t]}</strong><span className="studio-editing-state">{editingTrack === t ? '编辑中' : ''}</span><small>{w.templates[t].length ? `${w.templates[t].length} 个乐句` : '开始创作'}</small></span>}
           </button>{!draft && <div className="studio-instrument-label"><strong>{LABELS[t]}</strong><label className="studio-instrument-timbre" title="切换音色"><select aria-label={`${LABELS[t]}音色`} value={instrumentTimbre(t)} onChange={e => changeInstrumentTimbre(t,e.target.value)}>{TIMBRE_OPTIONS[t].map(id => <option key={id} value={id}>{timbreLabel(id)}</option>)}</select></label></div>}<button type="button" className="studio-track-mute" aria-label={`${w.mutedTracks[t] ? '取消静音' : '静音'}${LABELS[t]}`} aria-pressed={w.mutedTracks[t]} onClick={() => toggleMute(t)} title={w.mutedTracks[t] ? '取消静音' : '静音'}>{w.mutedTracks[t] ? <VolumeX size={14}/> : <Volume2 size={14}/>}</button></div>
           <div className="studio-template-list" aria-label={`${LABELS[t]}已保存乐句`}>{w.templates[t].length ? w.templates[t].map(p => <JamTemplateCard key={`${project.id}:${p.id}:${p.name}`} template={p} selected={w.selection[t] === p.id}
             playing={running && !w.mutedTracks[t] && (!solo || editingTrack === t)} onSelect={() => trigger(t,p.id)} onEdit={() => openEditor(t,p)} onRemove={() => setDeleteTarget(p)}/>) : <span className="studio-template-empty">保存的乐句会出现在这里</span>}</div>
@@ -287,12 +280,12 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
             <div>{draft.editingTemplateId && <button type="button" className="studio-text-button" onClick={() => saveTemplate(true)}>保存修改</button>}<button type="button" className="studio-save" onClick={() => saveTemplate()}><Save size={13}/>{draft.editingTemplateId ? '另存新模板' : '保存新模板'}</button></div></footer>
         </section>}
       </main>
-      <aside id="jam-studio-effects" className="jam-effects studio-effects" data-open={showEffects} data-track={fx.selectedTrack} onKeyDown={e => { if (e.key === 'Escape') { setShowEffects(false); workbench.current?.querySelector('.studio-effects-toggle')?.focus(); } }}><header><span className="performance-eyebrow">LIVE EFFECTS</span><h2>现场效果</h2><button type="button" className="studio-effects-close" aria-label="收起现场效果" onClick={() => { setShowEffects(false); workbench.current?.querySelector('.studio-effects-toggle')?.focus(); }}>×</button></header><div className="effect-targets" role="group" aria-label="效果目标轨道">{TRACKS.map(t => <button type="button" key={t} aria-pressed={fx.selectedTracks.includes(t)} onClick={() => effects.toggleTrack(t)}>{LABELS[t]}</button>)}</div>
-        <JamPerformanceDeck key={project.id} effects={effects} arp={arp} session={w} enabled={active && running && !status.loading} recordingLocked={false} changeMix={changeMix} onPage={changeEffectPage} onArpPress={pressArp} onArpConfigure={projectStore.configureArp}/>
+      <aside id="jam-studio-effects" className="jam-effects studio-effects" data-open={showEffects} data-track={fx.selectedTrack} onKeyDown={e => { if (e.key === 'Escape') { setShowEffects(false); workbench.current?.querySelector('.studio-effects-toggle')?.focus(); } }}><header><h2>现场效果</h2><button type="button" className="studio-effects-close" aria-label="收起现场效果" onClick={() => { setShowEffects(false); workbench.current?.querySelector('.studio-effects-toggle')?.focus(); }}>×</button></header><div className="effect-targets" role="group" aria-label="效果目标轨道">{TRACKS.map(t => <button type="button" key={t} aria-pressed={fx.selectedTracks.includes(t)} onClick={() => effects.toggleTrack(t)}>{LABELS[t]}</button>)}</div>
+        <JamPerformanceDeck key={project.id} effects={effects} session={w} enabled={active && running && !status.loading} changeMix={changeMix}/>
       </aside>
     </div>
     <footer className="template-jam-transport studio-transport"><button type="button" className="template-play-button" aria-label={running ? '停止组合' : '播放组合'} disabled={!running && !canPlay} onClick={togglePlayback}>{running ? <Square size={14}/> : <Play size={14}/>} {running ? '停止' : draft ? '试听组合' : '播放组合'}</button><span role="status">{library.error || status.error || (status.loading ? '正在准备声音…' : status.pendingId ? '等待节拍切换' : message)}</span>
-      <span className="template-page-controls">Launchpad {effectivePage+1}/{pageCount}<button type="button" aria-label="上一页模板" disabled={!effectivePage} onClick={() => setPage(effectivePage-1)}>‹</button><button type="button" aria-label="下一页模板" disabled={effectivePage+1>=pageCount} onClick={() => setPage(effectivePage+1)}>›</button></span></footer>
+      <span className="template-page-controls">模板页 {effectivePage+1}/{pageCount}<button type="button" aria-label="上一页模板" disabled={!effectivePage} onClick={() => setPage(effectivePage-1)}>‹</button><button type="button" aria-label="下一页模板" disabled={effectivePage+1>=pageCount} onClick={() => setPage(effectivePage+1)}>›</button></span></footer>
     {pendingEditor && <TemplateDialog titleId="replace-draft-title" onClose={() => setPendingEditor(null)}><h2 id="replace-draft-title">保留当前草稿？</h2><p>这条轨道还有未保存为模板的修改。</p><button type="button" onClick={() => resolvePending(true)}>先保存再编辑</button><button type="button" onClick={() => resolvePending(false)}>放弃草稿并编辑</button><button type="button" onClick={() => setPendingEditor(null)}>取消</button></TemplateDialog>}
     {deleteTarget && <TemplateDialog titleId="delete-template-title" onClose={() => setDeleteTarget(null)}><h2 id="delete-template-title">删除「{deleteTarget.name}」？</h2><p>已放入创作时间线的乐句会保留。</p><button type="button" onClick={() => { projectStore.removeTemplate(deleteTarget.trackId,deleteTarget.id); setDeleteTarget(null); if (running) launch('step',draft,false); }}>删除</button><button type="button" onClick={() => setDeleteTarget(null)}>取消</button></TemplateDialog>}
   </section>;

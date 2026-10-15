@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BAR_NUMBERS, TRACK_UI } from '../src/app/uiShellData.js';
-import { createInitialClips } from '../src/store/slices/clipsSlice.js';
+import { createClipRecord } from '../src/domain/clipHelpers.js';
+function createExampleClips() {
+  const clip = createClipRecord('drums', 0);
+  return { ids: [clip.id], byId: { [clip.id]: clip } };
+}
 import { createTimelineTracks } from '../src/app/timelineViewModels.js';
 import createInitialMatrix from '../src/store/createInitialMatrix.js';
 
 test('createTimelineTracks decorates static track UI with clip state by bar', () => {
-  const clips = createInitialClips();
+  const clips = createExampleClips();
   const tracks = createTimelineTracks({
     barNumbers: BAR_NUMBERS,
     clips,
@@ -43,7 +47,7 @@ test('createTimelineTracks decorates static track UI with clip state by bar', ()
 });
 
 test('createTimelineTracks decorates chord clips with the current chord label', () => {
-  const clips = createInitialClips();
+  const clips = createExampleClips();
   const matrix = createInitialMatrix();
   clips.ids.push('chord-bar-2');
   clips.byId['chord-bar-2'] = {
@@ -85,7 +89,7 @@ test('createTimelineTracks decorates chord clips with the current chord label', 
 });
 
 test('createTimelineTracks treats silent chord source metadata as empty', () => {
-  const clips = createInitialClips();
+  const clips = createExampleClips();
   const matrix = createInitialMatrix();
   clips.ids.push('chord-bar-2');
   clips.byId['chord-bar-2'] = {
@@ -118,7 +122,7 @@ test('createTimelineTracks treats silent chord source metadata as empty', () => 
 });
 
 test('createTimelineTracks marks drums clips with matrix content as non-empty', () => {
-  const clips = createInitialClips();
+  const clips = createExampleClips();
   const matrix = createInitialMatrix();
   matrix.drums[0][0] = { instruments: ['kick'] };
 
@@ -136,7 +140,7 @@ test('createTimelineTracks marks drums clips with matrix content as non-empty', 
 });
 
 test('createTimelineTracks marks tracks with clips outside the selected bar', () => {
-  const clips = createInitialClips();
+  const clips = createExampleClips();
   clips.ids.push('bass-bar-2');
   clips.byId['bass-bar-2'] = {
     id: 'bass-bar-2',
@@ -161,7 +165,7 @@ test('createTimelineTracks marks tracks with clips outside the selected bar', ()
 test('createTimelineTracks uses live store volumes for the left track controls', () => {
   const tracks = createTimelineTracks({
     barNumbers: BAR_NUMBERS,
-    clips: createInitialClips(),
+    clips: createExampleClips(),
     selectedBar: 0,
     trackUi: TRACK_UI,
     volumes: {

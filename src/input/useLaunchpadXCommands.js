@@ -403,7 +403,7 @@ function useLaunchpadXCommands({
     if (typeof window === 'undefined') return undefined;
     const handleWindowBlur = () => {
       performanceMidiRef.current.reset();
-    modeRef.current.performanceControlsRef?.current?.release?.();
+      modeRef.current.performanceControlsRef?.current?.release?.();
       chordGestureRef.current.cancel();
       releaseMelodyPads();
     };
@@ -448,10 +448,10 @@ function useLaunchpadXCommands({
     const output = findLaunchpadXMidiOutput(access.outputs.values());
     const previousInput = inputRef.current;
 
-    if (previousInput !== input) {
-      if (previousInput) detachInput(previousInput);
+    if (previousInput !== input || outputRef.current !== output) {
+      if (previousInput !== input && previousInput) detachInput(previousInput);
       performanceMidiRef.current.reset();
-    modeRef.current.performanceControlsRef?.current?.release?.();
+      modeRef.current.performanceControlsRef?.current?.release?.();
       chordGestureRef.current.cancel();
       releaseMelodyPads({ redraw: false });
     }

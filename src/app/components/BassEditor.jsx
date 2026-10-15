@@ -26,6 +26,7 @@ import { ClipNameInput } from './ClipNameInput.jsx';
 import { EditorTrackIdentity } from './EditorTrackIdentity.jsx';
 import { renderIcon } from './icons.js';
 import { PianoRoll } from './PianoRoll.jsx';
+void PianoRoll;
 import { TrackBarPager } from './TrackBarPager.jsx';
 
 const ICON_PLAY_URL = `${import.meta.env.BASE_URL}assets/skeuo/icon-play.svg`;
@@ -62,6 +63,7 @@ function BassEditor({
   onBassPreview = () => {},
   onBassStepToggle = () => {},
   onBassGrooveTemplatePreview = () => {},
+  onBassGrooveTemplatePreviewStop = () => {},
   onBassGrooveTemplateApply = () => {},
   onClearBassBar = () => {},
   onClearBass = () => {},
@@ -78,16 +80,25 @@ function BassEditor({
   const [pickerMode, setPickerMode] = useState(null);
   const [selectedGrooveTemplateId, setSelectedGrooveTemplateId] = useState('bass-8th-basic');
   const [confirmApplyOpen, setConfirmApplyOpen] = useState(false);
+  const userTemplatePreviewRef = useRef(null);
   const groovePickerRef = useRef(null);
   const grooveTriggerRef = useRef(null);
   const groovePickerOpen = pickerMode === 'groove';
   const selectedGrooveTemplate = BASS_GROOVE_TEMPLATES.find(
     (template) => template.id === selectedGrooveTemplateId,
   );
+  const builtinPreviewActive = useRef(false);
+  const stopBuiltinPreview = useCallback(() => {
+    if (!builtinPreviewActive.current) return;
+    builtinPreviewActive.current = false;
+    onBassGrooveTemplatePreviewStop();
+  }, [onBassGrooveTemplatePreviewStop]);
+  useEffect(() => () => stopBuiltinPreview(), [stopBuiltinPreview]);
   const closeBassPicker = useCallback(() => {
+    stopBuiltinPreview();
     setConfirmApplyOpen(false);
     setPickerMode(null);
-  }, []);
+  }, [stopBuiltinPreview]);
   useSecondaryMenuDismiss({
     active: groovePickerOpen && !confirmApplyOpen,
     dismissOnEscape: false,
@@ -158,7 +169,6 @@ function BassEditor({
         </div>
 
         <div className="tools">
-          {createElement(UserTemplatePicker, { trackId: 'bass', disabled: tutorialLocked })}
           <button
             className={grooveButtonClassName}
             ref={grooveTriggerRef}
@@ -217,7 +227,7 @@ function BassEditor({
         onPreviousBar,
         trackId,
       }, (
-        createElement(PianoRoll, {
+        <PianoRoll {...{
           ariaLabel: 'Bass piano roll',
           disabled: tutorialLocked,
           initialTopNote: 'D1',
@@ -229,7 +239,7 @@ function BassEditor({
           onNotePreview: onBassPreview,
           onPitchInteraction: closeBassPicker,
           trackId,
-        })
+        }} />
       ))}
 
       <section
@@ -263,6 +273,7 @@ function BassEditor({
             </div>
 
             <div className="bass-template-groove-options" aria-label="选择Bass弹奏律动模板">
+              {groovePickerOpen && <UserTemplatePicker trackId="bass" disabled={tutorialLocked} ref={userTemplatePreviewRef} onBeforePreview={stopBuiltinPreview} onApplied={closeBassPicker} />}
               {BASS_GROOVE_TEMPLATES.map((template) => {
                 const templateCardRole = getTutorialControlRole(
                   tutorialTargets,
@@ -309,7 +320,7 @@ function BassEditor({
                         type="button"
                         aria-label={`试听 ${template.name}`}
                         disabled={templateCardDisabled}
-                        onClick={() => onBassGrooveTemplatePreview(template.id)}
+                        onClick={() => { userTemplatePreviewRef.current?.stop(); stopBuiltinPreview(); builtinPreviewActive.current = true; onBassGrooveTemplatePreview(template.id); }}
                       >
                         <img src={ICON_PLAY_URL} alt="" aria-hidden="true" />
                       </button>
