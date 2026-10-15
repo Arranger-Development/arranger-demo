@@ -1,263 +1,299 @@
-import { createElement, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Home } from 'lucide-react';
-import { renderIcon } from './icons.js';
+import TemplateDialog from './TemplateDialog.jsx';
+void TemplateDialog;
+import { createElement, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Home, Play, Square, Undo2, Redo2, ArrowLeft, Save, Volume2, VolumeX, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ThemeSwitcher } from './ThemeSwitcher.jsx';
-import createAudioEngine from '../../audio/createAudioEngine.js';
-import { PERFORMANCE_LABELS as LABELS, performanceTemplates, hasSelection, normalizePerformanceBpm } from '../performanceModel.js';
-import { fixedPerformancePads, replacePadBinding, createSessionEditor, snapshotSection, createExportEntry, createArrangementImport, arrangementExportLength } from '../performanceSession.js';
-import { createSessionPlayback } from '../sessionPlayback.js';
-import { mapPerformanceKeyboard } from '../../input/performanceInput.js';
-import { loopRepeat } from '../loopOrder.js';
-import { createJamEffectAutomation } from '../jamEffectAutomation.js';
-import { createJamEffects } from '../jamEffects.js';
-import { bindJamBlankClick, returnToNewCombination } from '../jamBlankClick.js';
-import JamPerformanceDeck from './JamPerformanceDeck.jsx';
-import { createJamArpeggiator } from '../jamArpeggiator.js';
-import JamView from './JamView.jsx';
 import JamProjectControls from './JamProjectControls.jsx';
-import { createJamProjects } from '../jamProjects.js';
-import JamExportDialog from './JamExportDialog.jsx';
+import JamPerformanceDeck from './JamPerformanceDeck.jsx';
+import RotaryKnob from './RotaryKnob.jsx';
+import DrumStepGrid from './DrumStepGrid.jsx';
+import JamTemplateCard from './JamTemplateCard.jsx';
+import JamPhrasePreview from './JamPhrasePreview.jsx';
+import { createJamAudition } from '../jamAudition.js';
+import { toggleJamTemplate } from '../jamTemplateSelection.js';
+import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, performanceTemplates } from '../performanceModel.js';
+import { getJamTemplateProjects, jamCombinationSnapshot } from '../jamTemplateProjects.js';
+import { defaultTimbres, snapshotSection, TIMBRE_OPTIONS } from '../performanceSession.js';
+import { getDialDrumPreset } from '../../data/dialDrumPresets.js';
+import { PERFORMANCE_SAMPLE_BANKS } from '../../data/performanceTimbres.js';
+import { createJamEffects } from '../jamEffects.js';
+import { createJamArpeggiator } from '../jamArpeggiator.js';
+import { createSessionPlayback } from '../sessionPlayback.js';
+import createAudioEngine from '../../audio/createAudioEngine.js';
+import { toggleDrumsCellInstrument, getDrumsCellInstruments } from '../../domain/drumsCells.js';
+import { mapPerformanceKeyboard } from '../../input/performanceInput.js';
 import './performance.css';
-import './jamView.css';
 import './jamWorkspace.css';
+import './templateJam.css';
+import './jamStudio.css';
 
-void [JamView, JamExportDialog, JamPerformanceDeck, JamProjectControls];
-const storage = () => { try { return window.localStorage; } catch { return null; } };
-
-export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, recommendation, onBack, onHome, onImport, controlsRef, hardwareInput }) {
-  const [projectStore] = useState(() => createJamProjects(storage(), genreId, profileId, initialBpm, recommendation));
-  const projectLibrary = useSyncExternalStore(projectStore.subscribe, projectStore.getSnapshot);
-  const currentProject = projectLibrary.projects.find(p => p.id === projectLibrary.activeId);
-  const [editor] = useState(() => {
-    const instance = createSessionEditor(projectStore.current().workspace.session, { catalog: performanceTemplates(genreId, profileId) });
-    instance.restore(projectStore.current().workspace); return instance;
-  });
-  const { session, drafts, editingId } = useSyncExternalStore(editor.subscribe, editor.getSnapshot);
+void [Home, Play, Square, Undo2, Redo2, ArrowLeft, Save, Volume2, VolumeX, ChevronLeft, ChevronRight, RotaryKnob, JamProjectControls, JamPerformanceDeck, DrumStepGrid, JamTemplateCard, JamPhrasePreview];
+const copy = value => structuredClone(value);
+const performanceNow = () => globalThis.performance.now();
+const ART = Object.fromEntries(TRACKS.map(t => [t, `${import.meta.env.BASE_URL}assets/jam-instruments/${t}-v1.png`]));
+const timbreLabel = id => PERFORMANCE_SAMPLE_BANKS[id]?.label ?? ({ 'soft-electronic-kit':'柔和电子鼓', 'warm-electric-piano':'温暖电钢琴', 'round-electric-bass':'圆润电贝司', 'airy-synth-lead':'空气感合成器' })[id] ?? id;
+const emptySelection = () => Object.fromEntries(TRACKS.map(t => [t, null]));
+export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack, onHome, controlsRef, hardwareInput, projectStore: providedStore }) {
+  const [projectStore] = useState(() => providedStore ?? getJamTemplateProjects(genreId, profileId, initialBpm));
+  const library = useSyncExternalStore(projectStore.subscribe, projectStore.getSnapshot);
+  const project = library.projects.find(p => p.id === library.activeId), w = project.workspace;
   const [audio] = useState(() => createAudioEngine());
   const [effects] = useState(() => createJamEffects(audio));
-  const { selectedTrack, selectedTracks } = useSyncExternalStore(effects.subscribe, effects.getSnapshot);
-  const [arp] = useState(() => {
-    const instance = createJamArpeggiator(audio);
-    instance.configure(0, projectStore.current().arpNotes?.join(' ') ?? ''); return instance;
-  });
-  useEffect(() => { audio.setJamArpeggiator(arp); return () => { arp.stop(); audio.setJamArpeggiator(null); }; }, [audio, arp]);
-  const [status, setStatus] = useState({ mode: 'stopped', loading: false, playingId: null, pendingId: null });
-  const [automation] = useState(() => createJamEffectAutomation(audio, effects, (id, effectAutomation) => editor.edit({ effectAutomation }, id)));
-  const recording = useSyncExternalStore(automation.subscribe, automation.getSnapshot);
-  const recordingLocked = recording.phase !== 'idle';
-  const [playback] = useState(() => createSessionPlayback(audio, setStatus, automation));
-  const [message, setMessage] = useState('');
-  const [savedAt, setSavedAt] = useState(-Infinity);
-  const [exportEntries, setExportEntries] = useState(null);
-  const [counts, setCounts] = useState({});
-  const [requestedPage, setPage] = useState(0);
-  const page = Math.min(requestedPage, Math.max(0, Math.ceil(session.sections.length / 8) - 1));
-  const inputActive = active && !exportEntries;
-  const workspaceRef = useRef(null);
-  useEffect(() => bindJamBlankClick(workspaceRef.current, {
-    isEnabled: () => inputActive && !playback.isActive(),
-    onClick: () => returnToNewCombination(editor, playback),
-  }), [editor, playback, inputActive]);
-  const locked = status.mode !== 'stopped';
-  const draft = drafts[editingId];
-  const catalog = useMemo(() => performanceTemplates(genreId, profileId), [genreId, profileId]);
-  const templates = useMemo(() => fixedPerformancePads(catalog, session.pads), [catalog, session.pads]);
-  const persist = () => { if (!projectStore.save(editor.getSnapshot(), arp.getSnapshot().presets[0])) setMessage('项目保存失败，当前内容已保留，请重试。'); };
-  const patch = (value) => { editor.patch(value); persist(); };
-  const jamSnapshot = (section) => {
-    const value = snapshotSection(section, genreId, profileId);
-    const saved = editor.getSnapshot().session.sections.find(s => s.id === section.id);
-    return value && { ...value, repeat: loopRepeat(saved ?? { kind: section.kind }), effectAutomation: section.effectAutomation, phraseIds: { ...section.selection } };
-  };
-  const launchDraft = (edit = false) => {
-    setMessage('');
-    const current = editor.getSnapshot(); const next = jamSnapshot(current.drafts[current.editingId]);
-    if (next) playback.launch(next, current.session.bpm, { edit, returnAfterTransition: false }); else if (playback.isActive()) playback.stop();
-  };
-  function replacePad(track, index, templateId) {
-    if (automation.isRecording()) return;
-    const current = editor.getSnapshot().session;
-    const next = replacePadBinding(current, catalog, track, index, templateId);
-    if (next !== current) patch({ pads: next.pads });
+  const fx = useSyncExternalStore(effects.subscribe, effects.getSnapshot);
+  const [arp] = useState(() => createJamArpeggiator(audio));
+  const [status, setStatus] = useState({ mode: 'stopped', loading: false });
+  const [playback] = useState(() => createSessionPlayback(audio, setStatus));
+  const [editingTrack, setEditingTrack] = useState(null);
+  const [solo, setSolo] = useState(false), [message, setMessage] = useState(''), [pendingEditor, setPendingEditor] = useState(null);
+  const [audition] = useState(() => createJamAudition(playback, {readWorkspace:() => projectStore.current().workspace, readDraft:() => projectStore.current().workspace.draft, onSoloChange:setSolo, stopArp:() => arp.stop()}));
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [showEffects, setShowEffects] = useState(false);
+  const [history, setHistory] = useState({ undo: [], redo: [] });
+  const [page, setPage] = useState(0), [savedAt, setSavedAt] = useState(-Infinity);
+  const [editBar, setEditBar] = useState(0);
+  const gesture = useRef(null), histories = useRef({});
+  const artNodes = useRef({}), artPositions = useRef(null), animations = useRef([]);
+  const workbench = useRef(null);
+  useEffect(() => { if (workbench.current) workbench.current.scrollTop = 0; }, [editingTrack, project.id]);
+  function captureArt() {
+    artPositions.current = Object.fromEntries(TRACKS.map(t => [t,artNodes.current[t]?.getBoundingClientRect()]));
   }
-  function triggerPad(track, index) {
-    if (automation.isRecording()) return;
-    const current = editor.getSnapshot();
-    const phrase = fixedPerformancePads(catalog, current.session.pads)[track][index];
-    if (!phrase) return;
-    const selection = { ...current.drafts[current.editingId].selection };
-    selection[track] = selection[track] === phrase.id ? null : phrase.id;
-    editor.edit({ selection }); launchDraft(true);
-  }
-  function selectSection(id) {
-    if (automation.isRecording()) return;
-    if (!editor.getSnapshot().drafts[id]) return;
-    const current = editor.getSnapshot();
-    const snapshot = jamSnapshot(current.drafts[id]);
-    if (!playback.isActive() || !snapshot) editor.select(id);
-    playback.launch(snapshot, current.session.bpm);
-  }
-  function toggleSequence() {
-    if (playback.isActive()) { effects.reset(); playback.stop(); return; }
-    const current = editor.getSnapshot();
-    const snapshots = current.session.sections.map(s => jamSnapshot(current.drafts[s.id]));
-    setMessage(playback.sequence(snapshots, current.session.bpm) ? '' : '没有可播放的 Loop');
-  }
-  function save() {
-    if (automation.isRecording()) return;
-    if (!hasSelection(editor.getSnapshot().drafts[editor.getSnapshot().editingId].selection)) return;
-    if (!editor.save((next, snapshot) => projectStore.save(snapshot, arp.getSnapshot().presets[0]))) {
-      setMessage('保存失败，当前组合已保留，请重试。'); return;
+  useLayoutEffect(() => {
+    const before = artPositions.current;
+    artPositions.current = null;
+    animations.current.forEach(animation => animation.cancel());
+    animations.current = [];
+    if (!before || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    for (const t of TRACKS) {
+      const node = artNodes.current[t], from = before[t], to = node?.getBoundingClientRect();
+      if (!from || !to?.width) continue;
+      animations.current.push(node.animate([
+        {transformOrigin:'top left',transform:`translate(${from.left-to.left}px,${from.top-to.top}px) scale(${from.width/to.width},${from.height/to.height})`},
+        {transformOrigin:'top left',transform:'translate(0,0) scale(1)'},
+      ], {duration:460,easing:'cubic-bezier(.22,1,.36,1)'}));
     }
-    effects.reset(); playback.stop(); setSavedAt(performance.now()); setMessage('已保存，可继续组合下一个 loop。');
+  }, [editingTrack]);
+  useEffect(() => () => animations.current.forEach(animation => animation.cancel()), []);
+  const draft = editingTrack && w.draft?.trackId === editingTrack ? w.draft : null;
+  const running = status.mode !== 'stopped';
+  const sourceGenre = project.genreId ?? genreId, sourceProfile = project.profileId ?? profileId;
+  const catalog = performanceTemplates(sourceGenre, sourceProfile);
+  const pageCount = Math.max(1, ...TRACKS.map(t => Math.ceil(w.templates[t].length / 8)));
+  const effectivePage = Math.min(page, pageCount - 1);
+  const templates = Object.fromEntries(TRACKS.map(t => [t, w.templates[t].slice(effectivePage * 8, effectivePage * 8 + 8)]));
+  const instrumentTimbre = t => w.timbres?.[t] ?? w.templates[t].find(p => p.id === w.selection[t])?.timbreId ?? w.draftsByTrack?.[t]?.timbreId ?? defaultTimbres()[t];
+  function sourceDraft(t, sourceId, timbreId) {
+    const timbre = timbreId ?? instrumentTimbre(t);
+    if (t === 'drums') {
+      const p = getDialDrumPreset(50,50);
+      return { trackId: t, name: '', timbreId: timbre, params: { strength: 50, groove: 50 }, sourcePresetId: p.id, bars: copy(p.bars) };
+    }
+    const source = catalog[t].find(p => p.id === sourceId) ?? catalog[t][0];
+    const snap = snapshotSection({ id: 'source', kind: 'main', selection: { ...emptySelection(), [t]: source.id }, timbres: { ...defaultTimbres(), [t]: timbre } }, sourceGenre, sourceProfile);
+    return { trackId: t, name: '', timbreId: timbre, sourcePresetId: source.id, bars: copy(snap.matrix[t].slice(0, snap.phraseBars[t])) };
   }
-  function saveProject() {
-    if (automation.isRecording()) return;
-    setMessage(projectStore.save(editor.getSnapshot(), arp.getSnapshot().presets[0]) ? '项目已保存，包含当前草稿。' : '项目保存失败，当前内容已保留，请重试。');
+  function launch(quantize = 'bar', override = draft, overrideSolo = solo) {
+    const snapshot = jamCombinationSnapshot(projectStore.current().workspace, override, overrideSolo);
+    if (!snapshot) { playback.stop(); return; }
+    playback.launch(snapshot, projectStore.current().workspace.bpm, { edit: true, quantize, preservePhase: true });
   }
-  function openProject(id) {
-    if (automation.isRecording()) return false;
-    const ok = id ? projectStore.switchTo(id, editor.getSnapshot(), arp.getSnapshot().presets[0])
-      : projectStore.create(editor.getSnapshot(), arp.getSnapshot().presets[0]);
-    if (!ok) { setMessage('项目保存失败，已留在当前项目，请重试。'); return false; }
-    resetPlayback(); arp.stop();
-    const next = projectStore.current();
-    editor.restore(next.workspace); arp.configure(0, next.arpNotes?.join(' ') ?? '');
-    setPage(0); setExportEntries(null); setCounts({}); setSavedAt(-Infinity); setMessage(id ? `已打开「${next.name}」` : `已新建「${next.name}」，原项目已保留。`);
-    return true;
+  function replaceDraft(next, record = true, preserveDirty = false) {
+    if (record && draft) setHistory(h => ({ undo: [...h.undo, copy(draft)].slice(-50), redo: [] }));
+    projectStore.setDraft({ ...next,dirty:preserveDirty ? Boolean(next.dirty) : true });
+    if (running) launch('step', next);
   }
-  function renameProject(name) {
-    const ok = projectStore.rename(name);
-    setMessage(ok ? '项目已重命名。' : '重命名失败，请填写名称或检查浏览器存储。'); return ok;
+  function openEditor(t, template = null, force = false) {
+    const current = projectStore.current().workspace;
+    const existing = current.draftsByTrack?.[t] ?? (current.draft?.trackId === t ? current.draft : null);
+    if (!force && template && existing?.dirty && existing.editingTemplateId !== template.id) { setPendingEditor({t,template}); return; }
+    const next = template && (force || existing?.editingTemplateId !== template.id)
+      ? {...copy(template),editingTemplateId:template.id,dirty:false} : existing ? copy(existing) : sourceDraft(t);
+    if (t === 'drums' && !next.params) next.params = {strength:50,groove:50};
+    audition.release();
+    if (editingTrack) histories.current[editingTrack] = history;
+    captureArt(); projectStore.setDraft(next); setEditingTrack(t); setSolo(false);
+    setHistory(force || template && existing?.editingTemplateId !== template.id ? {undo:[],redo:[]} : histories.current[t] ?? {undo:[],redo:[]});
+    effects.select(t); setMessage(''); setEditBar(0);
   }
-  function changeMix(track, volume) {
-    const current = editor.getSnapshot().session;
-    const tracks = effects.getSnapshot().selectedTracks;
-    if (!tracks.length) return;
-    patch({ volumes: { ...current.volumes, ...Object.fromEntries(tracks.map(t=>[t,volume])) }, mutedTracks: { ...current.mutedTracks, ...Object.fromEntries(tracks.map(t=>[t,false])) } });
-    tracks.forEach(t=>effects.volume(t,volume));
+  function finishEditor() {
+    const continuing = audition.getTrack() ? audition.wasPlaying() : playback.isActive();
+    audition.release({resume:false});
+    histories.current[editingTrack] = history;
+    captureArt(); setEditingTrack(null); setSolo(false);
+    if (draft?.dirty) setMessage('草稿已保留，下次点乐器继续编辑。');
+    if (continuing) launch('step',null,false);
   }
-  function changeEffectPage(page) { if (effects.getSnapshot().effectPage === 'arp' && page !== 'arp') arp.stop(); effects.setPage(page); }
+  function resolvePending(save) {
+    const {t,template} = pendingEditor;
+    if (save) {
+      const previous = projectStore.current().workspace.draftsByTrack[t];
+      if (!projectStore.saveTemplate(previous,previous.name ?? '',previous.editingTemplateId)) { setMessage('模板未能保存，草稿已保留。'); return; }
+    }
+    setPendingEditor(null); openEditor(t,template,true);
+  }
+  function saveTemplate(update = false) {
+    if (!draft) return false;
+    const saved = projectStore.saveTemplate(draft, draft.name ?? '', update ? draft.editingTemplateId : null);
+    if (!saved) { setMessage('模板未能保存，当前编辑已保留。'); return false; }
+    const next = { ...copy(draft), dirty:false, name: update ? saved.name : '', ...(update ? { editingTemplateId: saved.id } : { editingTemplateId: undefined }) };
+    projectStore.setDraft(next); setSavedAt(performanceNow()); setMessage(`已保存「${saved.name}」`); return true;
+  }
+  function changeParameter(parameter, value) {
+    const params = { ...draft.params, [parameter]: value };
+    const p = getDialDrumPreset(params.strength, params.groove);
+    setEditBar(0);
+    replaceDraft({ ...draft, params, sourcePresetId: p.id, bars: copy(p.bars) }, false);
+  }
+  function beginGesture() { if (!gesture.current && draft) gesture.current = copy(draft); }
+  function endGesture() {
+    const before = gesture.current; gesture.current = null;
+    if (before && JSON.stringify(before) !== JSON.stringify(projectStore.current().workspace.draft)) setHistory(h => ({ undo: [...h.undo, before].slice(-50), redo: [] }));
+  }
+  function undo(redo = false) {
+    const from = redo ? history.redo : history.undo;
+    if (!from.length) return;
+    replaceDraft(copy(from[from.length - 1]), false, true);
+    setHistory(redo ? { undo: [...history.undo, copy(draft)], redo: history.redo.slice(0,-1) } : { undo: history.undo.slice(0,-1), redo: [...history.redo, copy(draft)] });
+  }
+  function trigger(t, id) {
+    toggleJamTemplate({projectStore,playback,audition,trackId:t,templateId:id,draft});
+  }
+  function toggleMute(t) {
+    if (audition.getTrack() === t) audition.stop();
+    const current = projectStore.current().workspace;
+    projectStore.patch({mutedTracks:{...current.mutedTracks,[t]:!current.mutedTracks[t]},volumes:{...current.volumes,[t]:current.volumes[t] <= -24 ? 0 : current.volumes[t]}});
+  }
+  function togglePlayback() {
+    if (running) { audition.stop(); effects.reset(); } else launch('step');
+  }
+  function changeInstrumentTimbre(t, timbreId) {
+    projectStore.setTimbre(t,timbreId);
+    if (playback.isActive()) launch('step',null,false);
+  }
   function pressArp(token, index) {
-    if (!playback.isReady() || automation.isRecording()) return;
-    const current = editor.getSnapshot();
-    void arp.press(token,index,current.drafts[current.editingId].timbres.melody);
+    if (playback.isReady()) void arp.press(token,index,w.timbres?.melody ?? (draft?.trackId === 'melody' ? draft.timbreId : jamCombinationSnapshot(w)?.timbres.melody));
   }
-  function toggleRecording() {
-    if (automation.isRecording()) playback.cancelRecording();
-    else { arp.stop(); const current=editor.getSnapshot(); playback.record(jamSnapshot(current.drafts[current.editingId]),current.session.bpm); }
+  function changeMix(track, value) {
+    const targets = effects.getSnapshot().selectedTracks;
+    const current = projectStore.current().workspace;
+    projectStore.patch({ volumes: { ...current.volumes, ...Object.fromEntries(targets.map(t => [t,value])) }, mutedTracks: { ...current.mutedTracks, ...Object.fromEntries(targets.map(t => [t,false])) } });
+    targets.forEach(t => effects.volume(t,value));
   }
-  function updateTimbre(track, value) {
-    if (automation.isRecording()) return;
-    arp.stop();
-    editor.edit({ timbres: { ...editor.getSnapshot().drafts[editingId].timbres, [track]: value } });
-    if (locked) launchDraft(true);
+  function changeEffectPage(next) { if (effects.getSnapshot().effectPage === 'arp' && next !== 'arp') arp.stop(); effects.setPage(next); }
+  function openProject(id) {
+    if (!projectStore.save()) return false;
+    if (!(id ? projectStore.switchTo(id) : projectStore.create())) return false;
+    audition.stop(); effects.reset(true); histories.current = {}; setEditingTrack(null); setSolo(false); setPage(0); setMessage(''); return true;
   }
-  function resetPlayback() { effects.reset(true); playback.stop(); }
-  function changeBpm(value) { if (automation.isRecording()) return; const bpm = normalizePerformanceBpm(value); patch({ bpm }); playback.setTempo(bpm); }
-  function connectHardware() { void audio.startAudio(); void hardwareInput?.onConnect(); }
-  function openExport() {
-    if (automation.isRecording()) return;
-    resetPlayback(); setMessage(''); setCounts({});
-    setExportEntries(session.sections.map(s => createExportEntry(s, genreId, profileId)));
-  }
+  useEffect(() => { audio.setJamArpeggiator(arp); return () => { playback.stop(); arp.stop(); audio.setJamArpeggiator(null); }; }, [audio, arp, playback]);
+  useEffect(() => { arp.configure(0,project.arpNotes?.join(' ') ?? ''); }, [arp, project.id, project.arpNotes]);
   useEffect(() => {
-    if (status.playingId && editor.getSnapshot().drafts[status.playingId]) editor.select(status.playingId);
-  }, [editor, status.playingId]);
-  useEffect(() => { projectStore.initialize(); }, [projectStore]);
-  useEffect(() => effects.syncMix(session.volumes, session.mutedTracks), [effects, session.volumes, session.mutedTracks]);
+    const t = solo ? audition.getTrack() : null;
+    effects.syncMix(t ? {...w.volumes,[t]:w.mutedTracks[t] || w.volumes[t] <= -24 ? 0 : w.volumes[t]} : w.volumes,
+      t ? {...w.mutedTracks,[t]:false} : w.mutedTracks);
+  }, [effects,w.volumes,w.mutedTracks,solo,audition]);
+  useEffect(() => { if (status.error) audition.release({resume:false}); }, [status.error,audition]);
   useEffect(() => {
-    const release = () => { arp.stop(); if (automation.isRecording()) playback.cancelRecording(); automation.suspend(); };
-    window.addEventListener('blur', release);
-    return () => { window.removeEventListener('blur', release); playback.stop(); effects.reset(true); };
-  }, [active, effects, playback, automation, arp]);
-  useEffect(() => { if (!inputActive || !locked || status.loading) effects.reset(); }, [effects, inputActive, locked, status.loading]);
-  useEffect(() => { arp.stop(); automation.releaseRepeats(); }, [automation, arp, hardwareInput?.status]);
+    if (!active) { audition.stop(); effects.resetHolds(); }
+    const release = () => { arp.stop(); effects.resetHolds(); };
+    window.addEventListener('blur',release); return () => window.removeEventListener('blur',release);
+  }, [active,playback,arp,effects,audition]);
   useEffect(() => {
-    if (!inputActive) return undefined;
-    const key = (e) => {
-      if (e.defaultPrevented) return;
-      const cmd = mapPerformanceKeyboard(e, templates);
-      if (cmd) { e.preventDefault(); triggerPad(cmd.trackId, templates[cmd.trackId].findIndex((p) => p?.id === cmd.templateId)); }
-      else if (e.key === ' ' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.closest?.('input,select,textarea,button,[role=slider],[contenteditable],[popover]:popover-open')) { e.preventDefault(); toggleSequence(); }
-      else if (e.key === 'Escape' && !e.target.closest?.('input,select,textarea,[contenteditable], [popover]:popover-open')) { e.preventDefault(); playback.stop(); }
+    if (!active) return;
+    const handler = e => {
+      if (e.target.closest?.('input,select,textarea,[contenteditable],dialog,[role=dialog],[popover]:popover-open')) return;
+      if (editingTrack && (e.ctrlKey || e.metaKey) && e.code === 'KeyZ') { e.preventDefault(); undo(e.shiftKey); return; }
+      if (e.target.closest?.('button,[role=slider]')) return;
+      const cmd = mapPerformanceKeyboard(e,templates);
+      if (cmd) { e.preventDefault(); trigger(cmd.trackId,cmd.templateId); }
+      else if (e.code === 'Space' && !e.repeat) { e.preventDefault(); togglePlayback(); }
+      else if (e.key === 'Escape') audition.stop();
     };
-    window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
+    window.addEventListener('keydown',handler); return () => window.removeEventListener('keydown',handler);
   });
   useLayoutEffect(() => {
-    if (!controlsRef || !inputActive) return undefined;
-    const controls = {
-      templates,
-      dispatch(command) {
-        if (command.type === 'template') triggerPad(command.trackId, templates[command.trackId].findIndex((p) => p?.id === command.templateId));
-        if (command.type === 'loop') { const s = session.sections[page * 8 + command.index]; if (s) selectSection(s.id); }
-        if (command.type === 'save') save();
-        if (command.type === 'togglePlayback') toggleSequence();
-        if (command.type === 'stop') { effects.reset(); playback.stop(); }
+    if (!controlsRef || !active) return;
+    const controls = { templates,
+      dispatch(cmd) {
         const track = effects.getSnapshot().selectedTrack;
-        if (command.type === 'selectTrack') effects.select(command.trackId, command.additive);
-        if (command.type === 'volume') changeMix(track, command.value);
-        if (command.type === 'cutoff') effects.getSnapshot().selectedTracks.forEach(t=>effects.cutoff(t, command.value));
-        if (command.type === 'effectPage') changeEffectPage(command.page);
-        if (command.type === 'recordEffects') toggleRecording();
-        if (command.type === 'reverb') effects.reverb(command.value);
-        if (['pitch','chopper','brake'].includes(command.type)) {
-          if (!command.pressed) effects.release(command.type,command.token);
-          else if (playback.isReady()) effects.press(command.type,command.token,command.value,editor.getSnapshot().session.bpm);
+        if (cmd.type === 'template') trigger(cmd.trackId,cmd.templateId);
+        if (cmd.type === 'save' && editingTrack) saveTemplate();
+        if (cmd.type === 'togglePlayback') togglePlayback();
+        if (cmd.type === 'stop') { audition.stop(); effects.reset(); }
+        if (cmd.type === 'page') setPage(Math.max(0,Math.min(pageCount-1,effectivePage+cmd.delta)));
+        if (cmd.type === 'selectTrack') effects.select(cmd.trackId,cmd.additive);
+        if (cmd.type === 'effectPage') changeEffectPage(cmd.page);
+        if (cmd.type === 'volume') changeMix(track,cmd.value);
+        if (cmd.type === 'cutoff') effects.getSnapshot().selectedTracks.forEach(t => effects.cutoff(t,cmd.value));
+        if (cmd.type === 'reverb') effects.reverb(cmd.value);
+        if (['pitch','chopper','brake'].includes(cmd.type)) {
+          if (!cmd.pressed) effects.release(cmd.type,cmd.token); else if (playback.isReady()) effects.press(cmd.type,cmd.token,cmd.value,w.bpm);
         }
-        if (command.type === 'arp') { if(command.pressed) pressArp(command.token,command.index); else arp.release(command.token); }
-        if (command.type === 'repeat') {
-          if (!command.pressed) effects.repeat.release(command.token);
-          else if (playback.isReady()) effects.repeat.press(command.token, command.division, editor.getSnapshot().session.bpm);
-        }
-        if (command.type === 'page') setPage(Math.max(0, Math.min(Math.max(0, Math.ceil(session.sections.length / 8) - 1), page + command.delta)));
+        if (cmd.type === 'repeat') { if (!cmd.pressed) effects.repeat.release(cmd.token); else if (playback.isReady()) effects.repeat.press(cmd.token,cmd.division,w.bpm); }
+        if (cmd.type === 'arp') { if (cmd.pressed) pressArp(cmd.token,cmd.index); else arp.release(cmd.token); }
       },
-      release: () => { arp.stop(); automation.releaseRepeats(); },
-      getSurface: () => ({ ...effects.getSnapshot(), arp: arp.getSnapshot(), recording: automation.getSnapshot(), selectedTrack: effects.getSnapshot().selectedTrack, volumes: effects.getSnapshot().volumes, cutoffs: effects.getSnapshot().cutoffs, repeat: effects.getSnapshot().repeats[effects.getSnapshot().selectedTrack], savedAt, storageError: message.includes('失败'), version: 4, templates, sections: session.sections, drafts, editingId, page, status, progress: playback.getProgress(), beatPhase: playback.getBeatPhase() }),
+      release: () => { arp.stop(); effects.resetHolds(); },
+      getSurface: () => ({ ...effects.getSnapshot(), version: 5, templates, selection: w.selection,
+        page: effectivePage, pageCount, sections: [], status, beatPhase: playback.getBeatPhase(), arp: arp.getSnapshot(),
+        repeat: effects.getSnapshot().repeats[effects.getSnapshot().selectedTrack], savedAt, canSave: Boolean(draft), storageError: Boolean(library.error) }),
     };
-    controlsRef.current = controls;
-    return () => { if (controlsRef.current === controls) controlsRef.current = null; };
+    controlsRef.current = controls; return () => { if (controlsRef.current === controls) controlsRef.current = null; };
   });
-  let exportLength = 0; let exportError = '';
-  try { exportLength = arrangementExportLength(exportEntries ?? [], counts); } catch (error) { exportError = error.message; }
-  return <section ref={workspaceRef} className="performance-mode jam-workspace" hidden={!active} aria-label="Jam 演奏">
+  const previewBar = Math.min(editBar,(draft?.bars.length ?? 1)-1);
+  const orderedTracks = editingTrack ? [editingTrack,...TRACKS.filter(t => t !== editingTrack)] : TRACKS;
+  const canPlay = Boolean(draft || TRACKS.some(t => w.selection[t]));
+  return <section className="performance-mode jam-workspace template-jam jam-studio" hidden={!active} aria-label="Jam 演奏" data-editing={Boolean(draft)}>
     <header className="performance-header">
       {createElement(ThemeSwitcher)}
-      {onHome ? <button className="performance-home" type="button" aria-label="返回首页" title="返回首页" disabled={recordingLocked} onClick={() => { resetPlayback(); arp.stop(); persist(); onHome(); }}>{renderIcon(Home)}</button> : null}
-      <button className="performance-connect" onClick={() => { resetPlayback(); onBack(); }}>← 创作模式</button>
+      {onHome && <button type="button" className="performance-home" aria-label="返回首页" onClick={() => { if (projectStore.save()) {audition.stop(); onHome();} }}><Home size={16}/></button>}
+      <button type="button" className="performance-connect" onClick={() => { if (projectStore.save()) {audition.stop(); onBack();} }}>← 创作模式</button>
       <div className="performance-title"><span className="performance-eyebrow">PROJECT ARRANGER</span><h1>Jam · 演奏</h1></div>
-      <label className="performance-tempo">BPM <input aria-label="演奏速度 BPM" disabled={recordingLocked} type="number" min="40" max="240" value={session.bpm} onChange={(e) => changeBpm(e.target.value)} /></label>
-      <button className="performance-connect" onClick={connectHardware}>{hardwareInput?.status === 'connected' ? 'Launchpad 已连接' : '连接 Launchpad'}</button>
-      <button className="performance-connect" disabled={recordingLocked || !session.sections.length} onClick={openExport}>导出到创作模式 →</button>
+      <label className="performance-tempo">BPM <input type="number" min="40" max="240" aria-label="演奏速度 BPM" value={w.bpm} onChange={e => { const value=Math.max(40,Math.min(240,Math.round(Number(e.target.value)||100))); projectStore.patch({bpm:value}); playback.setTempo(value); }}/></label>
+      <button type="button" className="performance-connect" onClick={() => { void audio.startAudio(); void hardwareInput?.onConnect(); }}>{hardwareInput?.status === 'connected' ? 'Launchpad 已连接' : '连接 Launchpad'}</button>
     </header>
-    <JamProjectControls project={currentProject} projects={projectLibrary.projects} disabled={recordingLocked || Boolean(exportEntries)}
-      onSave={saveProject} onNew={()=>openProject(null)} onOpen={openProject} onRename={renameProject}/>
-    <JamView active={active} session={session} drafts={drafts} editingId={editingId} draft={draft}
-      templates={templates} status={status} message={message || projectLibrary.error} playback={playback}
-      toggleSequence={toggleSequence} recordingLocked={recordingLocked}
-      selectedTrack={selectedTrack} selectedTracks={selectedTracks} selectTrack={effects.toggleTrack}
-      effectsPanel={<aside className="jam-effects" data-track={selectedTrack}><h2>现场效果</h2><p>{selectedTracks.length ? `效果轨道 · ${selectedTracks.map(t => LABELS[t]).join('、')}` : '未选择效果轨道'}</p>
-        <JamPerformanceDeck key={currentProject.id} effects={effects} arp={arp} session={session} enabled={inputActive && locked && !status.loading} recordingLocked={recordingLocked}
-          changeMix={changeMix} onPage={changeEffectPage} onArpPress={pressArp} />
-        <div className="jam-effect-recording" role="group" aria-label="效果录制">
-          <button type="button" className="performance-connect" aria-pressed={recordingLocked}
-            disabled={!recordingLocked && (status.loading || !hasSelection(draft.selection))}
-            onClick={toggleRecording}>
-            {recordingLocked ? '取消录制' : '● 录制效果'}</button>
-          <span role="status">{recording.phase === 'armed' ? (status.loading ? '正在准备声音…' : '等待录制 · 下一轮开始') : recording.phase === 'recording' ? '录制中 · 本轮结束后试听' : draft.effectAutomation ? '已录制 · 随 Loop 重放' : '录制一轮 · 保存后保留'}</span>
-          <button type="button" className="performance-connect" disabled={recordingLocked || !draft.effectAutomation}
-            onClick={() => { editor.edit({ effectAutomation: undefined }); automation.clear(editingId); }}>清除效果录制</button>
-        </div></aside>}
-      catalog={catalog} replacePad={replacePad} triggerPad={triggerPad} selectSection={selectSection} updateTimbre={updateTimbre}
-      reorderSection={(id, target, side) => { if (!locked) { editor.reorder(id, target, side); persist(); } }}
-      changeRepeat={(id, repeat) => { if (!locked) { editor.setRepeat(id, repeat); persist(); } }}
-      save={save} renameSection={(id, name) => { if (!locked) { editor.rename(id, name); persist(); } }}
-      removeSection={(id) => { if (!locked) { editor.remove(id); persist(); } }} />
-    {exportEntries && <JamExportDialog entries={exportEntries} sections={session.sections} onEntriesChange={setExportEntries}
-      onAdd={(id) => { const s = session.sections.find(s => s.id === id); if (s) setExportEntries([...exportEntries, createExportEntry(s, genreId, profileId)]); }}
-      counts={counts} onCountsChange={setCounts} error={exportError || message} length={exportLength} onClose={() => { setExportEntries(null); setMessage(''); }} onConfirm={() => {
-        try { const result = createArrangementImport(session, exportEntries, counts); resetPlayback(); onImport(result); setExportEntries(null); }
-        catch (error) { setMessage(error.message); }
-      }} />}
+    <JamProjectControls project={project} projects={library.projects} onSave={() => setMessage(projectStore.save() ? '项目已保存。' : '项目保存失败，草稿已保留。')}
+      onNew={() => openProject(null)} onOpen={openProject} onRename={projectStore.rename}/>
+    <div ref={workbench} className="template-jam-workbench studio-workbench">
+      <main className="studio-main">
+        <div className="studio-heading"><div><span className="performance-eyebrow">YOUR SOUND, YOUR WAY</span><h2>{draft ? `${LABELS[editingTrack]} · 乐句编辑` : '乐句工作台'}</h2></div><p>{draft ? '切换乐器，草稿会保留' : '单击选择 / 取消 · 点笔编辑'}</p>{draft && <button type="button" className="studio-text-button studio-collapse-compact" onClick={finishEditor}><ArrowLeft size={13}/> 收起编辑</button>}<button type="button" className="studio-effects-toggle" aria-expanded={showEffects} aria-controls="jam-studio-effects" onClick={() => setShowEffects(open => !open)}>现场效果</button></div>
+        <div className="studio-gallery" aria-label="四轨乐器与模板">{orderedTracks.map(t => <section className="studio-instrument" data-track={t} data-active={editingTrack === t} key={t} aria-label={`${LABELS[t]}模板`}>
+          <div className="studio-instrument-top"><button type="button" className="studio-instrument-open" aria-label={`创作${LABELS[t]}模板`} onClick={() => openEditor(t)} aria-expanded={editingTrack === t}>
+            <span className="studio-instrument-art" data-art-track={t} ref={node => {artNodes.current[t]=node;}}><img src={ART[t]} alt="" draggable={false} decoding="async"/></span>
+            {draft && <span className="studio-instrument-label"><strong>{LABELS[t]}</strong><small>{w.templates[t].length ? `${w.templates[t].length} 个乐句` : '开始创作'}</small></span>}
+          </button>{!draft && <div className="studio-instrument-label"><strong>{LABELS[t]}</strong><label className="studio-instrument-timbre" title="切换音色"><select aria-label={`${LABELS[t]}音色`} value={instrumentTimbre(t)} onChange={e => changeInstrumentTimbre(t,e.target.value)}>{TIMBRE_OPTIONS[t].map(id => <option key={id} value={id}>{timbreLabel(id)}</option>)}</select></label></div>}<button type="button" className="studio-track-mute" aria-label={`${w.mutedTracks[t] ? '取消静音' : '静音'}${LABELS[t]}`} aria-pressed={w.mutedTracks[t]} onClick={() => toggleMute(t)} title={w.mutedTracks[t] ? '取消静音' : '静音'}>{w.mutedTracks[t] ? <VolumeX size={14}/> : <Volume2 size={14}/>}</button></div>
+          <div className="studio-template-list" aria-label={`${LABELS[t]}已保存乐句`}>{w.templates[t].length ? w.templates[t].map(p => <JamTemplateCard key={`${project.id}:${p.id}:${p.name}`} template={p} selected={w.selection[t] === p.id}
+            playing={running && !w.mutedTracks[t] && (!solo || editingTrack === t)} onSelect={() => trigger(t,p.id)} onEdit={() => openEditor(t,p)} onRemove={() => setDeleteTarget(p)}/>) : <span className="studio-template-empty">保存的乐句会出现在这里</span>}</div>
+        </section>)}</div>
+        {draft && <section className="studio-editor" key={editingTrack} data-track={editingTrack} aria-label={`${LABELS[editingTrack]}乐句编辑`}>
+          <header className="studio-editor-heading"><div><strong>{LABELS[editingTrack]} · 乐句编辑</strong><span>{draft.dirty ? '草稿' : draft.editingTemplateId ? '已保存乐句' : '新的声音'}</span></div><button type="button" className="studio-text-button" onClick={finishEditor}><ArrowLeft size={13}/> 收起编辑</button></header>
+          <div className="studio-editor-controls">
+            <div className="studio-phrase-settings"><label>名称<input aria-label="模板名称" value={draft.name ?? ''} placeholder={`${LABELS[editingTrack]}新乐句`} maxLength={80} onChange={e => projectStore.setDraft({...draft,name:e.target.value,dirty:true})}/></label>
+              {editingTrack !== 'drums' && <label>起点<select aria-label={`${LABELS[editingTrack]}乐句起点`} value={draft.sourcePresetId} onChange={e => replaceDraft({...sourceDraft(editingTrack,e.target.value,draft.timbreId),name:draft.name,editingTemplateId:draft.editingTemplateId})}>{catalog[editingTrack].map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}
+            </div>
+            {editingTrack === 'drums' && <div className="studio-editor-knobs"><RotaryKnob label="强度" value={draft.params?.strength ?? 50} onBegin={beginGesture} onEnd={endGesture} onChange={v => changeParameter('strength',v)}/><RotaryKnob label="律动" value={draft.params?.groove ?? 50} onBegin={beginGesture} onEnd={endGesture} onChange={v => changeParameter('groove',v)}/></div>}
+          </div>
+          <div className="studio-grid-toolbar"><span>{editingTrack === 'drums' ? '鼓点音序器' : '乐句预览'}</span><div className="studio-bar-pager"><button type="button" aria-label="上一小节" disabled={previewBar === 0} onClick={() => setEditBar(previewBar-1)}><ChevronLeft size={13}/></button><span>{previewBar+1} / {draft.bars.length} 小节</span><button type="button" aria-label="下一小节" disabled={previewBar+1 === draft.bars.length} onClick={() => setEditBar(previewBar+1)}><ChevronRight size={13}/></button></div><div className="studio-undo"><button type="button" aria-label="撤销模板修改" disabled={!history.undo.length} onClick={() => undo()}><Undo2 size={14}/></button><button type="button" aria-label="重做模板修改" disabled={!history.redo.length} onClick={() => undo(true)}><Redo2 size={14}/></button></div></div>
+          {editingTrack === 'drums' ? <div className="studio-drum-grid"><DrumStepGrid renderStep={(row,stepNumber) => {
+            const step=stepNumber-1,cell=draft.bars[previewBar][step],hits=cell?.drumHits?.filter(h => h.instrument === row.id) ?? [];
+            const on=getDrumsCellInstruments(cell).includes(row.id);
+            const label={kick:'底鼓',snare:'军鼓',hihat:'踩镲'}[row.id];
+            return <button type="button" key={`${row.id}:${step}`} className={`drum-step ${on ? 'active' : ''} ${stepNumber%4 === 0 ? 'beat-end' : ''}`}
+              data-instrument={row.id} data-step={step} data-playing={running && (status.bar ?? 0)%draft.bars.length === previewBar && status.step === step} aria-label={`${label}第${step+1}格`} aria-pressed={on}
+              onClick={() => { const bars=copy(draft.bars); bars[previewBar][step]=toggleDrumsCellInstrument(cell,row.id); replaceDraft({...draft,bars}); }}>
+              {hits.length > 1 && <span className="studio-hit-count" aria-label={`${hits.length}次击打`}>{hits.length}</span>}
+            </button>;
+          }}/></div> : <JamPhrasePreview draft={draft} bar={previewBar} step={running && (status.bar ?? 0)%draft.bars.length === previewBar ? status.step : null}/>}
+          <footer className="studio-editor-actions"><button type="button" className="studio-solo" aria-label={`独听${LABELS[editingTrack]}`} aria-pressed={solo} onClick={() => audition.toggle(draft)}>{solo ? <Square size={12}/> : <Play size={12}/>} {solo ? '停止独听' : `独听${LABELS[editingTrack]}`}</button>
+            <div>{draft.editingTemplateId && <button type="button" className="studio-text-button" onClick={() => saveTemplate(true)}>保存修改</button>}<button type="button" className="studio-save" onClick={() => saveTemplate()}><Save size={13}/>{draft.editingTemplateId ? '另存新模板' : '保存新模板'}</button></div></footer>
+        </section>}
+      </main>
+      <aside id="jam-studio-effects" className="jam-effects studio-effects" data-open={showEffects} data-track={fx.selectedTrack} onKeyDown={e => { if (e.key === 'Escape') { setShowEffects(false); workbench.current?.querySelector('.studio-effects-toggle')?.focus(); } }}><header><span className="performance-eyebrow">LIVE EFFECTS</span><h2>现场效果</h2><button type="button" className="studio-effects-close" aria-label="收起现场效果" onClick={() => { setShowEffects(false); workbench.current?.querySelector('.studio-effects-toggle')?.focus(); }}>×</button></header><div className="effect-targets" role="group" aria-label="效果目标轨道">{TRACKS.map(t => <button type="button" key={t} aria-pressed={fx.selectedTracks.includes(t)} onClick={() => effects.toggleTrack(t)}>{LABELS[t]}</button>)}</div>
+        <JamPerformanceDeck key={project.id} effects={effects} arp={arp} session={w} enabled={active && running && !status.loading} recordingLocked={false} changeMix={changeMix} onPage={changeEffectPage} onArpPress={pressArp} onArpConfigure={projectStore.configureArp}/>
+      </aside>
+    </div>
+    <footer className="template-jam-transport studio-transport"><button type="button" className="template-play-button" aria-label={running ? '停止组合' : '播放组合'} disabled={!running && !canPlay} onClick={togglePlayback}>{running ? <Square size={14}/> : <Play size={14}/>} {running ? '停止' : draft ? '试听组合' : '播放组合'}</button><span role="status">{library.error || status.error || (status.loading ? '正在准备声音…' : status.pendingId ? '等待节拍切换' : message)}</span>
+      <span className="template-page-controls">Launchpad {effectivePage+1}/{pageCount}<button type="button" aria-label="上一页模板" disabled={!effectivePage} onClick={() => setPage(effectivePage-1)}>‹</button><button type="button" aria-label="下一页模板" disabled={effectivePage+1>=pageCount} onClick={() => setPage(effectivePage+1)}>›</button></span></footer>
+    {pendingEditor && <TemplateDialog titleId="replace-draft-title" onClose={() => setPendingEditor(null)}><h2 id="replace-draft-title">保留当前草稿？</h2><p>这条轨道还有未保存为模板的修改。</p><button type="button" onClick={() => resolvePending(true)}>先保存再编辑</button><button type="button" onClick={() => resolvePending(false)}>放弃草稿并编辑</button><button type="button" onClick={() => setPendingEditor(null)}>取消</button></TemplateDialog>}
+    {deleteTarget && <TemplateDialog titleId="delete-template-title" onClose={() => setDeleteTarget(null)}><h2 id="delete-template-title">删除「{deleteTarget.name}」？</h2><p>已放入创作时间线的乐句会保留。</p><button type="button" onClick={() => { projectStore.removeTemplate(deleteTarget.trackId,deleteTarget.id); setDeleteTarget(null); if (running) launch('step',draft,false); }}>删除</button><button type="button" onClick={() => setDeleteTarget(null)}>取消</button></TemplateDialog>}
   </section>;
 }

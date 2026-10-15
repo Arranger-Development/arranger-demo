@@ -215,6 +215,7 @@ function BottomEditor({
       activeTrackId,
       activeTrackName,
       activeTrackType,
+      tutorialLocked,
       canPageBars,
       clipName: selectedClipName,
       onNextBar,

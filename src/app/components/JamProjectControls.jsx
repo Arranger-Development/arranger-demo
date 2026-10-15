@@ -13,7 +13,7 @@ export default function JamProjectControls({ project, projects, disabled, onSave
         <label>项目名称<input aria-label="Jam 项目名称" name="name" required maxLength={80} defaultValue={project.name}/></label>
         <button type="submit">重命名</button>
       </form>
-      <small>保存在当前浏览器。保存项目会保留草稿；保存段落才加入 Loop 列表。</small>
+      <small>保存在当前浏览器。项目包含我的模板、当前组合和编辑草稿。</small>
     </div>
     <button type="button" className="performance-connect" disabled={disabled} onClick={onSave}>保存项目</button>
     <button type="button" className="performance-connect" disabled={disabled} onClick={onNew}>新建项目</button>

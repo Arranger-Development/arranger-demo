@@ -1,3 +1,5 @@
+import UserTemplatePicker from './UserTemplatePicker.jsx';
+void UserTemplatePicker;
 import {
   SlidersHorizontal,
   X,
@@ -313,6 +315,7 @@ function MelodyEditor({
         </div>
 
         <div className="tools">
+          {createElement(UserTemplatePicker, { trackId: 'melody', disabled: tutorialLocked })}
           <button
             className={[
               'btn-template-groove',

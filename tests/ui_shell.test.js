@@ -667,8 +667,10 @@ test('timeline add clip controls switch the persistent editor by track row', asy
   assert.match(melodyEditorSource, /trackId = 'melody'/);
   assert.match(trackEditorPlaceholderSource, /TrackBarPager/);
   assert.match(trackEditorPlaceholderSource, /trackId:\s*activeTrackId/);
-  assert.match(drumSequencerSource, /drum-step-groups/);
-  assert.match(drumSequencerSource, /drum-step-group/);
+  const drumGridSource = await readFile(new URL('../src/app/components/DrumStepGrid.jsx', import.meta.url), 'utf8');
+  assert.match(drumSequencerSource, /DrumStepGrid/);
+  assert.match(drumGridSource, /drum-step-groups/);
+  assert.match(drumGridSource, /drum-step-group/);
   assert.match(drumSequencerSource, /DRUM SEQUENCER - BAR/);
   assert.doesNotMatch(drumSequencerSource, /drum-bar-indicator/);
   assert.doesNotMatch(drumSequencerSource, /\/ 8/);

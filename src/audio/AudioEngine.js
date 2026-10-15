@@ -1630,7 +1630,7 @@ export default class AudioEngine {
           this.playbackCycleChanges.push({ time, totalBars });
           this.playbackTotalBars = totalBars;
         }
-        adapter = createMatrixPlaybackAdapter(nextSnapshot.matrix, { totalBars });
+        adapter = createMatrixPlaybackAdapter(nextSnapshot.phraseBars ? { matrix: nextSnapshot.matrix, phraseBars: nextSnapshot.phraseBars } : nextSnapshot.matrix, { totalBars });
         this.matrixAdapter = adapter;
         snapshot = nextSnapshot;
       }

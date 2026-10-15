@@ -5,7 +5,7 @@ import { renderIcon } from './icons.js';
 const ENTRIES = [
   { id: 'ai', title: 'AI 入口', description: '用文字、音频、视频或图片\n获取编曲建议', icon: Sparkles },
   { id: 'creation', title: '创作入口', description: '自由编排轨道与音符\n从你的想法开始', icon: Music2 },
-  { id: 'jam', title: '演奏入口', description: '组合 Loop，实时演奏\n进入 Jam 模式', icon: LayoutGrid },
+  { id: 'jam', title: '演奏入口', description: '创作乐句，组合演奏\n进入 Jam 模式', icon: LayoutGrid },
 ];
 
 export function EntryHome({ onEnter }) {

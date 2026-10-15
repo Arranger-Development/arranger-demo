@@ -10,13 +10,15 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
   const emit = (extra = {}) => notify({ mode: audible?.mode ?? mode, loading, requestedId: current?.id ?? null,
     playingId: audible?.id ?? null, pendingId: pending?.id ?? null, cycle: audible?.cycle ?? cycle, ...extra });
   const targetFor = snapshot => ({ id: snapshot.id, snapshot: structuredClone(snapshot), repeat: loopRepeat(snapshot) });
-  const makeSource = () => ({ matrix: current.snapshot.matrix, totalBars: current.snapshot.totalBars, stepOffset: startStep });
+  const makeSource = () => ({ matrix: current.snapshot.matrix, totalBars: current.snapshot.totalBars, phraseBars: current.snapshot.phraseBars, stepOffset: startStep });
   function stop() {
     generation++; automation?.stop(); recordingStopAt = null; mode = 'stopped'; loading = false; current = pending = audible = null; sequence = [];
     void audio.stop(); audio.stopAllVoices(); audio.resetPerformanceEffects?.(); emit();
   }
   function change(target, absoluteStep) {
-    recordingStopAt = null; current = target; startStep = absoluteStep; cycle = 1;
+    recordingStopAt = null; current = target;
+    if (!target.preservePhase) startStep = absoluteStep;
+    cycle = Math.floor((absoluteStep - startStep) / (target.snapshot.totalBars * 16)) + 1;
     if (target.nextMode) { mode = target.nextMode; if (mode === 'jam') sequence = []; }
     sourceSnapshot = makeSource();
   }
@@ -44,7 +46,9 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
     automation?.schedule({ ...scheduled, absoluteStep, time, bpm });
     const request = generation;
     return { ...sourceSnapshot, releaseVoices: absoluteStep === startStep,
-      onAudible: () => { if (request !== generation) return; audible = scheduled; automation?.audible(scheduled, absoluteStep); loading = false; emit(); } };
+      onAudible: () => { if (request !== generation) return; audible = scheduled; automation?.audible(scheduled, absoluteStep); loading = false;
+        const localStep = absoluteStep - scheduled.startStep;
+        emit({ bar: Math.floor(localStep / 16) % scheduled.snapshot.totalBars, step: localStep % 16 }); } };
   }
   async function start(nextMode, targets, tempo, record = false) {
     stop(); const request = ++generation;
@@ -90,7 +94,7 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
     },
     cancelRecording() { automation?.cancelTake(); if (current) current.repeat = previousRepeat; recordingStopAt = null; },
     setTempo(value) { bpm = value; audio.setTempo(value); },
-    launch(snapshot, tempo, { edit = false } = {}) {
+    launch(snapshot, tempo, { edit = false, quantize = 'bar', preservePhase = false } = {}) {
       if (automation?.isRecording()) return;
       if (!snapshot) { stop(); return; }
       const target = targetFor(snapshot);
@@ -100,7 +104,11 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
       automation?.resume();
       const nextMode = edit && mode === 'sequence' ? 'sequence' : 'jam';
       if (edit && mode === 'sequence') sequence = sequence.map(item => item.id === target.id ? target : item);
-      pending = { ...target, nextMode, at: pending?.id === target.id ? pending.at : (Math.floor(Math.max(-1, lastStep) / 16) + 1) * 16 };
+      const quantum = quantize === 'step' ? 1 : 16;
+      const nextBoundary = (Math.floor(Math.max(-1, lastStep) / quantum) + 1) * quantum;
+      // A step edit (including deselection) must not inherit a queued bar switch's delay.
+      const at = pending?.id === target.id ? edit && quantize === 'step' ? Math.min(pending.at,nextBoundary) : pending.at : nextBoundary;
+      pending = { ...target, nextMode, preservePhase, at };
       emit();
     },
     sequence(snapshots, tempo) {

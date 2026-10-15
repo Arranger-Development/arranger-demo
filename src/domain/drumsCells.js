@@ -59,6 +59,12 @@ function createDrumsCell(instruments, options = {}) {
   const cell = { instruments: ordered };
   if (Object.keys(velocities).length) cell.velocities = velocities;
   if (Object.keys(timingOffsets).length) cell.timingOffsets = timingOffsets;
+  if (Array.isArray(options.drumHits)) {
+    cell.drumHits = options.drumHits.filter(hit => selected.has(hit.instrument)).map(hit => ({ ...hit }));
+    for (const instrument of ordered) if (!cell.drumHits.some(hit => hit.instrument === instrument)) {
+      cell.drumHits.push({ instrument, offsetSteps: 0, durationSteps: 1, velocity: 1 });
+    }
+  }
   return cell;
 }
 
@@ -66,6 +72,7 @@ function getDrumsCellFeelOptions(cell) {
   return {
     timingOffsets: cell?.timingOffsets,
     velocities: cell?.velocities,
+    drumHits: cell?.drumHits,
   };
 }
 

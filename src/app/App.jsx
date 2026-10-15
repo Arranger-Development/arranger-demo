@@ -1,3 +1,5 @@
+import { JamTemplateContext } from './JamTemplateContext.js';
+import { getJamTemplateProjects, applyUserTemplate } from './jamTemplateProjects.js';
 import { getChordCellNotes, toggleChordNoteCell } from '../domain/chordCells.js';
 import { getProjectExtensionError, getTimelineBars, getTotalBars } from '../domain/projectLength.js';
 import {
@@ -207,6 +209,7 @@ function createTrackActionScope(state, trackId = state.activeTrackId) {
 
 // JSX components are not counted as references by the project lint parser.
 void PerformanceMode;
+void JamTemplateContext;
 
 export default function App({
   genreId = 'pop',
@@ -224,6 +227,8 @@ export default function App({
   const performanceControlsRef = useRef(null);
   const [performanceVisited, setPerformanceVisited] = useState(initialView !== 'creation');
   const bpm = useMusicStore((state) => state.bpm);
+  const [jamTemplateStore] = useState(() => getJamTemplateProjects(genreId, performanceProfileId, bpm));
+  useEffect(() => { jamTemplateStore.initialize(); }, [jamTemplateStore]);
   const rootKey = useMusicStore((state) => state.rootKey);
   const scale = useMusicStore((state) => state.scale);
   const currentBar = useMusicStore((state) => state.currentBar);
@@ -3038,28 +3043,19 @@ export default function App({
   const appStyle = editorHeightPx === null ? undefined : {
     '--app-editor-height': `${editorHeightPx}px`,
   };
-  const importPerformance = useCallback((snapshot) => {
+  const applySavedTemplate = useCallback((template) => {
     withUndoCheckpoint(() => {
       handleStop();
-      audioEngine.stopAllVoices();
-      clearTutorialAutoAdvanceTimer();
-      clearClipClipboardState();
-      clearTimelineSelectionPlayback();
-      setTimelineSelection(null);
-      setLaunchpadChordHarmonyTarget(null);
-      setTutorialModeActive(false);
-      setTutorialVisible(false);
-      setTutorialPanelState('closed');
-      useMusicStore.setState(snapshot);
+      const current = useMusicStore.getState();
+      const destination = getTrackType(current, current.activeTrackId) === template.trackId ? current.activeTrackId : template.trackId;
+      useMusicStore.setState(applyUserTemplate(current, template, current.selectedBar, destination));
     });
-    setPerformanceActive(false);
-    window.requestAnimationFrame(() => {
-      const timeline = document.querySelector('.timeline-col');
-      if (timeline) timeline.scrollLeft = 0;
-      document.querySelector('.clip.selected')?.focus();
-    });
-  }, [withUndoCheckpoint, handleStop, clearClipClipboardState, clearTimelineSelectionPlayback,
-    setTutorialModeActive, setTutorialVisible, setTutorialPanelState]);
+  }, [withUndoCheckpoint, handleStop]);
+  const hasTemplateDestinationContent = (template) => {
+    const current = useMusicStore.getState();
+    const destination = getTrackType(current, current.activeTrackId) === template.trackId ? current.activeTrackId : template.trackId;
+    return template.bars.some((_, i) => current.matrix[destination]?.[current.selectedBar + i]?.some(Boolean));
+  };
   function enterPerformance() {
     handleStop();
     audioEngine.stopAllVoices();
@@ -3071,7 +3067,7 @@ export default function App({
   }
 
   return (
-    <>
+    <JamTemplateContext.Provider value={{ store: jamTemplateStore, applyTemplate: applySavedTemplate, hasTemplateDestinationContent, preparePreview: handleStop }}>
     <div
       className={`${appClassName}${performanceActive ? ' performance-arranger-hidden' : ''}`}
       inert={performanceActive ? true : undefined}
@@ -3439,12 +3435,12 @@ export default function App({
       profileId={performanceProfileId}
       initialBpm={bpm}
       onHome={onHome ? () => { handleStop(); onHome(); } : undefined}
-      onImport={importPerformance}
+      projectStore={jamTemplateStore}
       onBack={() => {
         setPerformanceActive(false);
         window.requestAnimationFrame(() => document.querySelector('.performance-entry')?.focus());
       }}
     /> : null}
-    </>
+    </JamTemplateContext.Provider>
   );
 }

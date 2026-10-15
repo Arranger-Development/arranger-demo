@@ -1,0 +1,27 @@
+{
+  "generator": "built-in image_gen",
+  "date": "2026-10-15",
+  "transparent_background": true,
+  "assets": [
+    {
+      "file": "drums-v1.png",
+      "references": [],
+      "prompt": "Use case: product-mockup. Create ONE premium isolated product-render asset for a music-making desktop app, the DRUMS instrument. Subject: a compact elegant acoustic drum kit with bass drum, small snare and a single hi-hat, complete recognizable musical equipment, no person. Three-quarter elevated camera, coherent realistic product photography rendered in 3D, beautiful warm dark walnut drum shells, brushed nickel metal hardware, cream drum skins, restrained materials and soft studio lighting. No logos, no lettering, no text, no watermark, no surrounding scene, no floor or pedestal, no colored square or border. Center the full kit with generous clear margins on all sides in a square composition. All parts must remain inside the frame. Truly transparent background and natural clean antialiased alpha edges. The asset must stay legible both on warm ivory and dark brown app surfaces; soft neutral rim lighting, low contrast small contact shadow only, no harsh glow. It will be displayed at about 170px wide and shrink smoothly to a 52px thumbnail: use a clear silhouette, few objects, no tiny clutter. This is the first of four matching assets: drums, electric piano, electric bass, analog synthesizer. Produce only the drums asset."
+    },
+    {
+      "file": "chord-v1.png",
+      "references": ["drums-v1.png"],
+      "prompt": "Use case: product-mockup. Create ONE premium transparent product-render app asset: an elegant compact vintage electric piano, the CHORDS instrument. Match the restrained realistic studio-render quality and warm walnut + brushed metal + cream palette of the attached drum asset, but generate a separate instrument. Subject: a recognizable vintage electric piano, cream and black keys, gently rounded charcoal upper casing, warm walnut side cheeks, very minimal front controls. No stool, cables, stand, person, logos or lettering. Three-quarter elevated view, keys facing viewer, full keyboard visible. Centered square composition with comfortable clear margins; instrument should fill most of width, use a compact 37-key keyboard shape rather than an extremely long keyboard so silhouette stays strong at 170px and 52px. Soft neutral studio lighting, refined real materials, no strong colored lighting or glow. Truly transparent background, clean alpha edges, no floor, no square frame, no backdrop, no floating text, no watermark. This must look excellent both on warm ivory and dark brown UI backgrounds. Only the electric piano, do not include drums or other instruments from the reference."
+    },
+    {
+      "file": "bass-v1.png",
+      "references": ["drums-v1.png", "chord-v1.png"],
+      "prompt": "Use case: product-mockup. Generate ONE separate matching transparent instrument asset for a premium desktop music application: a beautiful FOUR-STRING ELECTRIC BASS GUITAR. Match the attached drum kit and electric piano in realistic studio-render craftsmanship, warm walnut wood, brushed nickel metal, cream accents, softly lit surfaces. Show the full bass at a pleasing diagonal from bottom left body to upper right headstock in a square image, three-quarter face view, compact broad-bodied silhouette, all four tuning pegs and the entire neck inside the canvas, comfortable clear margins. No stand, amplifier, cables, person, text, logos, watermark, floor, scene, border or backdrop. Genuine transparent background with clean alpha edges. Balanced studio lighting and quiet neutral highlights so it works on both ivory and dark brown backgrounds; small soft shadow only, no bright colored glows. The asset will be rendered at about 170px wide and shrink to 52px, so emphasize recognizable silhouette rather than tiny detailing. Only this bass guitar, do not include the reference instruments."
+    },
+    {
+      "file": "melody-v1.png",
+      "references": ["drums-v1.png", "chord-v1.png"],
+      "prompt": "Use case: product-mockup. Create ONE separate matching transparent product-render asset for the MELODY instrument of a premium music desktop app: an elegant compact ANALOG SYNTHESIZER. Coordinate the realistic render quality, walnut side cheeks, brushed metal and cream keys with the attached vintage electric piano and drum-kit assets. Differentiate it from the piano: compact 25-key synthesizer with a sloping dark charcoal control panel, 2 orderly rows of a few beautiful black/silver knobs, restrained muted amber indicators, expressive pitch/mod wheels. Three-quarter elevated camera, entire instrument visible in a square composition with comfortable transparent margins, clear silhouette. Photoreal product render, beautiful real materials, soft neutral studio lighting, low soft shadow. No text or legends, no logos, no watermark, no cables, stand, person, floor, pedestal, background scene, colored rectangle or frame. True transparent background with clean alpha edges. Must read clearly at 170px and remain recognizable as a 52px thumbnail, on warm ivory and dark brown app backgrounds. Produce only the synthesizer; do not include reference instruments."
+    }
+  ]
+}

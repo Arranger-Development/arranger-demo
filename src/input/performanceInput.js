@@ -60,14 +60,14 @@ export function createPerformanceMidiInput() {
           command = { type: 'selectTrack', trackId: PERFORMANCE_TRACKS[JAM_TRACK_CC.indexOf(number)], additive };
         }
         if ([49,39,29].includes(number)) command = { type: 'effectPage', page: JAM_EFFECT_PAGES[[49,39,29].indexOf(number)] };
-        if (number === 19) command = { type: 'recordEffects' };
+        if (number === 19 && surface.version !== 5) command = { type: 'recordEffects' };
         if (number === 93 || number === 94) command = { type: 'page', delta: number === 93 ? -1 : 1 };
         if (number === 97) command = { type: 'save' };
         if (number === 98) command = { type: 'togglePlayback' };
       } else {
         const row = 8 - Math.floor(number / 10), column = number % 10 - 1;
         if (row >= 0 && row < 4 && column >= 0 && column < 8) command = templateCommand(templates, PERFORMANCE_TRACKS[row], column);
-        if (number >= 11 && number <= 18) command = { type: 'loop', index: number - 11 };
+        if (number >= 11 && number <= 18 && surface.version !== 5) command = { type: 'loop', index: number - 11 };
         if (number >= 21 && number <= 23) command = { type: 'repeat', token, division: [4,8,16][number-21], pressed: true };
         if (number >= 24 && number <= 27) command = { type: 'chopper', token, value: [4,8,16,32][number-24], pressed: true };
         if (number === 28) command = { type: 'brake', token, value: 1, pressed: true };

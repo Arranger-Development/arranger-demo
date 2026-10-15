@@ -1,4 +1,6 @@
 import {
+  useEffect,
+  useId,
   useRef,
   useState,
 } from 'react';
@@ -16,7 +18,10 @@ import {
 } from '../multimodalRecommendation.js';
 import { MULTIMODAL_INPUT_MODES, MULTIMODAL_TEXT_LIMIT, getMultimodalAnalysisStages, validateMultimodalInput } from '../multimodalInput.js';
 import { EntryShell } from './EntryShell.jsx';
-import { BpmControl } from './BpmControl.jsx';
+import RotaryKnob from './RotaryKnob.jsx';
+import KeyDial from './KeyDial.jsx';
+import TemplateDialog from './TemplateDialog.jsx';
+import './resultsLayout.css';
 import { TRACK_ICONS, renderIcon } from './icons.js';
 
 const TRACK_RECOMMENDATION_COPY = Object.freeze({
@@ -266,6 +271,29 @@ function TrackRecommendationPicker({ onTrackToggle, selectedTrackIds, timbreByTr
   </div>;
 }
 
+function ResultExcerpt({ text, title }) {
+  const paragraph = useRef(null);
+  const titleId = useId();
+  const [clipped, setClipped] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    const node = paragraph.current;
+    const measure = () => setClipped(node.scrollHeight > node.clientHeight + 1);
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    measure();
+    return () => observer.disconnect();
+  }, [text]);
+  return <>
+    <p ref={paragraph} className="entry-result-excerpt">{text}</p>
+    {clipped && <button type="button" className="entry-excerpt-expand" aria-label={`展开查看${title}`} onClick={() => setExpanded(true)}>展开查看</button>}
+    {expanded && <TemplateDialog titleId={titleId} className="entry-copy-dialog" onClose={() => setExpanded(false)}>
+      <h2 id={titleId}>{title}</h2><p>{text}</p><button type="button" onClick={() => setExpanded(false)}>关闭</button>
+    </TemplateDialog>}
+  </>;
+}
+void [ResultExcerpt, TemplateDialog];
+
 function ResultsView({ bpm, file, kind, onApply, onBpmChange, onRecommendationTrackToggle, previewUrl, selections, textPrompt }) {
   return <div className="entry-results-body">
     <div className="entry-results-heading">
@@ -282,20 +310,18 @@ function ResultsView({ bpm, file, kind, onApply, onBpmChange, onRecommendationTr
       <div className="entry-results-copy">
         <article>
           <h2>{kind === 'text' ? '文字描述' : kind === 'audio' ? '音频素材' : '画面描述'}</h2>
-          <p>{kind === 'text' ? textPrompt : kind === 'audio' ? `已选择音频：${file?.name ?? ''}` : '地面略微潮湿，刚下过雨，几个滑板青年悠闲地在街头漫步，穿着打扮符合日式街头潮流'}</p>
+          <ResultExcerpt title={kind === 'text' ? '文字描述' : kind === 'audio' ? '音频素材' : '画面描述'} text={kind === 'text' ? textPrompt : kind === 'audio' ? `已选择音频：${file?.name ?? ''}` : '地面略微潮湿，刚下过雨，几个滑板青年悠闲地在街头漫步，穿着打扮符合日式街头潮流'}/>
         </article>
         <article>
           <h2>曲风描述</h2>
-          <p>{kind === 'text' || kind === 'audio' ? '演示方案采用温暖、柔和的 City Pop 音色，中速偏慢的节奏搭配电钢琴、圆润低音与轻盈的合成器旋律。' : '整体应接近City Pop质感，音色听起来温暖、柔和；节奏中速偏慢，听起来悠闲舒缓的同时有较强的律动感，符合图中人物穿着的潮流感和街头感；旋律应偏向轻松明亮，同时有一定都市霓虹的现代感'}</p>
+          <ResultExcerpt title="曲风描述" text={kind === 'text' || kind === 'audio' ? '演示方案采用温暖、柔和的 City Pop 音色，中速偏慢的节奏搭配电钢琴、圆润低音与轻盈的合成器旋律。' : '整体应接近City Pop质感，音色听起来温暖、柔和；节奏中速偏慢，听起来悠闲舒缓的同时有较强的律动感，符合图中人物穿着的潮流感和街头感；旋律应偏向轻松明亮，同时有一定都市霓虹的现代感'}/>
         </article>
       </div>
     </section>
     <div className="entry-results-settings">
       <section className="entry-results-tempo" aria-labelledby="entry-tempo-title">
-        <h2 id="entry-tempo-title">速度和节奏</h2>
-        <p className="entry-tempo-description">中速偏慢 <span aria-hidden="true">|</span> 4/4拍</p>
-        <BpmControl idPrefix="recommendation-bpm" unit="bpm" value={bpm} onChange={onBpmChange} />
-        <p className="entry-results-help">4/4拍，节奏设计密集且律动感强</p>
+        <div className="entry-tempo-heading"><h2 id="entry-tempo-title">速度与调性</h2><span>中速偏慢 · 4/4拍</span></div>
+        <div className="ai-music-knobs"><RotaryKnob label="BPM" value={bpm} min={40} max={240} step={1} onChange={onBpmChange}/><KeyDial/></div>
       </section>
       <section className="entry-results-instruments" aria-labelledby="entry-instruments-title">
         <div className="entry-instruments-heading"><h2 id="entry-instruments-title">乐器搭配</h2><span>点击选择 · 至少保留一条轨道</span></div>
@@ -349,7 +375,7 @@ function MultimodalFlowScreen({
 }
 
 // JSX component references are not marked as reads by this repository's lint parser.
-void BpmControl;
+void [RotaryKnob, KeyDial];
 void MediaPreview;
 void UploadView;
 void AnalyzingView;

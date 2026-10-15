@@ -70,8 +70,8 @@ function createTempoTrack(bpm, endTick) {
 }
 
 function durationToTicks(event) {
-  if (Number.isInteger(event.durationSteps) && event.durationSteps > 0) {
-    return event.durationSteps * MIDI_TICKS_PER_STEP;
+  if (Number.isFinite(event.durationSteps) && event.durationSteps > 0) {
+    return Math.max(1, Math.round(event.durationSteps * MIDI_TICKS_PER_STEP));
   }
 
   const duration = event.duration ?? '16n';

@@ -77,6 +77,16 @@ function fixture() {
   const controller=createSessionPlayback(audio,n=>notices.push(n));
   return {controller,notices,audio,tick(step){absolute=step;const value=options.playbackSource(step,step*.15);value.onAudible?.();return value;},async ready(){await new Promise(r=>setImmediate(r));}};
 }
+test('live template edits update on the next sixteenth without resetting musical phase or transport', async () => {
+  const f=fixture(); let plays=0; const play=f.audio.play;
+  f.audio.play=async options=>{plays++;return play(options);};
+  const options={edit:true,quantize:'step',preservePhase:true};
+  f.controller.launch({...segment('current',1),repeat:null},100,options); await f.ready(); f.tick(7);
+  f.controller.launch({...segment('current',2),repeat:null},100,options);
+  const next=f.tick(8);
+  assert.equal(next.totalBars,2); assert.equal(next.stepOffset,0); assert.equal(next.releaseVoices,false);
+  assert.equal(plays,1); assert.equal(f.controller.getProgress().localStep,8);
+});
 test('Jam perimeter keeps audible identity through cancellation, one-shot fill and stop', async () => {
   const f = fixture();
   const main = { ...segment('main'), phraseIds: { drums: 'beat' }, phraseBars: { drums: 2 } };

@@ -21,6 +21,7 @@ import { validateMultimodalInput } from './multimodalInput.js';
 import { RECOMMENDED_BPM } from '../domain/bpm.js';
 import { AI_PERFORMANCE_PROFILE_ID } from '../data/aiPerformanceTemplates.js';
 import useMusicStore from '../store/useMusicStore.js';
+import { getJamTemplateProjects } from './jamTemplateProjects.js';
 
 const ROOT_VIEWS = Object.freeze({
   ANALYZING: 'analyzing',
@@ -96,6 +97,7 @@ function Root() {
     setInitialWorkspaceView(destination);
     setPerformanceProfileId(AI_PERFORMANCE_PROFILE_ID);
     useMusicStore.setState(createMultimodalRecommendationAppState({ bpm, selections }));
+    getJamTemplateProjects(MULTIMODAL_DRUM_TEMPLATE_GENRE_ID, AI_PERFORMANCE_PROFILE_ID, bpm).patch({ bpm });
     setGenreId(MULTIMODAL_DRUM_TEMPLATE_GENRE_ID);
     setView(ROOT_VIEWS.ARRANGER);
   };
