@@ -25,7 +25,7 @@ import { HardwareInputStatus } from './HardwareInputStatus.jsx';
 import { BpmControl } from './BpmControl.jsx';
 import { ThemeSwitcher } from './ThemeSwitcher.jsx';
 import { renderIcon } from './icons.js';
-import ProjectLengthControl from './ProjectLengthControl.jsx';
+import './projectLengthControl.css';
 
 function BpmPopoverControl({
   bpm,
@@ -106,10 +106,10 @@ function BpmPopoverControl({
 }
 
 function TopBar({
-  totalBars,
   projectLengthLocked = false,
   projectLengthLockReason = '',
-  onExtendProject,
+  onDeleteProjectBars,
+  deleteBarRange,
   activeTutorialTarget,
   bpm,
   bpmLocked = false,
@@ -294,7 +294,12 @@ function TopBar({
       </div>
 
       <div className="right-tools">
-        {createElement(ProjectLengthControl, { totalBars, locked: projectLengthLocked, lockReason: projectLengthLockReason, onExtend: onExtendProject })}
+        {deleteBarRange && <button type="button" className="key-switch project-delete-bars"
+          disabled={projectLengthLocked}
+          title={projectLengthLocked ? projectLengthLockReason : '删除所有轨道的对应小节，后续内容前移；可撤销。'}
+          onClick={onDeleteProjectBars}>
+          删除第 {deleteBarRange.startBar + 1}{deleteBarRange.endBar !== deleteBarRange.startBar ? `–${deleteBarRange.endBar + 1}` : ''} 小节
+        </button>}
         {hardwareInput ? createElement(HardwareInputStatus, hardwareInput) : null}
         {onPerformanceEnter ? (
           <button className="key-switch performance-entry" type="button" onClick={onPerformanceEnter}>

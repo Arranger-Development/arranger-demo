@@ -8,6 +8,7 @@ import {
 } from '../../domain/musicConstants.js';
 import { clampTrackVolume } from '../../domain/trackVolume.js';
 import { createProjectLengthPatch, getProjectExtensionError, getTotalBars } from '../../domain/projectLength.js';
+import { createProjectBarDeletionPatch } from '../../domain/projectBarDeletion.js';
 
 function createDefaultVolumes() {
   return Object.fromEntries(TRACK_IDS.map((trackId) => [trackId, 0]));
@@ -45,6 +46,13 @@ export default function createTransportSlice(set, get) {
       if (getProjectExtensionError(targetBars, getTotalBars(state))) return false;
       const patch = createProjectLengthPatch(state, Number(targetBars));
       if (!patch.totalBars) return false;
+      set(patch);
+      return true;
+    },
+
+    deleteProjectBars: (startBar, endBar) => {
+      const patch = createProjectBarDeletionPatch(get(), startBar, endBar);
+      if (!patch) return false;
       set(patch);
       return true;
     },

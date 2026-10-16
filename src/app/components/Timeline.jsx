@@ -230,6 +230,8 @@ const Timeline = memo(forwardRef(function Timeline(
     onMoveClip,
     onOpenClip,
     onTransportSeek = () => {},
+    onRulerBarSelect = () => {},
+    selectedBar,
     onTutorialOpenClip = () => true,
     onTrackSelect,
     onTimelineSelectionChange = () => {},
@@ -418,6 +420,8 @@ const Timeline = memo(forwardRef(function Timeline(
     }
 
     seekPlayheadFromClientX(event.clientX);
+    const bar = getBarFromRow(event.currentTarget, event.clientX, totalBars);
+    if (bar !== null) onRulerBarSelect(bar);
   };
 
   useEffect(() => () => {
@@ -624,6 +628,7 @@ const Timeline = memo(forwardRef(function Timeline(
         {Array.from({ length: totalBars }, (_, index) => index + 1).map((barNumber) => (
           <div
             className={`bar-label${barNumber === 1 || barNumber === 5 ? ' major' : ''} mono`}
+            data-selected={barNumber - 1 === selectedBar}
             key={barNumber}
           >
             {barNumber}

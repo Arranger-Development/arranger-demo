@@ -3,6 +3,7 @@ import { JamTemplateContext } from './JamTemplateContext.js';
 import { getJamTemplateProjects, applyUserTemplate } from './jamTemplateProjects.js';
 import { getChordCellNotes, toggleChordNoteCell } from '../domain/chordCells.js';
 import { getProjectExtensionError, getTimelineBars, getTotalBars } from '../domain/projectLength.js';
+import { isValidBarDeletion } from '../domain/projectBarDeletion.js';
 import {
   createElement,
   useCallback,
@@ -496,7 +497,10 @@ export default function App({
   const bpmLocked = bpmLockedByTutorial || bpmLockedByRecording;
   const projectLengthLocked = activeTutorialLocked || bpmLocked;
   const projectLengthLockReason = bpmLockedByRecording
-    ? '录音或倒数期间不能扩充小节。' : '请暂停或退出教程后扩充小节。';
+    ? '录音或倒数期间不能增删小节。' : '请暂停或退出教程后增删小节。';
+  const deleteBarRange = timelineSelection
+    ? { startBar: timelineSelection.startBar, endBar: timelineSelection.endBar }
+    : { startBar: selectedBar, endBar: selectedBar };
   const bpmLockReason = bpmLockedByTutorial
     ? '教程正在使用固定速度，暂停或退出教程后可以调整。'
     : bpmLockedByRecording
@@ -671,6 +675,19 @@ export default function App({
     });
     return changed;
   }, [projectLengthLocked, handleStop, withUndoCheckpoint]);
+
+  const handleDeleteProjectBars = () => {
+    const { startBar, endBar } = deleteBarRange;
+    if (projectLengthLocked || !isValidBarDeletion(useMusicStore.getState(), startBar, endBar)) return;
+    handleStop();
+    audioEngine.stopAllVoices();
+    const changed = withUndoCheckpoint(() => useMusicStore.getState().deleteProjectBars(startBar, endBar));
+    if (!changed) return;
+    setTimelineSelection(null);
+    clearClipPasteDestination();
+    const next = useMusicStore.getState();
+    void dispatchAppCommand({ type: APP_COMMAND_TYPES.TRANSPORT_SEEK, bar: next.seekBar, step: next.seekStep });
+  };
 
   const handleStopAndRewind = useCallback(() => {
     cancelChillPreviewPlayback();
@@ -3087,7 +3104,8 @@ export default function App({
           totalBars,
           projectLengthLocked,
           projectLengthLockReason,
-          onExtendProject: handleExtendProject,
+          onDeleteProjectBars: handleDeleteProjectBars,
+          deleteBarRange,
           activeTutorialTarget,
           bpm,
           bpmLocked,
@@ -3295,6 +3313,12 @@ export default function App({
             onMoveClip: handleMoveClip,
             onOpenClip: handleOpenClip,
             onTransportSeek: handleTransportSeek,
+            selectedBar,
+            onRulerBarSelect: (bar) => {
+              const state = useMusicStore.getState();
+              state.setSelectedBar(bar);
+              state.setSelectedClipId(null);
+            },
             onTutorialOpenClip: handleTutorialOpenClip,
             onTrackSelect: handleTrackSelect,
             onTimelineSelectionChange: handleTimelineSelectionChange,
