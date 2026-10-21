@@ -21,6 +21,7 @@ import { createSessionPlayback } from '../sessionPlayback.js';
 import createAudioEngine from '../../audio/createAudioEngine.js';
 import { toggleDrumsCellInstrument, getDrumsCellInstruments } from '../../domain/drumsCells.js';
 import { mapPerformanceKeyboard } from '../../input/performanceInput.js';
+import useJamMidiController from '../../input/useJamMidiController.js';
 import './performance.css';
 import './jamWorkspace.css';
 import './templateJam.css';
@@ -50,6 +51,8 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const [page, setPage] = useState(0), [savedAt, setSavedAt] = useState(-Infinity);
   const [editBar, setEditBar] = useState(0);
   const gesture = useRef(null), histories = useRef({});
+  const midiControlsRef = useRef(null), midiEditorVersion = useRef(0);
+  const midiInput = useJamMidiController({ active, controlsRef: midiControlsRef });
   const artNodes = useRef({}), artPositions = useRef(null), animations = useRef([]);
   const workbench = useRef(null);
   useEffect(() => { if (workbench.current) workbench.current.scrollTop = 0; }, [editingTrack, project.id]);
@@ -108,6 +111,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     const next = template && (force || existing?.editingTemplateId !== template.id)
       ? {...copy(template),editingTemplateId:template.id,dirty:false} : existing ? copy(existing) : sourceDraft(t);
     if (t === 'drums' && !next.params) next.params = {strength:50,groove:50};
+    midiInput.reset(); midiEditorVersion.current += 1;
     audition.release();
     if (editingTrack) histories.current[editingTrack] = history;
     if (!editingTrack) captureArt();
@@ -116,6 +120,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     effects.select(t); setMessage(''); setEditBar(0);
   }
   function finishEditor() {
+    midiInput.reset(); midiEditorVersion.current += 1;
     const continuing = audition.getTrack() ? audition.wasPlaying() : playback.isActive();
     audition.release({resume:false});
     histories.current[editingTrack] = history;
@@ -138,11 +143,15 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     const next = { ...copy(draft), dirty:false, name: update ? saved.name : '', ...(update ? { editingTemplateId: saved.id } : { editingTemplateId: undefined }) };
     projectStore.setDraft(next); setSavedAt(performanceNow()); setMessage(`已保存「${saved.name}」`); return true;
   }
-  function changeParameter(parameter, value) {
-    const params = { ...draft.params, [parameter]: value };
+  function changeParameter(parameter, value, record = false) {
+    const current = projectStore.current().workspace.draft;
+    if (editingTrack !== 'drums' || current?.trackId !== 'drums') return;
+    const params = { ...current.params, [parameter]: value };
+    if (current.params?.[parameter] === value) return;
     const p = getDialDrumPreset(params.strength, params.groove);
     setEditBar(0);
-    replaceDraft({ ...draft, params, sourcePresetId: p.id, bars: copy(p.bars) }, false);
+    if (record) setHistory(h => ({ undo: [...h.undo, copy(current)].slice(-50), redo: [] }));
+    replaceDraft({ ...current, params, sourcePresetId: p.id, bars: copy(p.bars) }, false);
   }
   function beginGesture() { if (!gesture.current && draft) gesture.current = copy(draft); }
   function endGesture() {
@@ -178,6 +187,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   }
   function openProject(id) {
     if (!projectStore.save()) return false;
+    midiInput.reset(); midiEditorVersion.current += 1;
     if (!(id ? projectStore.switchTo(id) : projectStore.create())) return false;
     audition.stop(); effects.reset(true); histories.current = {}; setEditingTrack(null); setSolo(false); setPage(0); setMessage(''); return true;
   }
@@ -208,7 +218,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     window.addEventListener('keydown',handler); return () => window.removeEventListener('keydown',handler);
   });
   useLayoutEffect(() => {
-    if (!controlsRef || !active) return;
+    if (!active) return;
     const controls = { templates,
       dispatch(cmd) {
         const track = effects.getSnapshot().selectedTrack;
@@ -221,17 +231,31 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         if (cmd.type === 'volume') changeMix(track,cmd.value);
         if (cmd.type === 'cutoff') effects.getSnapshot().selectedTracks.forEach(t => effects.cutoff(t,cmd.value));
         if (cmd.type === 'reverb') effects.reverb(cmd.value);
+        if (cmd.type === 'drumParameter') changeParameter(cmd.parameter,cmd.value,true);
         if (['pitch','chopper','brake'].includes(cmd.type)) {
           if (!cmd.pressed) effects.release(cmd.type,cmd.token); else if (playback.isReady()) effects.press(cmd.type,cmd.token,cmd.value,w.bpm);
         }
         if (cmd.type === 'repeat') { if (!cmd.pressed) effects.repeat.release(cmd.token); else if (playback.isReady()) effects.repeat.press(cmd.token,cmd.division,w.bpm); }
       },
       release: () => effects.resetHolds(),
+      getMidiContext: () => {
+        const current = projectStore.current(), snapshot = effects.getSnapshot(), t = snapshot.selectedTrack;
+        return { projectId: current.id, editorVersion: midiEditorVersion.current, editingTrack,
+          blocked: Boolean(pendingEditor || deleteTarget), playing: playback.isReady() && !status.loading,
+          selectedTrack: t, selectedTracks: snapshot.selectedTracks,
+          params: current.workspace.draft?.params ?? {strength:50,groove:50},
+          values: {volume:snapshot.volumes[t],cutoff:snapshot.cutoffs[t],reverb:snapshot.reverbs[t],pitch:snapshot.pitches[t]} };
+      },
       getSurface: () => ({ ...effects.getSnapshot(), version: 5, templates, selection: w.selection,
         page: effectivePage, pageCount, sections: [], status, beatPhase: playback.getBeatPhase(),
         repeat: effects.getSnapshot().repeats[effects.getSnapshot().selectedTrack], savedAt, canSave: Boolean(draft), storageError: Boolean(library.error) }),
     };
-    controlsRef.current = controls; return () => { if (controlsRef.current === controls) controlsRef.current = null; };
+    midiControlsRef.current = controls;
+    if (controlsRef) controlsRef.current = controls;
+    return () => {
+      if (midiControlsRef.current === controls) midiControlsRef.current = null;
+      if (controlsRef?.current === controls) controlsRef.current = null;
+    };
   });
   const previewBar = Math.min(editBar,(draft?.bars.length ?? 1)-1);
   const canPlay = Boolean(draft || TRACKS.some(t => w.selection[t]));
@@ -242,13 +266,13 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       <button type="button" className="performance-connect" onClick={() => { if (projectStore.save()) {audition.stop(); onBack();} }}>← 创作模式</button>
       <div className="performance-title"><span className="performance-eyebrow">PROJECT ARRANGER</span><h1>Jam · 演奏</h1></div>
       <label className="performance-tempo">BPM <input type="number" min="40" max="240" aria-label="演奏速度 BPM" value={w.bpm} onChange={e => { const value=Math.max(40,Math.min(240,Math.round(Number(e.target.value)||100))); projectStore.patch({bpm:value}); playback.setTempo(value); }}/></label>
-      <button type="button" className="performance-connect" onClick={() => { void audio.startAudio(); void hardwareInput?.onConnect(); }}>{hardwareInput?.status === 'connected' ? 'Launchpad 已连接' : '连接 Launchpad'}</button>
+      <button type="button" className="performance-connect" title="推子：音量、滤波、混响、弯音（手动回中）；旋钮：鼓强度、律动。经过屏幕当前值后接管。" onClick={() => { void audio.startAudio(); void hardwareInput?.onConnect(); void midiInput.connect(); }}>{midiInput.status === 'connecting' ? '正在连接…' : <>{[hardwareInput?.status === 'connected' && 'Launchpad',midiInput.status === 'connected' && '旋钮推子'].filter(Boolean).join(' · ') || '连接控制器'}{hardwareInput?.status === 'connected' || midiInput.status === 'connected' ? ' 已连接' : ''}</>}</button>
     </header>
     <JamProjectControls project={project} projects={library.projects} onSave={() => setMessage(projectStore.save() ? '项目已保存。' : '项目保存失败，草稿已保留。')}
       onNew={() => openProject(null)} onOpen={openProject} onRename={projectStore.rename}/>
     <div ref={workbench} className="template-jam-workbench studio-workbench">
       <main className="studio-main">
-        <div className="studio-heading"><div><span className="performance-eyebrow">YOUR SOUND, YOUR WAY</span><h2>{draft ? `${LABELS[editingTrack]} · 乐句编辑` : '乐句工作台'}</h2></div><p>{draft ? '切换乐器，草稿会保留' : '单击选择 / 取消 · 点笔编辑'}</p>{draft && <button type="button" className="studio-text-button studio-collapse-compact" onClick={finishEditor}><ArrowLeft size={13}/> 收起编辑</button>}<button type="button" className="studio-effects-toggle" aria-expanded={showEffects} aria-controls="jam-studio-effects" onClick={() => setShowEffects(open => !open)}>现场效果</button></div>
+        <div className="studio-heading"><h2>乐句工作台</h2><p>{draft ? '切换乐器，草稿会保留' : '单击选择 / 取消 · 点笔编辑'}</p><button type="button" className="studio-effects-toggle" aria-expanded={showEffects} aria-controls="jam-studio-effects" onClick={() => setShowEffects(open => !open)}>现场效果</button></div>
         <div className="studio-gallery" aria-label="四轨乐器与模板">{TRACKS.map(t => <section className="studio-instrument" data-track={t} data-active={editingTrack === t} key={t} aria-label={`${LABELS[t]}模板`}>
           <div className="studio-instrument-top"><button type="button" className="studio-instrument-open" aria-label={`创作${LABELS[t]}模板`} onClick={() => openEditor(t)} aria-expanded={editingTrack === t}>
             <span className="studio-instrument-art" data-art-track={t} ref={node => {artNodes.current[t]=node;}}><img src={ART[t]} alt="" draggable={false} decoding="async"/></span>
@@ -258,12 +282,10 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
             playing={running && !w.mutedTracks[t] && (!solo || editingTrack === t)} onSelect={() => trigger(t,p.id)} onEdit={() => openEditor(t,p)} onRemove={() => setDeleteTarget(p)}/>) : <span className="studio-template-empty">保存的乐句会出现在这里</span>}</div>
         </section>)}</div>
         {draft && <section className="studio-editor" key={editingTrack} data-track={editingTrack} aria-label={`${LABELS[editingTrack]}乐句编辑`}>
-          <header className="studio-editor-heading"><div><strong>{LABELS[editingTrack]} · 乐句编辑</strong><span>{draft.dirty ? '草稿' : draft.editingTemplateId ? '已保存乐句' : '新的声音'}</span></div><button type="button" className="studio-text-button" onClick={finishEditor}><ArrowLeft size={13}/> 收起编辑</button></header>
+          <header className="studio-editor-heading"><div className="studio-editor-identity"><label className="studio-template-name-field">名称<input aria-label="模板名称" value={draft.name ?? ''} placeholder={`${LABELS[editingTrack]}新乐句`} maxLength={80} onChange={e => projectStore.setDraft({...draft,name:e.target.value,dirty:true})}/></label><span className="studio-draft-state">{draft.dirty ? '草稿' : draft.editingTemplateId ? '已保存乐句' : '新的声音'}</span></div><button type="button" className="studio-text-button" onClick={finishEditor}><ArrowLeft size={13}/> 收起编辑</button></header>
           <div className="studio-editor-controls">
-            <div className="studio-phrase-settings"><label>名称<input aria-label="模板名称" value={draft.name ?? ''} placeholder={`${LABELS[editingTrack]}新乐句`} maxLength={80} onChange={e => projectStore.setDraft({...draft,name:e.target.value,dirty:true})}/></label>
-              {editingTrack !== 'drums' && <label>起点<select aria-label={`${LABELS[editingTrack]}乐句起点`} value={draft.sourcePresetId} onChange={e => replaceDraft({...sourceDraft(editingTrack,e.target.value,draft.timbreId),name:draft.name,editingTemplateId:draft.editingTemplateId})}>{catalog[editingTrack].map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}
-            </div>
-            {editingTrack === 'drums' && <div className="studio-editor-knobs"><RotaryKnob label="强度" value={draft.params?.strength ?? 50} onBegin={beginGesture} onEnd={endGesture} onChange={v => changeParameter('strength',v)}/><RotaryKnob label="律动" value={draft.params?.groove ?? 50} onBegin={beginGesture} onEnd={endGesture} onChange={v => changeParameter('groove',v)}/></div>}
+            {editingTrack !== 'drums' && <div className="studio-phrase-settings"><label>起点<select aria-label={`${LABELS[editingTrack]}乐句起点`} value={draft.sourcePresetId} onChange={e => replaceDraft({...sourceDraft(editingTrack,e.target.value,draft.timbreId),name:draft.name,editingTemplateId:draft.editingTemplateId})}>{catalog[editingTrack].map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label></div>}
+            {editingTrack === 'drums' && <div className="studio-editor-knobs"><RotaryKnob label="强度" value={draft.params?.strength ?? 50} spectrum showTicks={false} lowLabel="温和" highLabel="强烈" onBegin={beginGesture} onEnd={endGesture} onChange={v => changeParameter('strength',v)}/><RotaryKnob label="律动" value={draft.params?.groove ?? 50} spectrum showTicks={false} lowLabel="平稳" highLabel="活跃" onBegin={beginGesture} onEnd={endGesture} onChange={v => changeParameter('groove',v)}/></div>}
           </div>
           <div className="studio-grid-toolbar"><span>{editingTrack === 'drums' ? '鼓点音序器' : '乐句预览'}</span><div className="studio-bar-pager"><button type="button" aria-label="上一小节" disabled={previewBar === 0} onClick={() => setEditBar(previewBar-1)}><ChevronLeft size={13}/></button><span>{previewBar+1} / {draft.bars.length} 小节</span><button type="button" aria-label="下一小节" disabled={previewBar+1 === draft.bars.length} onClick={() => setEditBar(previewBar+1)}><ChevronRight size={13}/></button></div><div className="studio-undo"><button type="button" aria-label="撤销模板修改" disabled={!history.undo.length} onClick={() => undo()}><Undo2 size={14}/></button><button type="button" aria-label="重做模板修改" disabled={!history.redo.length} onClick={() => undo(true)}><Redo2 size={14}/></button></div></div>
           {editingTrack === 'drums' ? <div className="studio-drum-grid"><DrumStepGrid renderStep={(row,stepNumber) => {
@@ -276,7 +298,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
               {hits.length > 1 && <span className="studio-hit-count" aria-label={`${hits.length}次击打`}>{hits.length}</span>}
             </button>;
           }}/></div> : <JamPhrasePreview draft={draft} bar={previewBar} step={running && (status.bar ?? 0)%draft.bars.length === previewBar ? status.step : null}/>}
-          <footer className="studio-editor-actions"><button type="button" className="studio-solo" aria-label={`独听${LABELS[editingTrack]}`} aria-pressed={solo} onClick={() => audition.toggle(draft)}>{solo ? <Square size={12}/> : <Play size={12}/>} {solo ? '停止独听' : `独听${LABELS[editingTrack]}`}</button>
+          <footer className="studio-editor-actions"><button type="button" className="studio-solo" aria-label={`${solo ? '停止试听' : '试听'}${LABELS[editingTrack]}`} aria-pressed={solo} onClick={() => audition.toggle(draft)}>{solo ? <Square size={12}/> : <Play size={12}/>} {solo ? '停止试听' : '试听'}</button>
             <div>{draft.editingTemplateId && <button type="button" className="studio-text-button" onClick={() => saveTemplate(true)}>保存修改</button>}<button type="button" className="studio-save" onClick={() => saveTemplate()}><Save size={13}/>{draft.editingTemplateId ? '另存新模板' : '保存新模板'}</button></div></footer>
         </section>}
       </main>
@@ -284,7 +306,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         <JamPerformanceDeck key={project.id} effects={effects} session={w} enabled={active && running && !status.loading} changeMix={changeMix}/>
       </aside>
     </div>
-    <footer className="template-jam-transport studio-transport"><button type="button" className="template-play-button" aria-label={running ? '停止组合' : '播放组合'} disabled={!running && !canPlay} onClick={togglePlayback}>{running ? <Square size={14}/> : <Play size={14}/>} {running ? '停止' : draft ? '试听组合' : '播放组合'}</button><span role="status">{library.error || status.error || (status.loading ? '正在准备声音…' : status.pendingId ? '等待节拍切换' : message)}</span>
+    <footer className="template-jam-transport studio-transport"><button type="button" className="template-play-button" aria-label={running ? '停止组合' : '播放组合'} disabled={!running && !canPlay} onClick={togglePlayback}>{running ? <Square size={14}/> : <Play size={14}/>} {running ? '停止' : draft ? '试听组合' : '播放组合'}</button><span role="status">{library.error || status.error || midiInput.errorMessage || (status.loading ? '正在准备声音…' : status.pendingId ? '等待节拍切换' : message)}</span>
       <span className="template-page-controls">模板页 {effectivePage+1}/{pageCount}<button type="button" aria-label="上一页模板" disabled={!effectivePage} onClick={() => setPage(effectivePage-1)}>‹</button><button type="button" aria-label="下一页模板" disabled={effectivePage+1>=pageCount} onClick={() => setPage(effectivePage+1)}>›</button></span></footer>
     {pendingEditor && <TemplateDialog titleId="replace-draft-title" onClose={() => setPendingEditor(null)}><h2 id="replace-draft-title">保留当前草稿？</h2><p>这条轨道还有未保存为模板的修改。</p><button type="button" onClick={() => resolvePending(true)}>先保存再编辑</button><button type="button" onClick={() => resolvePending(false)}>放弃草稿并编辑</button><button type="button" onClick={() => setPendingEditor(null)}>取消</button></TemplateDialog>}
     {deleteTarget && <TemplateDialog titleId="delete-template-title" onClose={() => setDeleteTarget(null)}><h2 id="delete-template-title">删除「{deleteTarget.name}」？</h2><p>已放入创作时间线的乐句会保留。</p><button type="button" onClick={() => { projectStore.removeTemplate(deleteTarget.trackId,deleteTarget.id); setDeleteTarget(null); if (running) launch('step',draft,false); }}>删除</button><button type="button" onClick={() => setDeleteTarget(null)}>取消</button></TemplateDialog>}

@@ -5,6 +5,15 @@
 .template-play-button,.template-save-button { display:flex; align-items:center; justify-content:center; gap:8px; padding:10px 20px; border:1px solid var(--tj-border); border-radius:5px; color:var(--ink); background:var(--tj-accent); }
 .template-jam .template-save-button { color:#191510; }.template-jam .template-play-button { color:#191510; }
 .rotary-control { display:flex; flex-direction:column; align-items:center; gap:8px; width:160px; }.rotary-label { font-size:14px; font-weight:600; }.rotary-knob { display:grid; place-items:center; width:116px; height:116px; border-radius:50%; background:repeating-conic-gradient(from -135deg,#ad9270 0deg 2deg,transparent 2deg 27deg); cursor:ns-resize; touch-action:none; user-select:none; }.rotary-face { display:block; width:96px; height:96px; border-radius:50%; background:radial-gradient(circle at 35% 25%,#72604d,#211b14 75%); border:1px solid #b19065; box-shadow:0 5px 10px #0007; transform:rotate(var(--knob-angle)); position:relative; }.rotary-marker { position:absolute; width:4px; height:22px; top:8px; left:calc(50% - 2px); border-radius:2px; background:#f5d493; }.rotary-value { font-size:25px; font-variant-numeric:tabular-nums; font-weight:600; }.rotary-ticks { width:160px; display:flex; justify-content:space-between; font-size:10px; color:var(--ink-2); }.rotary-ticks [data-active=true] { color:var(--ink); font-weight:700; }.rotary-knob:focus-visible { outline:3px solid #6596ff; outline-offset:4px; }
+/* Optional range guide: the shared BPM and key dials retain their original face. */
+.rotary-knob[data-spectrum=true] { --spectrum-low:#5e4b31; --spectrum-mid:#b58b4f; --spectrum-high:#f3cf85; --spectrum-fill:conic-gradient(from 225deg,var(--spectrum-low),var(--spectrum-mid) 135deg,var(--spectrum-high) 270deg,transparent 270deg); position:relative; background:transparent; }
+.rotary-knob[data-spectrum=true]::before { content:''; position:absolute; inset:0; border-radius:50%; background:var(--spectrum-fill); mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 4px)); pointer-events:none; }
+.rotary-spectrum-stops,.rotary-spectrum-stop { position:absolute; inset:0; pointer-events:none; }
+.rotary-spectrum-stops { z-index:2; }
+.rotary-spectrum-stop { transform:rotate(var(--tick-angle)); }
+.rotary-spectrum-stop::after { content:''; position:absolute; top:1px; left:calc(50% - 1px); width:2px; height:4px; border-radius:1px; background:var(--ink); opacity:.65; }
+.rotary-spectrum-stop[data-active=true]::after { left:calc(50% - 2px); width:4px; height:7px; opacity:1; background:var(--ink); box-shadow:0 0 0 1px var(--tj-panel,var(--surface)); }
+.rotary-guide { display:flex; justify-content:space-between; gap:8px; width:100%; color:var(--ink-2); font-size:10px; line-height:14px; }
 .template-dialog-backdrop { position:fixed; inset:0; z-index:500; background:#0009; display:grid; place-items:center; }.template-dialog { padding:24px; border:1px solid var(--tj-border,#92734f); background:var(--tj-panel,#211c17); color:var(--ink); border-radius:10px; width:min(480px,90vw); }.template-dialog h2 { font-size:20px; }.template-dialog button { padding:8px 12px; margin:4px; border:1px solid var(--tj-border,#92734f); background:var(--tj-card,#302820); color:inherit; border-radius:4px; }.template-dialog input { color:inherit; background:transparent; border:1px solid var(--tj-border,#92734f); padding:8px; }
 /* Saved cards participate in the original template grids, before built-ins. */
 .user-template-section,.user-template-list { display:contents; }
@@ -67,6 +76,8 @@
 :root[data-theme=swiss] .rotary-face { background:var(--surface,#f1f0e8); border:2px solid var(--border); box-shadow:none; }:root[data-theme=swiss] .rotary-marker { background:var(--ink); }:root[data-theme=swiss] .rotary-knob { background:repeating-conic-gradient(from -135deg,#171717 0deg 2deg,transparent 2deg 27deg); }:root[data-theme=swiss] .template-dialog { background:var(--surface); color:var(--ink); --tj-card:var(--surface-2); --tj-border:var(--border); }
 :root[data-theme=swiss] :is(.rotary-knob,.rotary-face) { border-radius:50% !important; }
 :root[data-theme=swiss] .rotary-knob { background:repeating-conic-gradient(from -135deg,#171717 0deg 2deg,transparent 2deg 27deg) !important; }
+:root[data-theme=swiss] .rotary-knob[data-spectrum=true] { --spectrum-low:#f2d658; --spectrum-mid:#efa445; --spectrum-high:#cf563b; background:transparent !important; }
+:root[data-theme=swiss] .rotary-knob[data-spectrum=true]::before { background-image:var(--spectrum-fill) !important; border-radius:50% !important; }
 @media(max-width:850px) { .template-jam-transport { flex-wrap:wrap; }.template-jam .performance-header { flex-wrap:wrap; } }
 @media(max-width:480px) { .template-jam-transport [role=status] { order:3; flex-basis:100%; } }
 

@@ -6,10 +6,8 @@
 .jam-studio .studio-workbench { grid-template-columns:minmax(0,1fr) 238px; gap:28px; padding:18px 24px; border:0; overflow:hidden; position:relative; container-type:size; }
 .jam-studio .studio-main { min-width:0; min-height:0; display:flex; flex-direction:column; gap:12px; overflow:auto; }
 .jam-studio .studio-heading { display:flex; justify-content:space-between; align-items:end; gap:12px; min-height:34px; }
-.jam-studio .studio-heading > div { display:grid; gap:3px; }
 .jam-studio .studio-heading h2 { margin:0; font-size:18px; line-height:22px; font-weight:550; letter-spacing:.01em; }
 .jam-studio .studio-heading p { margin:0; color:var(--tj-muted); font-size:11px; }
-.jam-studio .studio-heading .performance-eyebrow { font-size:8px; line-height:10px; letter-spacing:.16em; }
 .jam-studio .studio-gallery { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); min-height:0; flex:1; gap:12px 36px; }
 .jam-studio .studio-instrument { min-width:0; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:0 12px; border:0; background:transparent; }
 .jam-studio .studio-instrument-top { display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; }
@@ -54,16 +52,16 @@
 .jam-studio .studio-editor { display:grid; gap:10px; min-width:0; animation:studio-editor-in .26s .08s both; }
 .jam-studio .studio-editor button:not(.drum-step) { font-size:11px; line-height:16px; }
 .jam-studio .studio-editor-heading { display:flex; justify-content:space-between; gap:12px; align-items:center; }
-.jam-studio .studio-editor-heading > div { display:flex; align-items:center; gap:8px; }
-.jam-studio .studio-editor-heading strong { font-size:14px; font-weight:550; }
-.jam-studio .studio-editor-heading span { font-size:10px; color:var(--tj-muted); }
+.jam-studio .studio-editor-identity { display:flex; flex:1; min-width:0; align-items:center; gap:10px; }
+.jam-studio .studio-template-name-field { flex:1; max-width:340px; min-width:0; }
+.jam-studio .studio-draft-state { flex-shrink:0; font-size:10px; color:var(--tj-muted); white-space:nowrap; }
+.jam-studio .studio-editor-heading > button { flex-shrink:0; white-space:nowrap; }
 .jam-studio .studio-text-button { display:inline-flex; align-items:center; gap:4px; color:var(--tj-muted); background:transparent; padding:4px 0; border:0; font-size:11px; }
-.jam-studio .studio-collapse-compact { display:none; }
 .jam-studio .studio-editor-controls { display:flex; justify-content:space-between; align-items:center; gap:24px; }
 .jam-studio .studio-phrase-settings { display:grid; gap:8px; width:min(300px,45%); }
-.jam-studio .studio-editor:not([data-track=drums]) .studio-phrase-settings { width:100%; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
-.jam-studio .studio-phrase-settings label { display:grid; grid-template-columns:30px minmax(0,1fr); align-items:center; gap:6px; font-size:11px; color:var(--tj-muted); }
-.jam-studio .studio-phrase-settings input,.jam-studio .studio-phrase-settings select { width:100%; min-width:0; color:var(--ink); font:inherit; font-size:12px; background:var(--studio-soft); border:0; border-bottom:1px solid var(--studio-line); border-radius:0; padding:5px 6px; }
+.jam-studio .studio-phrase-settings label,.jam-studio .studio-template-name-field { display:grid; grid-template-columns:30px minmax(0,1fr); align-items:center; gap:6px; font-size:11px; color:var(--tj-muted); }
+.jam-studio .studio-template-name-field input,.jam-studio .studio-phrase-settings select { width:100%; min-width:0; color:var(--ink); font:inherit; font-size:12px; background:var(--studio-soft); border:0; border-bottom:1px solid var(--studio-line); border-radius:0; padding:5px 6px; }
+.jam-studio .studio-editor[data-track=drums] .studio-editor-controls { justify-content:center; }
 .jam-studio .studio-editor-knobs { display:flex; justify-content:center; gap:24px; padding-right:12px; }
 .jam-studio .rotary-control { width:100px; gap:3px; }
 .jam-studio .rotary-label { font-size:11px; line-height:14px; }
@@ -150,11 +148,9 @@
   .jam-studio .studio-workbench { padding-block:8px; }
   .jam-studio .studio-main { gap:4px; }
   .jam-studio .studio-heading { min-height:24px; }
-  .jam-studio .studio-heading .performance-eyebrow { display:none; }
   .jam-studio:not([data-editing=true]) .studio-instrument-art { width:min(128px,22cqh); height:min(128px,22cqh); }
   .jam-studio .studio-editor { gap:3px; }
-  .jam-studio[data-editing=true] .studio-heading p,.jam-studio .studio-editor-heading { display:none; }
-  .jam-studio[data-editing=true] .studio-collapse-compact { display:inline-flex; margin-left:auto; flex-shrink:0; }
+  .jam-studio[data-editing=true] .studio-heading p { display:none; }
   .jam-studio .studio-drum-grid { --drum-step-size:24px; }
   .jam-studio .drum-sequencer-grid { --drum-group-header-height:26px; --drum-group-padding:4px; --drum-row-gap:4px; }
   .jam-studio[data-editing=true] .studio-instrument-art { width:34px; height:34px; }
