@@ -24,6 +24,16 @@ test('recognizes only this controller input, leaving Launchpad and output ports 
   assert.equal(findJamMidiInput([pad, output, offline]), null);
 });
 
+test('recognizes both F4C4 hardware names and the product alias with case and spacing variations', () => {
+  for (const name of ['4AC0F4C4', '4AC1F4C4', 'MIDIF4C4', '4ac0f4c4', '4AC0-F4C4 MIDI 1']) {
+    const device = { type: 'input', name, state: 'connected' };
+    assert.equal(findJamMidiInput([device]), device, name);
+    assert.equal(findJamMidiInput([{ ...device, type: 'output' }]), null, name);
+    assert.equal(findJamMidiInput([{ ...device, state: 'disconnected' }]), null, name);
+  }
+  assert.equal(findJamMidiInput([{ type: 'input', name: 'Unrelated MIDI controller', state: 'connected' }]), null);
+});
+
 test('accepts only measured channel 4 CC1–6, ignoring other devices/protocols and malformed data', () => {
   const { controller, commands } = setup();
   for (const message of [[0xb0, 1, 102], [0x93, 1, 102], [0xb3, 7, 64], [0xb3, 5, 128], [0xb3, 5, -1], [0xb3, 5], [0xb3, 5, 1.5]]) {
@@ -177,6 +187,19 @@ test('controller connects independently and preserves Launchpad handlers', async
   assert.equal(access.onstatechange, existing); assert.equal(pad.onmidimessage, existing);
   connection.dispose(); device.emit('midimessage', { data: [0xb3, 1, 0] });
   assert.equal(messages.length, 1); assert.equal(otherMessages, 2);
+});
+
+test('4AC0F4C4 connects and forwards its controls alongside Launchpad', async () => {
+  const pad = input('Launchpad X'), device = input('4AC0F4C4');
+  const { connection, messages } = midiSetup([pad, device]);
+  try {
+    await connection.connect();
+    assert.equal(connection.getSnapshot().status, 'connected');
+    assert.equal(connection.getSnapshot().deviceName, '4AC0F4C4');
+    device.emit('midimessage', { data: new Uint8Array([0xb3, 4, 64]) });
+    pad.emit('midimessage', { data: new Uint8Array([0xb3, 4, 127]) });
+    assert.deepEqual(messages.map(data => Array.from(data)), [[0xb3, 4, 64]]);
+  } finally { connection.dispose(); }
 });
 
 test('hot unplug releases pitch and hot plug rebinds without duplicate listeners', async () => {

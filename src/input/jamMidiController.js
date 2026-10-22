@@ -8,7 +8,7 @@ const round = value => Math.round(value * 10) / 10;
 
 export function findJamMidiInput(ports) {
   return Array.from(ports).find(port => port.type === 'input' && port.state !== 'disconnected'
-    && /(?:4ac1f4c4|midif4c4)/i.test(port.name?.replace(/[^a-z0-9]/gi, '') ?? '')) ?? null;
+    && /(?:4ac[01]f4c4|midif4c4)/i.test(port.name?.replace(/[^a-z0-9]/gi, '') ?? '')) ?? null;
 }
 
 export function jamMidiValue(parameter, raw) {
