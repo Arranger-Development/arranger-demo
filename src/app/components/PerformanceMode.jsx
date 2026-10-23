@@ -228,6 +228,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         if (cmd.type === 'stop') { audition.stop(); effects.reset(); }
         if (cmd.type === 'page') setPage(Math.max(0,Math.min(pageCount-1,effectivePage+cmd.delta)));
         if (cmd.type === 'selectTrack') effects.select(cmd.trackId,cmd.additive);
+        if (cmd.type === 'toggleTrack') effects.toggleTrack(cmd.trackId);
         if (cmd.type === 'volume') changeMix(track,cmd.value);
         if (cmd.type === 'cutoff') effects.getSnapshot().selectedTracks.forEach(t => effects.cutoff(t,cmd.value));
         if (cmd.type === 'reverb') effects.reverb(cmd.value);

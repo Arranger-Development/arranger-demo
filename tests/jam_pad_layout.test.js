@@ -81,13 +81,14 @@ test('hold commands retain ownership across simultaneous presses, page changes a
   const dispatch = command => {
     if (!command) return;
     if (command.type==='selectTrack') fx.select(command.trackId,command.additive);
+    else if (command.type==='toggleTrack') fx.toggleTrack(command.trackId);
     else if (command.type==='repeat') command.pressed ? fx.repeat.press(command.token,command.division,120) : fx.repeat.release(command.token);
     else if (command.type==='chopper'||command.type==='brake') command.pressed ? fx.press(command.type,command.token,command.value,120) : fx.release(command.type,command.token);
     else if (command.type==='reverb') fx.reverb(command.value);
     else if (command.type==='volume'||command.type==='cutoff') fx.getSnapshot().selectedTracks.forEach(t=>fx[command.type](t,command.value));
   };
   const send=(note,pressed=true,cc=false)=>dispatch(input.handle([cc?0xb0:pressed?0x90:0x80,note,pressed?127:0],templates,{...surface,effectPage:'arp'}));
-  send(89,true,true);send(69,true,true);
+  send(69,true,true);send(69,false,true);
   assert.deepEqual(fx.getSnapshot().selectedTracks,['drums','bass']);
   send(48);send(32);send(26);
   for(const track of ['drums','bass']) { assert.equal(fx.getSnapshot().reverbs[track],1);assert.equal(fx.getSnapshot().cutoffs[track],250);assert.equal(fx.getSnapshot().volumes[track],-3); }
@@ -101,4 +102,60 @@ test('hold commands retain ownership across simultaneous presses, page changes a
     assert.equal(fx.getSnapshot().repeats.drums,null,reason); assert.equal(fx.getSnapshot().choppers.bass,null,reason);assert.equal(fx.getSnapshot().brakes.drums,0,reason);
     send(13,false);send(17,false);send(18,false);
   }
+});
+
+test('current Jam track keys toggle independently on single presses and LEDs match every selected target', () => {
+  const input = createPerformanceMidiInput(), fx = createJamEffects({ setPerformanceEffect() {} });
+  const trackKeys = { drums: 89, chord: 79, bass: 69, melody: 59 };
+  const brightness = { drums: [19,17], chord: [11,9], bass: [43,41], melody: [51,49] };
+  const send = (cc, value) => {
+    const command = input.handle([0xb0, cc, value], templates, surface);
+    if (command) {
+      assert.equal(command.type, 'toggleTrack');
+      fx.toggleTrack(command.trackId);
+    }
+    return command;
+  };
+  const click = (track, expected) => {
+    const cc = trackKeys[track];
+    assert.deepEqual(send(cc, 127), { type: 'toggleTrack', trackId: track });
+    assert.equal(send(cc, 100), null, 'held-key updates must not toggle repeatedly');
+    assert.equal(send(cc, 0), null, 'release must not toggle');
+    assert.deepEqual(fx.getSnapshot().selectedTracks, expected);
+    const frame = createLaunchpadXPerformanceLedFrame({ ...surface, ...fx.getSnapshot() });
+    for (const [t, key] of Object.entries(trackKeys)) {
+      assert.equal(light(frame, key, 0xb0), brightness[t][Number(expected.includes(t))]);
+    }
+    if (!expected.length) for (let note = 21; note <= 48; note++) {
+      if (note % 10 >= 1 && note % 10 <= 8) assert.equal(light(frame, note), 0);
+    }
+  };
+  click('bass', ['drums','bass']);
+  click('chord', ['drums','bass','chord']);
+  click('melody', ['drums','bass','chord','melody']);
+  click('bass', ['drums','chord','melody']);
+  click('drums', ['chord','melody']);
+  click('chord', ['melody']);
+  click('melody', []);
+  click('drums', ['drums']);
+});
+
+test('hardware toggles share screen target state and deselection releases held effects', () => {
+  const input = createPerformanceMidiInput(), fx = createJamEffects({ setPerformanceEffect() {} });
+  fx.toggleTrack('bass'); // The same action as the screen's track button.
+  fx.press('pitch', 'screen:pitch', 7, 100);
+  fx.repeat.press('midi:repeat', 8, 100);
+  fx.press('chopper', 'midi:chopper', 16, 100);
+  const command = input.handle([0xb0, 69, 127], templates, surface);
+  assert.deepEqual(command, { type: 'toggleTrack', trackId: 'bass' });
+  fx.toggleTrack(command.trackId);
+  assert.deepEqual(fx.getSnapshot().selectedTracks, ['drums']);
+  for (const track of ['drums','bass']) {
+    assert.equal(fx.getSnapshot().pitches[track], 0);
+    assert.equal(fx.getSnapshot().repeats[track], null);
+    assert.equal(fx.getSnapshot().choppers[track], null);
+  }
+  fx.reverb(0.5);
+  assert.equal(fx.getSnapshot().reverbs.drums, 0.5);
+  assert.equal(fx.getSnapshot().reverbs.bass, 0);
 });

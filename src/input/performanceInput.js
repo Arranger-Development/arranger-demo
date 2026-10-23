@@ -57,8 +57,12 @@ export function createPerformanceMidiInput() {
       let command = null;
       if (kind === 'control-change') {
         if (JAM_TRACK_CC.includes(number)) {
-          const additive = [...held.values()].some(c => c?.type === 'selectTrack');
-          command = { type: 'selectTrack', trackId: PERFORMANCE_TRACKS[JAM_TRACK_CC.indexOf(number)], additive };
+          const trackId = PERFORMANCE_TRACKS[JAM_TRACK_CC.indexOf(number)];
+          if (surface.version === 5) command = { type: 'toggleTrack', trackId };
+          else {
+            const additive = [...held.values()].some(c => c?.type === 'selectTrack');
+            command = { type: 'selectTrack', trackId, additive };
+          }
         }
         if (surface.version !== 5 && [49,39,29].includes(number)) command = { type: 'effectPage', page: JAM_EFFECT_PAGES[[49,39,29].indexOf(number)] };
         if (number === 19 && surface.version !== 5) command = { type: 'recordEffects' };
