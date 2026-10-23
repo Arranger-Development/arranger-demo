@@ -15,7 +15,7 @@ export function jamMidiValue(parameter, raw) {
   // The faders measured 1–127; accept both 0 and 1 as the bottom endpoint.
   const unit = raw <= 1 ? 0 : raw / 127;
   if (parameter === 'volume') return Math.round(-24 + unit * 30);
-  if (parameter === 'cutoff') return clamp(Math.round((100 + unit * 19900) / 100) * 100, 100, 20000);
+  if (parameter === 'cutoff') return clamp(Math.round((20000 - unit * 19900) / 100) * 100, 100, 20000);
   if (parameter === 'reverb') return Math.round(unit * 100) / 100;
   if (parameter === 'pitch') return raw >= 62 && raw <= 65 ? 0
     : round(raw < 62 ? -12 * (62 - Math.max(1, raw)) / 61 : 12 * (raw - 65) / 62);
@@ -24,7 +24,7 @@ export function jamMidiValue(parameter, raw) {
 
 function midiPosition(parameter, value) {
   if (parameter === 'volume') return (value + 24) / 30 * 127;
-  if (parameter === 'cutoff') return (value - 100) / 19900 * 127;
+  if (parameter === 'cutoff') return (20000 - value) / 19900 * 127;
   if (parameter === 'reverb') return value * 127;
   if (parameter === 'pitch') return value === 0 ? 63.5 : value < 0 ? 62 + value / 12 * 61 : 65 + value / 12 * 62;
   return value / 100 * 127;

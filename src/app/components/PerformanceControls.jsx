@@ -38,6 +38,7 @@ function RepeatPads({ controller, track, bpm, enabled, value }) {
 
 function FilterKnob({ track, value, onChange, disabled = false }) {
   const drag = useRef(null);
+  const amount = Math.round((20000 - value) / 19900 * 1000) / 10;
   const update = (next) => onChange(Math.max(100, Math.min(20000, Math.round(next / 100) * 100)));
   const end = () => { drag.current = null; };
   useEffect(() => {
@@ -45,8 +46,8 @@ function FilterKnob({ track, value, onChange, disabled = false }) {
     return () => window.removeEventListener('blur', end);
   }, []);
   return <div className="dj-knob" role="slider" tabIndex={disabled ? -1 : 0} aria-label={`${LABELS[track]}滤波器`} aria-disabled={disabled}
-    aria-valuemin={100} aria-valuemax={20000} aria-valuenow={value} aria-valuetext={value === 20000 ? '关闭' : `${value} Hz`}
-    aria-orientation="vertical" style={{ '--dj-angle': `${-135 + ((value - 100) / 19900) * 270}deg` }}
+    aria-valuemin={0} aria-valuemax={100} aria-valuenow={amount} aria-valuetext={value === 20000 ? '关闭' : `滤波 ${amount}% · ${value} Hz`}
+    aria-orientation="vertical" style={{ '--dj-angle': `${-135 + ((20000 - value) / 19900) * 270}deg` }}
     onPointerDown={(e) => {
       if (disabled || e.button !== 0 || drag.current) return;
       e.preventDefault(); e.currentTarget.focus(); e.currentTarget.setPointerCapture(e.pointerId);
@@ -54,16 +55,16 @@ function FilterKnob({ track, value, onChange, disabled = false }) {
     }}
     onPointerMove={(e) => {
       const start = drag.current;
-      if (!disabled && start?.id === e.pointerId) update(start.value + (start.y - e.clientY) * (19900 / 150));
+      if (!disabled && start?.id === e.pointerId) update(start.value - (start.y - e.clientY) * (19900 / 150));
     }} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onBlur={end}
     onKeyDown={(e) => {
       if (disabled) return;
-      const steps = { ArrowUp: 100, ArrowRight: 100, ArrowDown: -100, ArrowLeft: -100, PageUp: 1000, PageDown: -1000 };
+      const steps = { ArrowUp: -100, ArrowRight: -100, ArrowDown: 100, ArrowLeft: 100, PageUp: -1000, PageDown: 1000 };
       if (e.key in steps) { e.preventDefault(); update(value + steps[e.key]); }
       else if (['Home', 'End', ' ', 'Enter'].includes(e.key)) {
         e.preventDefault();
-        if (e.key === 'Home') update(100);
-        if (e.key === 'End') update(20000);
+        if (e.key === 'Home') update(20000);
+        if (e.key === 'End') update(100);
       }
     }}><span className="dj-knob-face" aria-hidden="true"><span /></span></div>;
 }
@@ -104,7 +105,7 @@ export function TrackControls({ track, session, changeMix, effects, cutoff, repe
         <span className="dj-control-label">滤波器</span>
         <output>{cutoff === 20000 ? '关闭' : cutoff >= 1000 ? `${(cutoff / 1000).toFixed(1)} kHz` : `${cutoff} Hz`}</output>
         <FilterKnob track={track} value={cutoff} disabled={disabled} onChange={onCutoffChange ?? ((value) => effects.cutoff(track, value))} />
-        <span className="dj-knob-ends" aria-hidden="true">低<span>关闭</span></span>
+        <span className="dj-knob-ends" aria-hidden="true">关闭<span>强</span></span>
       </div>
     </div>
     {!hideRepeat && <><div className="dj-repeat-label">重复</div>

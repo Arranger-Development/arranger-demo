@@ -42,15 +42,15 @@ test('accepts only measured channel 4 CC1–6, ignoring other devices/protocols 
   assert.equal(commands.length, 0);
 });
 
-test('both measured fader bottom 1 and MIDI bottom 0 reach silence, minimum filter, dry reverb and lowest pitch', () => {
+test('both measured fader bottom 1 and MIDI bottom 0 reach silence, filter off, dry reverb and lowest pitch', () => {
   for (const raw of [0, 1]) {
     assert.equal(jamMidiValue('volume', raw), -24);
-    assert.equal(jamMidiValue('cutoff', raw), 100);
+    assert.equal(jamMidiValue('cutoff', raw), 20000);
     assert.equal(jamMidiValue('reverb', raw), 0);
     assert.equal(jamMidiValue('pitch', raw), -12);
   }
   assert.equal(jamMidiValue('volume', 127), 6);
-  assert.equal(jamMidiValue('cutoff', 127), 20000);
+  assert.equal(jamMidiValue('cutoff', 127), 100);
   assert.equal(jamMidiValue('reverb', 127), 1);
   assert.equal(jamMidiValue('pitch', 127), 12);
   for (const raw of [62, 63, 64, 65]) assert.equal(jamMidiValue('pitch', raw), 0);
@@ -68,11 +68,39 @@ test('faders wait for pickup; a crossing catches the current value even if MIDI 
 
 test('filter and reverb use existing effect commands and correct endpoints', () => {
   const { send, context, commands } = setup();
-  send(2, 127); send(2, 1);
+  send(2, 1); send(2, 127);
   assert.equal(context.values.cutoff, 100);
   send(3, 1); send(3, 127);
   assert.equal(context.values.reverb, 1);
   assert.deepEqual(commands.map(c => c.type), ['cutoff', 'reverb']);
+});
+
+test('filter fader strengthens upward and returns to off at the bottom', () => {
+  let previous = 20000;
+  for (let raw = 0; raw <= 127; raw++) {
+    const cutoff = jamMidiValue('cutoff', raw);
+    assert.ok(cutoff <= previous && cutoff >= 100);
+    previous = cutoff;
+  }
+  const { send, context } = setup();
+  send(2, 1); send(2, 64);
+  assert.equal(context.values.cutoff, 10000);
+  send(2, 127); assert.equal(context.values.cutoff, 100);
+  send(2, 1); assert.equal(context.values.cutoff, 20000);
+});
+
+test('reversed filter pickup matches current cutoff and re-arms when switching targets', () => {
+  const { send, context, commands } = setup();
+  context.values.cutoff = 5000;
+  send(2, 20); send(2, 60);
+  assert.equal(commands.length, 0);
+  send(2, 96); assert.equal(context.values.cutoff, 5000);
+  send(2, 127); assert.equal(context.values.cutoff, 100);
+  context.selectedTrack = 'bass'; context.selectedTracks = ['bass']; context.values.cutoff = 20000;
+  const count = commands.length;
+  send(2, 126); assert.equal(commands.length, count);
+  send(2, 1); send(2, 64);
+  assert.equal(context.values.cutoff, 10000);
 });
 
 test('changing target selection or project re-arms pickup rather than jumping the new target', () => {
