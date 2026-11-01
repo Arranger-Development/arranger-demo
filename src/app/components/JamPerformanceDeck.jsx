@@ -17,9 +17,10 @@ function Hold({ label, disabled, pressed, onPress, onRelease }) {
     onBlur={releaseKeys}>{label}</button>;
 }
 
-export default function JamPerformanceDeck({ effects, session, enabled, changeMix }) {
+export default function JamPerformanceDeck({ effects, session, enabled, hardwarePitch, changeMix }) {
   const fx = useSyncExternalStore(effects.subscribe, effects.getSnapshot);
   const track = fx.selectedTrack, hasTargets = fx.selectedTracks.length > 0;
+  const pitch = !enabled && hasTargets ? hardwarePitch ?? fx.pitches[track] : fx.pitches[track];
   const mixed = Object.values(EFFECT_FIELDS).some(field => fx.selectedTracks.some(t => fx[field][t] !== fx[field][track]));
   const momentary = (parameter, value, label) => <Hold key={parameter + ':' + value} label={label}
     disabled={!enabled || !hasTargets} pressed={fx[EFFECT_FIELDS[parameter]][track] === value}
@@ -42,9 +43,9 @@ export default function JamPerformanceDeck({ effects, session, enabled, changeMi
     </section>
     <section className="jam-performance-group" aria-label="演奏效果">
       <h3 className="jam-effect-group-title">演奏效果</h3>
-      <label className="jam-effect-slider">弯音 <output>{fx.pitches[track].toFixed(1)} 半音</output>
+      <label className="jam-effect-slider">弯音 <output>{pitch.toFixed(1)} 半音</output>
         <input type="range" aria-label="弯音" min="-12" max="12" step="0.1"
-          value={fx.pitches[track]} disabled={!enabled || !hasTargets}
+          value={pitch} disabled={!enabled || !hasTargets}
           onChange={e => effects.press('pitch', 'screen:pitch-slider', Number(e.target.value), session.bpm)}
           onPointerDown={e => e.currentTarget.setPointerCapture(e.pointerId)}
           onPointerUp={() => effects.release('pitch', 'screen:pitch-slider')}

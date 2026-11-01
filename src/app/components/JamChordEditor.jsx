@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { PianoRoll } from './PianoRoll.jsx';
 import { jamEditorNotes, jamPitchedNotes, jamPitchedRenderState, setJamPitchedNote } from '../jamNoteEditing.js';
+import { formatNoteLabel } from '../noteDisplay.js';
 
 export default function JamChordEditor({ draft, bar, step, onChange }) {
   const [selection, setSelection] = useState(null);
@@ -32,7 +33,7 @@ export default function JamChordEditor({ draft, bar, step, onChange }) {
   }}>
     <div className="studio-chord-progression" aria-label={`${label}辅助信息`}>{track === 'chord' ? `和弦进行 · ${progression.join(' → ') || '自由音符'}` : '点击空格添加 · 选中音符后修改时值或删除'}</div>
     <div className="studio-note-tools">
-      <span>{selected ? `${selected.note} · 第 ${selected.step + 1} 步` : '点格子添加音符 · 点音符选择'}</span>
+      <span>{selected ? `${formatNoteLabel(selected.note)} · 第 ${selected.step + 1} 步` : '点格子添加音符 · 点音符选择'}</span>
       <label>时值 <input type="number" aria-label={`${label}音符时值（步）`} min="1" max={selected ? 16 - selected.step : 16}
         disabled={!selected} value={hit ? Math.max(1, Math.round(hit.durationSteps)) : 1} onChange={event => edit(event.target.value)}/> 步</label>
       <button type="button" aria-label={`删除${label}音符`} disabled={!selected} onClick={() => edit(1, true)}><Trash2 size={14}/></button>

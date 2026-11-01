@@ -50,6 +50,7 @@ import { ClipNameInput } from './ClipNameInput.jsx';
 import { EditorTrackIdentity } from './EditorTrackIdentity.jsx';
 import { renderIcon } from './icons.js';
 import { PianoRoll } from './PianoRoll.jsx';
+import { formatNoteLabel } from '../noteDisplay.js';
 import { TrackBarPager } from './TrackBarPager.jsx';
 
 const MELODY_EXAMPLE_DISPLAY_BY_TARGET = Object.freeze({
@@ -399,9 +400,9 @@ function MelodyEditor({
           <div className="ks-keys" data-scale={activeScale.id} aria-label="三八度按键与音符对应表">
             {melodyInputGrid.map((row) => (
               <div className="ks-row" key={row[0].rowId}>
-                <span className="ks-octave" aria-hidden="true">{row[0].octave}</span>
+                <span className="ks-octave" aria-hidden="true">{row[0].octave - 1}</span>
                 {row.map((cell) => {
-                  const { name, octave } = formatMelodyNoteParts(cell.note ?? '');
+                  const { name, octave } = formatMelodyNoteParts(formatNoteLabel(cell.note ?? ''));
                   const playing = cell.note ? activePlayedNotes.has(cell.note) : false;
                   return (
                     <button
@@ -416,7 +417,7 @@ function MelodyEditor({
                       data-oct={octave}
                       disabled={!cell.enabled}
                       key={`${cell.rowId}-${cell.column}`}
-                      aria-label={cell.enabled ? `${cell.note} - 按 ${cell.keyLabel}` : `${cell.keyLabel} - 当前音阶未使用`}
+                      aria-label={cell.enabled ? `${formatNoteLabel(cell.note)} - 按 ${cell.keyLabel}` : `${cell.keyLabel} - 当前音阶未使用`}
                       onPointerCancel={(event) => handlePreviewEnd(event, cell)}
                       onPointerDown={(event) => handlePreviewStart(event, cell)}
                       onPointerUp={(event) => handlePreviewEnd(event, cell)}

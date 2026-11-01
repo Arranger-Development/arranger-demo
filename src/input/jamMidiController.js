@@ -1,4 +1,7 @@
+import { jamParameterLevels, jamTrackKnobs } from '../app/jamPerformanceState.js';
+
 // Measured on the user's 4AC1F4C4: MIDI channel 4, faders CC1–4, knobs CC5–6.
+// Binding keys retain physical knob positions; musical parameters depend on the track.
 export const JAM_MIDI_BINDINGS = Object.freeze({
   1: 'volume', 2: 'cutoff', 3: 'reverb', 4: 'pitch', 5: 'strength', 6: 'groove',
 });
@@ -22,64 +25,94 @@ export function jamMidiValue(parameter, raw, levels = [0, 25, 50, 75, 100]) {
   return levels[Math.round(raw / 127 * (levels.length - 1))];
 }
 
-function midiPosition(parameter, value) {
-  if (parameter === 'volume') return (value + 24) / 30 * 127;
-  if (parameter === 'cutoff') return (20000 - value) / 19900 * 127;
-  if (parameter === 'reverb') return value * 127;
-  if (parameter === 'pitch') return value === 0 ? 63.5 : value < 0 ? 62 + value / 12 * 61 : 65 + value / 12 * 62;
-  return value / 100 * 127;
-}
-
 export function createJamMidiController({ getContext, dispatch }) {
-  const slots = new Map();
+  const listeners = new Set();
+  let positions = { strength: null, groove: null };
+  const emptyFaders = () => ({ volume: null, cutoff: null, reverb: null, pitch: null });
+  let faders = emptyFaders();
+  const pendingFaders = new Set();
+  const publish = next => { positions = next; listeners.forEach(listener => listener()); };
   let pitchOwned = false;
   const releasePitch = () => {
     if (pitchOwned) dispatch({ type: 'pitch', token: PITCH_TOKEN, pressed: false });
     pitchOwned = false;
   };
+  const suspendPitch = () => { releasePitch(); if (faders.pitch) pendingFaders.add('pitch'); };
+  function applyFader(parameter) {
+    const context = getContext(), position = faders[parameter];
+    if (!position || !context?.active || context.blocked || !context.selectedTracks.length) {
+      if (parameter === 'pitch') releasePitch();
+      return false;
+    }
+    if (parameter === 'pitch' && !context.playing) { releasePitch(); return false; }
+    pendingFaders.delete(parameter);
+    const next = position.value;
+    if (parameter === 'pitch') {
+      if (next === 0) { const owned = pitchOwned; releasePitch(); return owned; }
+      if (pitchOwned && next === context.values.pitch) return false;
+      pitchOwned = true; dispatch({ type: 'pitch', token: PITCH_TOKEN, value: next, pressed: true });
+    } else {
+      if (next === context.values[parameter] && context.selectedTracks.length === 1) return false;
+      dispatch({ type: parameter, parameter, value: next });
+    }
+    return true;
+  }
+  const syncFaders = () => { for (const parameter of [...pendingFaders]) applyFader(parameter); };
   return {
-    reset() { releasePitch(); slots.clear(); },
-    handle(data) {
+    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    getSnapshot: () => positions,
+    getFaderSnapshot: () => faders,
+    syncFaders, suspendPitch,
+    // A mouse edit/undo shows the software value, without forgetting the physical position.
+    useSoftwareValue(parameter) {
+      const next = { ...positions };
+      for (const p of parameter ? [parameter] : ['strength', 'groove']) {
+        if (next[p]?.display) next[p] = { ...next[p], display: false };
+      }
+      if (next.strength !== positions.strength || next.groove !== positions.groove) publish(next);
+    },
+    reset: suspendPitch,
+    showPositions() {
+      const next = Object.fromEntries(Object.entries(positions).map(([p, position]) =>
+        [p, position ? { ...position, display: true } : null]));
+      publish(next);
+    },
+    disconnect() {
+      releasePitch(); pendingFaders.clear();
+      faders = emptyFaders();
+      listeners.forEach(listener => listener());
+      if (positions.strength || positions.groove) publish({ strength: null, groove: null });
+    },
+    handle(data, { positionOnly = false } = {}) {
       if (data?.length !== 3 || data[0] !== 0xb3 || !Number.isInteger(data[1])
         || !Number.isInteger(data[2]) || data[2] < 0 || data[2] > 127) return false;
-      const parameter = JAM_MIDI_BINDINGS[data[1]];
+      let parameter = JAM_MIDI_BINDINGS[data[1]];
       if (!parameter) return false;
-      const context = getContext();
       const knob = parameter === 'strength' || parameter === 'groove';
-      if (!context?.active || context.blocked || (knob ? !['drums','chord','bass','melody'].includes(context.editingTrack) : !context.selectedTracks.length)
-        || (parameter === 'pitch' && !context.playing)) {
-        slots.delete(parameter);
-        if (parameter === 'pitch') releasePitch();
-        return false;
+      const raw = data[2], previousRaw = knob ? positions[parameter]?.raw : null;
+      if (!knob) {
+        faders = { ...faders, [parameter]: { raw, value: jamMidiValue(parameter, raw) } };
+        pendingFaders.add(parameter);
+        listeners.forEach(listener => listener());
+        return positionOnly ? false : applyFader(parameter);
       }
-      const value = knob ? context.params[parameter] : context.values[parameter];
-      const key = knob ? `${context.projectId}:${context.editorVersion}:${context.editingTrack}`
-        : `${context.projectId}:${context.selectedTrack}:${context.selectedTracks.join(',')}:${parameter === 'pitch' ? context.playing : ''}`;
-      let slot = slots.get(parameter);
-      // Re-arm when a screen control, undo, template or another MIDI device changes the value.
-      if (!slot || slot.key !== key || Math.abs(value - slot.expected) > 0.000001) {
-        slot = { key, expected: value, raw: null, latched: false };
-        slots.set(parameter, slot);
-      }
-      const raw = data[2], target = midiPosition(parameter, value);
-      if (!slot.latched) {
-        slot.latched = Math.abs(raw - target) <= 2 || (slot.raw !== null && (slot.raw - target) * (raw - target) <= 0);
-      }
-      slot.raw = raw;
-      if (!slot.latched) return false;
-      const levels = context.parameterLevels?.[parameter] ?? [0, 25, 50, 75, 100];
+      // Capture even with no editor, an inactive tab, or an open confirmation. Never replay it later.
+      if (knob && previousRaw !== raw) publish({ ...positions,
+        [parameter]: { raw, percent: Math.round(raw / 127 * 100), display: true } });
+      if (positionOnly || knob && previousRaw === raw) return false;
+      const context = getContext();
+      if (!context?.active || context.blocked || !['drums','chord','bass','melody'].includes(context.editingTrack)) return false;
+      parameter = jamTrackKnobs(context.editingTrack).find(knob => knob.hardwareParameter === parameter).parameter;
+      const value = context.params[parameter];
+      const levels = context.parameterLevels?.[parameter] ?? jamParameterLevels(context.editingTrack,parameter);
       const next = jamMidiValue(parameter, raw, levels);
-      if (knob && next !== value) {
-        const boundary = (levels.indexOf(value) + (next > value ? 0.5 : -0.5)) * 127 / (levels.length - 1);
+      if (next === value) return false;
+      const index = levels.indexOf(value), nextIndex = levels.indexOf(next);
+      if (Math.abs(index - nextIndex) === 1) {
+        const boundary = (index + (next > value ? 0.5 : -0.5)) * 127 / (levels.length - 1);
         if (Math.abs(raw - boundary) < 2) return false;
       }
-      if (next === value) return false;
-      slot.expected = next;
-      if (parameter === 'pitch') {
-        if (next === 0) releasePitch();
-        else { pitchOwned = true; dispatch({ type: 'pitch', token: PITCH_TOKEN, value: next, pressed: true }); }
-      } else dispatch(knob ? { type: 'trackParameter', trackId: context.editingTrack, parameter, value: next }
-        : { type: parameter, parameter, value: next });
+      dispatch({ type: 'trackParameter', trackId: context.editingTrack, parameter, value: next });
       return true;
     },
   };
@@ -88,13 +121,14 @@ export function createJamMidiController({ getContext, dispatch }) {
 // Independent listeners preserve Launchpad's input and MIDIAccess state handler.
 export function createJamMidiConnection({ requestAccess, controller }) {
   let state = { status: 'idle', deviceName: null, errorMessage: null };
-  let access = null, input = null, generation = 0;
+  let access = null, input = null, generation = 0, opening = false;
   const listeners = new Set();
   const publish = patch => { state = { ...state, ...patch }; listeners.forEach(listener => listener()); };
-  const receive = event => controller.handle(event.data);
+  const receive = event => controller.handle(event.data, { positionOnly: opening });
   const detach = () => {
     input?.removeEventListener('midimessage', receive);
-    input = null; controller.reset();
+    input = null; opening = false;
+    if (controller.disconnect) controller.disconnect(); else controller.reset();
   };
   async function bind() {
     const next = findJamMidiInput(access.inputs.values());
@@ -107,9 +141,13 @@ export function createJamMidiConnection({ requestAccess, controller }) {
     input = next;
     const ownGeneration = generation;
     try {
+      // Listen before opening so a device's opening snapshot cannot be lost or generate notes.
+      opening = true;
+      next.addEventListener('midimessage', receive);
       await next.open();
       if (ownGeneration !== generation || input !== next) return;
-      next.addEventListener('midimessage', receive);
+      opening = false;
+      controller.syncFaders?.();
       publish({ status: 'connected', deviceName: next.name, errorMessage: null });
     } catch (error) {
       if (ownGeneration !== generation || input !== next) return;
@@ -144,6 +182,7 @@ export function createJamMidiConnection({ requestAccess, controller }) {
       generation += 1;
       access?.removeEventListener('statechange', changed);
       access = null; detach();
+      publish({ status: 'idle', deviceName: null, errorMessage: null });
     },
   };
 }

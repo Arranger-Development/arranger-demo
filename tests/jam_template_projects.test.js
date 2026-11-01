@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DIAL_DRUM_PRESETS, getDialDrumPreset } from '../src/data/dialDrumPresets.js';
 import { createMatrixPlaybackAdapter } from '../src/audio/matrixPlaybackAdapter.js';
 import { toggleDrumsCellInstrument } from '../src/domain/drumsCells.js';
-import { createJamTemplateProjects, getJamTemplateProjects, jamTemplateProjectsKey, jamCombinationSnapshot, applyUserTemplate, sortUserTemplatesForCreation, upgradeJamSlotLayout } from '../src/app/jamTemplateProjects.js';
+import { createJamTemplateProjects, getJamTemplateProjects, jamTemplateProjectsKey, jamCombinationSnapshot, applyUserTemplate, sortUserTemplatesForCreation, upgradeJamSlotLayout, defaultJamTimbres } from '../src/app/jamTemplateProjects.js';
 import { createSession, createSessionEditor, TIMBRE_OPTIONS } from '../src/app/performanceSession.js';
 import { createJamProjects } from '../src/app/jamProjects.js';
 import createInitialMatrix from '../src/store/createInitialMatrix.js';
@@ -12,6 +12,47 @@ import { createLaunchpadXPerformanceLedFrame } from '../src/input/launchpadXPerf
 
 const memory = () => { const data = new Map(); return { getItem: k => data.get(k) ?? null, setItem: (k,v) => data.set(k,v) }; };
 const draft = () => ({ trackId:'drums', timbreId:'soft-electronic-kit', params:{strength:100,groove:100}, bars:structuredClone(getDialDrumPreset(100,100).bars) });
+test('new Jam phrases default to all four Deep Autumn banks through save, playback and reopening',()=>{
+  const storage=memory(),store=createJamTemplateProjects(storage,'pop',null,100);
+  const expected={drums:'deep-autumn-drums',chord:'deep-autumn-chord',bass:'deep-autumn-bass',melody:'deep-autumn-melody'};
+  assert.deepEqual(defaultJamTimbres(),expected);
+  assert.equal(jamCombinationSnapshot(store.current().workspace),null,'the entry stays musically blank');
+  const selection={};
+  for(const track of Object.keys(expected)) {
+    const cell=track==='drums'?{instruments:['kick']}:track==='bass'?{type:'bass',note:'C2'}
+      :track==='melody'?{type:'melody',note:'C4'}:{type:'notes',notes:['C4']};
+    const saved=store.saveTemplate({trackId:track,bars:[[cell,...Array(15).fill(null)]]},track);
+    assert.equal(saved.timbreId,expected[track]);selection[track]=saved.id;
+  }
+  store.patch({selection});
+  const restored=createJamTemplateProjects(storage,'pop',null,100),snapshot=jamCombinationSnapshot(restored.current().workspace);
+  assert.deepEqual(snapshot.timbres,expected);
+  const events=createMatrixPlaybackAdapter(snapshot.matrix,{totalBars:snapshot.totalBars}).getEventsForFlatStep(0);
+  assert.deepEqual(new Set(events.map(e=>e.trackId)),new Set(Object.keys(expected)));
+  for(const event of events)assert.equal(event.timbreId,expected[event.trackId]);
+  const applied=applyUserTemplate({matrix:createInitialMatrix(),clips:{ids:[],byId:{}},totalBars:8},restored.current().workspace.templates.drums[0],0);
+  assert.equal(applied.matrix.drums[0][0].requestedTimbreId,expected.drums);
+  restored.create();assert.ok(Object.values(restored.current().workspace.templates).every(row=>row.length===0));
+  assert.equal(jamCombinationSnapshot(restored.current().workspace),null);
+});
+test('Deep Autumn fallback preserves explicit project and saved-phrase choices while filling missing banks',()=>{
+  const storage=memory(),store=createJamTemplateProjects(storage,'pop',null,100),selection={};
+  const old={drums:'soft-electronic-kit',chord:'warm-electric-piano',bass:'round-electric-bass',melody:'airy-synth-lead'};
+  for(const [track,timbreId] of Object.entries(old)) {
+    const cell=track==='drums'?{instruments:['kick']}:track==='bass'?{type:'bass',note:'C2'}
+      :track==='melody'?{type:'melody',note:'C4'}:{type:'notes',notes:['C4']};
+    selection[track]=store.saveTemplate({trackId:track,timbreId,bars:[[cell,...Array(15).fill(null)]]},track).id;
+  }
+  store.patch({selection});store.setTimbre('chord','deep-autumn-chord');
+  store.setDraft({trackId:'melody',timbreId:old.melody,bars:[Array(16).fill(null)],dirty:true});
+  let restored=createJamTemplateProjects(storage,'pop',null,100);
+  assert.deepEqual(jamCombinationSnapshot(restored.current().workspace).timbres,{...old,chord:'deep-autumn-chord'});
+  assert.equal(restored.current().workspace.draft.timbreId,old.melody);
+  const key=jamTemplateProjectsKey('pop',null),raw=JSON.parse(storage.getItem(key));
+  for(const project of raw.projects)delete project.workspace.templates.bass[0].timbreId;
+  storage.setItem(key,JSON.stringify(raw));restored=createJamTemplateProjects(storage,'pop',null,100);
+  assert.deepEqual(jamCombinationSnapshot(restored.current().workspace).timbres,{...old,chord:'deep-autumn-chord',bass:'deep-autumn-bass'});
+});
 test('all 25 authored combinations preserve 406 hits and exact substep rolls in the playback adapter', () => {
   assert.equal(DIAL_DRUM_PRESETS.length,25);
   assert.equal(new Set(DIAL_DRUM_PRESETS.map(p => `${p.strength}:${p.groove}`)).size,25);

@@ -12,6 +12,7 @@ import {
 import { usePianoRollRowIndicator } from '../usePianoRollRowIndicator.js';
 import { usePitchScrollSync } from '../usePitchScrollSync.js';
 import { BEAT_NUMBERS } from '../uiShellData.js';
+import { formatNoteLabel } from '../noteDisplay.js';
 import { renderIcon } from './icons.js';
 
 const EMPTY_ACTIVE_NOTE_IDS = new Set();
@@ -42,11 +43,11 @@ function PianoRollNoteKey({
     className,
     'data-note': note.note,
     'data-row': rowIndex,
-    title: note.note,
+    title: formatNoteLabel(note.note),
   };
 
   if (!onNotePreview) {
-    return <div {...commonProps}>{note.label}</div>;
+    return <div {...commonProps}>{formatNoteLabel(note.note)}</div>;
   }
 
   return (
@@ -56,7 +57,7 @@ function PianoRollNoteKey({
       disabled={disabled}
       onClick={() => onNotePreview(note.note)}
     >
-      {note.label}
+      {formatNoteLabel(note.note)}
     </button>
   );
 }
@@ -267,7 +268,7 @@ function PianoRoll({
                           data-step={step}
                           key={`${note.note}-${step}`}
                           type="button"
-                          aria-label={`${note.note} beat ${beatNumber}.${stepNumber}`}
+                          aria-label={`${formatNoteLabel(note.note)} beat ${beatNumber}.${stepNumber}`}
                           aria-pressed={active}
                           disabled={disabled}
                           onClick={() => {

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { DIAL_PITCHED_PRESETS, getDialPitchedPreset } from '../src/data/dialPitchedPresets.js';
+import { getJamPitchedPreset } from '../src/app/jamPitchedPresets.js';
 import { createMatrixPlaybackAdapter } from '../src/audio/matrixPlaybackAdapter.js';
 import { createJamTemplateProjects } from '../src/app/jamTemplateProjects.js';
 import { jamTemplatePage, jamSavedPageCount, normalizeJamSlots } from '../src/app/jamTemplateSlots.js';
@@ -9,7 +10,7 @@ import { blankJamDraft, hasJamNotes, applyJamTrackParameter } from '../src/app/j
 import { jamParameterLevels, jamTrackParameters } from '../src/app/jamPerformanceState.js';
 import { setJamPitchedNote, jamPitchedRenderState } from '../src/app/jamNoteEditing.js';
 import { createJamMidiController } from '../src/input/jamMidiController.js';
-import { getDurationSeconds, getEventTime } from '../src/export/audioFile.js';
+import { collectProjectEvents, getDurationSeconds, getEventTime } from '../src/export/audioFile.js';
 
 const pitchNumber = note => {
   const [, name, octave] = /^([A-G]#?)(-?\d+)$/.exec(note);
@@ -41,6 +42,25 @@ test('all 80 Session presets preserve every source MIDI event, length, velocity 
     total += tuples.length;
   }
   assert.equal(total,2728); assert.ok(fractional > 1000); assert.equal(repeated,2);
+});
+
+test('all 55 authored chord and melody phrases retain source MIDI and feel through Deep Autumn export', () => {
+  const presets=DIAL_PITCHED_PRESETS.filter(p=>p.trackId==='chord'||p.trackId==='melody');
+  assert.equal(presets.length,55);
+  for(const preset of presets) {
+    const before=structuredClone(preset),bars=structuredClone(preset.bars),timbreId=`deep-autumn-${preset.trackId}`;
+    for(const cell of bars.flat())if(cell)cell.requestedTimbreId=timbreId;
+    const events=collectProjectEvents({matrix:{[preset.trackId]:bars},trackOrder:[preset.trackId],totalBars:preset.barCount,bpm:120});
+    assert.ok(events.every(event=>event.timbreId===timbreId&&event.playbackMode==='natural'));
+    const tuples=events.flatMap(event=>(event.notes??[event.note]).map(note=>[
+      pitchNumber(note),getEventTime(event,120)*8,getDurationSeconds(event,120)*8,event.velocity,
+    ]));
+    tuples.sort((a,b)=>{for(let i=0;i<4;i++)if(a[i]!==b[i])return a[i]-b[i];return 0;});
+    const canonical=tuples.map(([note,...values])=>`${note}:${values.map(v=>v.toFixed(9)).join(':')}`).join('\n');
+    assert.equal(tuples.length,preset.sourceEventCount,preset.id);
+    assert.equal(createHash('sha256').update(canonical).digest('hex'),preset.sourceEventHash,preset.id);
+    assert.deepEqual(preset,before,'playback and export must not rewrite the source preset');
+  }
 });
 
 test('slots accept 9/16/17 templates, compact after deletion and survive project reload', () => {
@@ -107,21 +127,22 @@ test('four-track macros use authored presets, leave the original manual draft in
     const draft=blankJamDraft(track,'default',7);const before=structuredClone(draft);
     const next=applyJamTrackParameter(draft,'strength',75);
     assert.deepEqual(draft,before);assert.equal(next.targetSlot,7);assert.equal(next.params.strength,75);assert.ok(hasJamNotes(next));
-    if(track!=='drums') assert.deepEqual(next.bars,getDialPitchedPreset(track,75,track==='chord'?60:50).bars);
+    if(track!=='drums') assert.deepEqual(next.bars,getJamPitchedPreset(track,75,track==='chord'?60:50).bars);
     assert.equal(applyJamTrackParameter(next,'strength',75),next);
   }
 });
 
-test('MIDI chord groove uses six levels and pickup re-arms across track changes', () => {
+test('MIDI left chord color uses six Level values, displays physical percentage and directly takes over across track changes', () => {
   const context={active:true,projectId:'p',editorVersion:1,editingTrack:'chord',selectedTracks:[],params:{strength:50,groove:60},parameterLevels:{groove:jamParameterLevels('chord','groove')}};
   const seen=[];
   const c=createJamMidiController({getContext:()=>context,dispatch:cmd=>{seen.push(cmd);context.params[cmd.parameter]=cmd.value;}});
-  assert.equal(c.handle([0xb3,6,0]),false);
-  c.handle([0xb3,6,76]); c.handle([0xb3,6,127]);
+  assert.equal(c.handle([0xb3,5,0]),true);
+  c.handle([0xb3,5,76]); c.handle([0xb3,5,127]);
   assert.equal(seen.at(-1).value,100);
-  for(const raw of [0,25,51,76,102,127]) c.handle([0xb3,6,raw]);
+  for(const raw of [0,25,51,76,102,127]) c.handle([0xb3,5,raw]);
   assert.deepEqual([...new Set(seen.map(cmd=>cmd.value))].sort((a,b)=>a-b),[0,20,40,60,80,100]);
   context.editingTrack='melody';context.params.groove=50;context.parameterLevels.groove=jamParameterLevels('melody','groove');
-  assert.equal(c.handle([0xb3,6,127]),false); c.handle([0xb3,6,64]);c.handle([0xb3,6,127]);
+  assert.equal(c.handle([0xb3,5,127]),false); c.handle([0xb3,5,126]);
   assert.equal(seen.at(-1).trackId,'melody');assert.equal(seen.at(-1).value,100);
+  assert.equal(c.getSnapshot().strength.percent,99);
 });

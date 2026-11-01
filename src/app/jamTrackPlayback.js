@@ -3,14 +3,15 @@ import { PERFORMANCE_TRACKS as TRACKS } from './performanceModel.js';
 // Runtime only: saved selections contain IDs, never transport positions or requests.
 export function createJamTrackPlayback(nextVersion) {
   let tracks = {}, audible = {}, launches = {}, stops = {}, overlay = null, overlayRequest;
-  const releases = new Map();
-  let source = null, lastAudible = -1;
+  const releases = new Map(), edits = new Map();
+  let source = null, lastAudible = -1, overlayVersion = 0;
   const cancelled = new Set();
-  const ids = entries => Object.fromEntries(TRACKS.map(t => [t, entries[t]?.id ?? null]));
+  const ids = entries => Object.fromEntries(TRACKS.map(t => [t, entries[t]?.silent ? null : entries[t]?.id ?? null]));
   const entry = (snapshot, t, at, preserve) => snapshot?.phraseIds[t] ? {
     id: snapshot.phraseIds[t], bars: snapshot.phraseBars?.[t] ?? snapshot.totalBars,
     matrix: snapshot.matrix[t], startStep: preserve && tracks[t]?.id === snapshot.phraseIds[t] ? tracks[t].startStep : at,
     revision: nextVersion(),
+    ...(snapshot.editorRevision === undefined ? {} : { editorRevision: snapshot.editorRevision }),
   } : null;
   function invalidate(t, cancelScheduled = false) {
     if (launches[t] && (!launches[t].scheduled || cancelScheduled)) cancelled.add(launches[t].revision);
@@ -49,8 +50,27 @@ export function createJamTrackPlayback(nextVersion) {
     }
   }
   function remove(t, id, at) {
+    if (edits.get(t)?.id===id) edits.delete(t);
     if (launches[t]?.entry?.id === id) invalidate(t, true);
     if (tracks[t]?.id === id || audible[t]?.id === id) stops[t] = { id, at, revision: nextVersion() };
+  }
+  function updatePhrase(snapshot,t,id,at) {
+    const replaceValue=previous=>({...previous,matrix:snapshot.matrix[t],
+      bars:snapshot.phraseBars?.[t]??snapshot.totalBars,silent:!snapshot.phraseIds[t],revision:nextVersion()});
+    const request=launches[t];
+    if (request?.entry?.id===id) {
+      cancelled.add(request.revision);
+      if (request.scheduled) {
+        if (request.previous) tracks[t]=request.previous; else delete tracks[t];
+      }
+      request.entry=replaceValue(request.entry);request.revision=request.entry.revision;request.scheduled=false;
+    }
+    if (request?.previous?.id===id) request.previous=replaceValue(request.previous);
+    if (tracks[t]?.id===id) {
+      cancelled.add(tracks[t].revision);
+      edits.set(t,{id,at,entry:replaceValue(tracks[t])});
+    }
+    source=null;
   }
   function snapshotFor(entries) {
     return { id: 'jam-current-combination', repeat: null, kind: 'main',
@@ -61,34 +81,43 @@ export function createJamTrackPlayback(nextVersion) {
       trackStepOffsets: Object.fromEntries(TRACKS.map(t => [t, entries[t]?.startStep ?? 0])),
     };
   }
-  const hasWork = () => TRACKS.some(t => tracks[t] || launches[t]?.entry);
+  const hasWork = () => TRACKS.some(t => tracks[t] && !tracks[t].silent || launches[t]?.entry && !launches[t].entry.silent || edits.get(t)?.entry && !edits.get(t).entry.silent);
   function positions(entries, absolute) {
-    return Object.fromEntries(TRACKS.filter(t => entries[t]).map(t => {
+    return Object.fromEntries(TRACKS.filter(t => entries[t] && !entries[t].silent).map(t => {
       const value = entries[t], localStep = Math.max(0, absolute - value.startStep), totalSteps = value.bars * 16;
       return [t, { phraseId: value.id, startStep: value.startStep, localStep, totalSteps,
+        ...(value.editorRevision === undefined ? {} : { editorRevision: value.editorRevision }),
         bar: Math.floor(localStep / 16) % value.bars, step: localStep % 16, fraction: (localStep % totalSteps) / totalSteps }];
     }));
   }
   return {
-    replace, toggle, remove, hasWork,
+    replace, toggle, remove, hasWork, updatePhrase,
     desiredIds: () => Object.fromEntries(TRACKS.map(t => [t,
-      launches[t] ? launches[t].entry?.id ?? null : stops[t]?.id === tracks[t]?.id ? null : tracks[t]?.id ?? null])),
+      launches[t] ? launches[t].entry?.silent ? null : launches[t].entry?.id ?? null : stops[t]?.id === tracks[t]?.id || tracks[t]?.silent ? null : tracks[t]?.id ?? null])),
     state: () => ({ playingPhraseIds: ids(audible),
-      queuedPhraseIds: Object.keys(launches).length ? Object.fromEntries(TRACKS.map(t => [t, launches[t]?.entry?.id ?? null])) : null }),
+      queuedPhraseIds: Object.keys(launches).length ? Object.fromEntries(TRACKS.map(t => [t, launches[t]?.entry?.silent ? null : launches[t]?.entry?.id ?? null])) : null }),
     progress: absolute => ({ snapshot: snapshotFor(audible), trackPositions: positions(audible, absolute) }),
-    audition(snapshot, at) { overlayRequest = { snapshot, at }; },
+    audition(snapshot, at, { restart = false } = {}) { overlayVersion++; overlayRequest = { snapshot, at, restart }; },
     read(absolute) {
       const releaseTrackIds = new Set();
       for (const [t, at] of releases) if (absolute >= at) { releaseTrackIds.add(t); releases.delete(t); }
       for (const t of TRACKS) {
+        const edit=edits.get(t);
+        if (edit && absolute>=edit.at) {
+          if (tracks[t]?.id===edit.id) {
+            tracks[t]={...edit.entry,startStep:tracks[t].startStep};
+            if (!overlay) releaseTrackIds.add(t);
+          }
+          edits.delete(t);source=null;
+        }
         if (stops[t] && absolute >= stops[t].at) {
-          if (tracks[t]?.id === stops[t].id) { delete tracks[t]; releaseTrackIds.add(t); }
+          if (tracks[t]?.id === stops[t].id) { delete tracks[t]; if (!overlay) releaseTrackIds.add(t); }
           delete stops[t]; source = null;
         }
         const request = launches[t];
         if (request && absolute >= request.at && !request.scheduled) {
-          if (tracks[t]) releaseTrackIds.add(t);
-          request.previous = tracks[t];
+          if (tracks[t] && !overlay) releaseTrackIds.add(t);
+          if (!('previous' in request)) request.previous = tracks[t];
           if (request.entry) tracks[t] = request.entry; else delete tracks[t];
           request.scheduled = true; source = null;
         }
@@ -97,7 +126,7 @@ export function createJamTrackPlayback(nextVersion) {
         TRACKS.forEach(t => { if (overlay?.[t] || tracks[t]) releaseTrackIds.add(t); });
         overlay = overlayRequest.snapshot ? Object.fromEntries(TRACKS.map(t => {
           const value = entry(overlayRequest.snapshot, t, absolute, false);
-          if (value && overlay?.[t]?.id === value.id) value.startStep = overlay[t].startStep;
+          if (value && overlay?.[t] && !overlayRequest.restart) value.startStep = overlay[t].startStep;
           return [t, value];
         })) : null;
         overlayRequest = undefined; source = null;
@@ -105,10 +134,11 @@ export function createJamTrackPlayback(nextVersion) {
       if (!hasWork() && !overlay && !overlayRequest) return { done: true };
       const entries = { ...(overlay ?? tracks) }, requests = Object.fromEntries(Object.entries(overlay ? {} : launches)
         .filter(([, request]) => request.scheduled).map(([t, request]) => [t, request.revision]));
+      const viewVersion = overlayVersion;
       source ??= snapshotFor(entries);
       return { ...source, stepOffset: 0, releaseTrackIds: [...releaseTrackIds],
         confirm() {
-          if (absolute < lastAudible) return false;
+          if (absolute < lastAudible || viewVersion !== overlayVersion) return false;
           lastAudible = absolute;
           for (const t of TRACKS) {
             if (cancelled.has(entries[t]?.revision)) continue;

@@ -1,6 +1,7 @@
 import { getJamPadBinding } from './jamPadLayout.js';
 import { PERFORMANCE_TRACKS } from '../app/performanceModel.js';
 import { parseLaunchpadXMessage } from './launchpadXProtocol.js';
+import { isEmptyJamPhrase } from '../app/jamPhraseContent.js';
 
 export const PERFORMANCE_KEYS = {
   drums: ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8'],
@@ -14,7 +15,7 @@ export function performanceKeyLabel(trackId, index) {
 }
 function templateCommand(templates, trackId, index) {
   const template = templates?.[trackId]?.[index];
-  return template ? { type: 'template', trackId, templateId: template.id } : null;
+  return template && !isEmptyJamPhrase(template) ? { type: 'template', trackId, templateId: template.id } : null;
 }
 export function mapPerformanceKeyboard(event, templates) {
   if (event.type !== 'keydown' || event.repeat || event.isComposing || event.keyCode === 229
@@ -67,7 +68,7 @@ export function createPerformanceMidiInput() {
         if (surface.version !== 5 && [49,39,29].includes(number)) command = { type: 'effectPage', page: JAM_EFFECT_PAGES[[49,39,29].indexOf(number)] };
         if (number === 19 && surface.version !== 5) command = { type: 'recordEffects' };
         if (number === 93 || number === 94) command = { type: 'page', delta: number === 93 ? -1 : 1 };
-        if (number === 97) command = { type: 'save' };
+        if (number === 97 && surface.manualSave !== false) command = { type: 'save' };
         if (number === 98) command = { type: 'togglePlayback' };
       } else if (surface.version === 5) {
         const pad = getJamPadBinding(number);

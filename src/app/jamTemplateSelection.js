@@ -1,6 +1,7 @@
 import { jamCombinationSnapshot, jamTemplateRemoval } from './jamTemplateProjects.js';
 import { PERFORMANCE_TRACKS } from './performanceModel.js';
 import { jamTemplatePage } from './jamTemplateSlots.js';
+import { isEmptyJamPhrase } from './jamPhraseContent.js';
 
 // Repositioning surviving gems must not retrigger them or replace a pending launch.
 export function deleteJamTemplate({ projectStore, playback, audition, trackId, templateId }) {
@@ -29,15 +30,26 @@ export function deleteJamTemplate({ projectStore, playback, audition, trackId, t
 }
 
 // A column is one atomic launch, not four toggles (which would queue partial mixes).
-export function launchJamColumn({ projectStore, playback, audition, columnIndex, page = 0, slotIndex }) {
+export function launchJamColumn({ projectStore, playback, audition, columnIndex, page = 0, slotIndex, toggle = false }) {
   if (slotIndex === undefined) {
     if (!Number.isInteger(columnIndex) || columnIndex < 0 || columnIndex > 7 || !Number.isInteger(page) || page < 0) return false;
     slotIndex = page * 8 + columnIndex;
   }
   if (!Number.isSafeInteger(slotIndex) || slotIndex < 0) return false;
   const w = projectStore.current().workspace;
-  const selection = Object.fromEntries(PERFORMANCE_TRACKS.map(t => [t, jamTemplatePage(w.templates[t] ?? [], Math.floor(slotIndex / 8))[slotIndex % 8]?.id ?? null]));
+  const selection = Object.fromEntries(PERFORMANCE_TRACKS.map(t => {
+    const phrase=jamTemplatePage(w.templates[t] ?? [], Math.floor(slotIndex / 8))[slotIndex % 8];
+    return [t,phrase && !isEmptyJamPhrase(phrase)?phrase.id:null];
+  }));
   if (!Object.values(selection).some(Boolean)) return false;
+  // Explicit launches stay idempotent; the column's transport button toggles
+  // either its audible mix or its pending request, including during loading.
+  const matches = ids => ids && PERFORMANCE_TRACKS.every(t => (ids[t] ?? null) === selection[t]);
+  if (toggle && !audition.getTrack() && playback.isActive()
+    && (matches(playback.getDesiredPhraseIds()) || matches(playback.getProgress()?.snapshot.phraseIds))) {
+    audition.stop();
+    return true;
+  }
   if (!audition.getTrack() && playback.isActive() && PERFORMANCE_TRACKS.every(t => w.selection[t] === selection[t]
     && (!selection[t] || !w.mutedTracks[t] && w.volumes[t] > -24))) return false;
   audition.release();
@@ -53,7 +65,7 @@ export function launchJamColumn({ projectStore, playback, audition, columnIndex,
 // stopped historical selection can silently join this saved phrase.
 export function toggleJamTemplate({ projectStore, playback, audition, trackId, templateId }) {
   const current = projectStore.current().workspace;
-  if (!current.templates[trackId]?.some(template => template.id === templateId)) return false;
+  if (!current.templates[trackId]?.some(template => template.id === templateId && !isEmptyJamPhrase(template))) return false;
   audition.release();
   const snapshot = jamCombinationSnapshot({ ...current, selection: { [trackId]: templateId } });
   playback.toggleTrack(snapshot, trackId, current.bpm, { restart: current.mutedTracks[trackId] || current.volumes[trackId] <= -24 });
