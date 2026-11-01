@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JAM_PAD_LAYOUT } from '../src/input/jamPadLayout.js';
 import { createPerformanceMidiInput, JAM_VOLUME_STEPS, JAM_FILTER_STEPS, JAM_REVERB_STEPS } from '../src/input/performanceInput.js';
-import { createLaunchpadXPerformanceLedFrame } from '../src/input/launchpadXPerformanceSurface.js';
+import { createLaunchpadXPerformanceLedFrame, createLedFrameSender } from '../src/input/launchpadXPerformanceSurface.js';
 import { createJamEffects } from '../src/app/jamEffects.js';
 import { createJamTemplateProjects } from '../src/app/jamTemplateProjects.js';
 import { createSessionPlayback } from '../src/app/sessionPlayback.js';
@@ -145,7 +145,7 @@ test('paging, insertion and deletion follow the existing per-track array without
     input.handle([0x80,note,0],page,surface);
   }
   const emptyFrame = createLaunchpadXPerformanceLedFrame({...surface,templates:{}});
-  for (const notes of Object.values(positions)) for (const note of notes) assert.notEqual(light(emptyFrame,note),0);
+  for (const notes of Object.values(positions)) for (const note of notes) assert.equal(light(emptyFrame,note),0);
   assert.deepEqual(raw,before);
   page.drums.splice(0,1); page.drums.push({id:'new'});
   assert.equal(input.handle([0x90,81,127],page,surface).templateId,'drums-9');
@@ -153,6 +153,41 @@ test('paging, insertion and deletion follow the existing per-track array without
   assert.equal(input.handle([0x90,83,127],page,surface).templateId,'new');
   assert.notEqual(light(createLaunchpadXPerformanceLedFrame({...surface,templates:page}),81),light(emptyFrame,81));
   assert.equal(light(createLaunchpadXPerformanceLedFrame({...surface,templates:page}),84),light(emptyFrame,84));
+});
+test('only saved phrase slots light up; holes stay off through loading, playback, queues and mute',()=>{
+  const sparse=Object.fromEntries(Object.keys(positions).map(t=>[t,[{id:`${t}-0`},null,null,null,{id:`${t}-4`}]]));
+  for(const extra of [
+    {status:{mode:'stopped'}},
+    {status:{mode:'jam',loading:true}},
+    {status:{mode:'jam',playingPhraseIds:{drums:'drums-0',chord:'chord-0'},queuedPhraseIds:{bass:'bass-4',melody:'melody-4'}}},
+    {status:{mode:'jam',playingPhraseIds:{drums:'deleted'},queuedPhraseIds:{chord:'deleted'}},mutedTracks:{bass:true},volumes:{melody:-24}},
+  ])for(const beatPhase of [.1,.8]) {
+    const frame=createLaunchpadXPerformanceLedFrame({...surface,templates:sparse,beatPhase,...extra});
+    for(const notes of Object.values(positions)) for(const [index,note] of notes.entries()) {
+      if(index===0||index===4)assert.notEqual(light(frame,note),0);
+      else assert.equal(light(frame,note),0,'unsaved slots must send an explicit zero');
+    }
+    const full=createLaunchpadXPerformanceLedFrame({...surface,beatPhase,...extra});
+    assert.deepEqual(frame.filter(([s,n])=>s!==0x90||n<51),full.filter(([s,n])=>s!==0x90||n<51),'effects and sidebar lights do not depend on phrase holes');
+  }
+});
+test('LED sender clears previously lit pads after empty-bank navigation, deletion and insertion ordering',()=>{
+  const f=livePadFixture(),sender=createLedFrameSender(),messages=[],output={send:m=>messages.push(m)};
+  sender.send(output,f.lights(0));messages.length=0;
+  f.setBank(4);sender.send(output,f.lights(0));
+  for(const notes of Object.values(positions))for(const index of [0,4])assert.ok(messages.some(([s,n,v])=>s===0x90&&n===notes[index]&&v===0));
+  f.setBank(0);sender.send(output,f.lights(0));messages.length=0;
+  for(const track of Object.keys(positions))f.store.removeTemplate(track,f.phrases[track][0].id);
+  sender.send(output,f.lights(0));
+  for(const notes of Object.values(positions)) {
+    assert.ok(messages.some(([s,n,v])=>s===0x90&&n===notes[4]&&v===0),'old slot 4 clears after deletion compacts the row');
+    assert.notEqual(light(f.lights(0),notes[0]),0);
+  }
+  messages.length=0;f.store.moveSlots({trackId:null,from:3,to:7});sender.send(output,f.lights(0));
+  for(const notes of Object.values(positions)) {
+    assert.ok(messages.some(([s,n,v])=>s===0x90&&n===notes[3]&&v===0),'the vacated slot turns off');
+    assert.ok(messages.some(([s,n,v])=>s===0x90&&n===notes[7]&&v!==0),'the saved phrase lights at its new slot');
+  }
 });
 test('selected-track LEDs show parameter levels and bottom holds disable when stopped or without targets', () => {
   const s={...surface,selectedTrack:'bass',selectedTracks:['drums','bass'],volumes:{bass:-9},cutoffs:{bass:1000},reverbs:{bass:3/7},repeat:8,choppers:{bass:16},brakes:{bass:1}};
