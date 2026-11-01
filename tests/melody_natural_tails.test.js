@@ -3,11 +3,93 @@ import { test } from 'node:test';
 import AudioEngine from '../src/audio/AudioEngine.js';
 import { createPerformanceImport } from '../src/app/performanceImport.js';
 import { emptySelection, performanceTemplates } from '../src/app/performanceModel.js';
-import { collectProjectEvents } from '../src/export/audioFile.js';
+import { collectProjectEvents, renderProjectToWav } from '../src/export/audioFile.js';
 import { createMidiFile } from '../src/export/midiFile.js';
+import { getDialPitchedPreset } from '../src/data/dialPitchedPresets.js';
+import { createJamTemplateProjects, jamCombinationSnapshot } from '../src/app/jamTemplateProjects.js';
+import { setJamPitchedNote } from '../src/app/jamNoteEditing.js';
+import { usesNaturalSampleTail } from '../src/domain/notePerformances.js';
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const natural = { type: 'melody', note: 'C4', timbreId: 'piano', duration: '16n', playbackMode: 'natural' };
+
+test('saved authored and manually edited Jam melodies keep natural tails without rewriting MIDI note lengths', () => {
+  const data=new Map(),storage={getItem:key=>data.get(key),setItem:(key,value)=>data.set(key,value)};
+  const store=createJamTemplateProjects(storage,'pop',null,100);
+  const preset=getDialPitchedPreset('melody',75,50),bars=structuredClone(preset.bars);
+  bars[0]=setJamPitchedNote(bars[0],1,'D4',3,false,'melody');
+  const saved=store.saveTemplate({trackId:'melody',timbreId:'airy-synth-lead',bars,params:{strength:75,groove:50}},'尾音回归');
+  store.patch({selection:{drums:null,chord:null,bass:null,melody:saved.id}});
+  const reload=createJamTemplateProjects(storage,'pop',null,100);
+  assert.deepEqual(reload.current().workspace.templates.melody[0].bars,bars);
+  const snapshot=jamCombinationSnapshot(reload.current().workspace);
+  const project={...snapshot,bpm:100,trackOrder:['melody']},events=collectProjectEvents(project);
+  assert.ok(events.every(event=>event.gateDuration && usesNaturalSampleTail(event)));
+  assert.ok(events.some(event=>event.bar===0&&event.step===1&&event.note==='D4'&&event.durationSteps===3));
+  const previous=structuredClone(project);
+  previous.matrix.melody.flat().filter(Boolean).forEach(cell=>{delete cell.playbackMode;});
+  assert.deepEqual(createMidiFile(project),createMidiFile(previous));
+});
+
+test('authored melody expression keeps natural tails across repeats, loop boundaries and duplicate tracks', async () => {
+  const { engine, tone, mix } = setup();
+  mix.volumes['melody-2'] = -6;
+  const bar = Array(16).fill(null);
+  bar[0] = { ...natural, notePerformances: { C4: [
+    { offsetSteps: .25, durationSteps: .5, velocity: .6 },
+    { offsetSteps: .75, durationSteps: .25, velocity: .9 },
+  ] } };
+  bar[15] = { ...natural, notePerformances: { C4: [{ offsetSteps: .5, durationSteps: .125, velocity: .7 }] } };
+  const matrix = { melody: [bar], 'melody-2': [structuredClone(bar)] };
+  const original = structuredClone(matrix);
+  await engine.play({ matrixSource: () => ({ matrix, trackOrder: ['melody', 'melody-2'] }), bpm: 120, totalBars: 1 });
+  for (let step = 0; step <= 16; step++) tone.Transport.tick(step * .125);
+  for (const track of ['melody', 'melody-2']) {
+    const sampler = engine.getMelodyBank('piano', track, 'natural').sampler;
+    assert.ok(sampler.hits.every(hit => hit.kind === 'natural'), 'notePerformances must not gate a natural melody');
+    assert.deepEqual(sampler.hits.map(hit => hit.time), [.03125,.09375,1.9375,2.03125,2.09375]);
+    assert.deepEqual(sampler.hits.map(hit => hit.velocity), [.6,.9,.7,.6,.9]);
+    assert.deepEqual(sampler.releases, []);
+    assert.ok(sampler.hits.every(hit => hit.volume === (track === 'melody' ? 0 : -6)));
+  }
+  assert.deepEqual(matrix, original);
+  await engine.stop();
+  for (const track of ['melody', 'melody-2']) assert.ok(engine.getMelodyBank('piano', track, 'natural').sampler.releases.length > 0);
+});
+
+test('whole and chunked WAV preserve authored natural melody tails beyond short note-offs and chunk boundaries', async t => {
+  const stops = [], lengths = [];
+  class Context {
+    constructor(channels, frames, rate) { this.frames=frames;this.rate=rate;this.voices=[];this.destination={};lengths.push(frames); }
+    createGain() { return { gain:{value:1,setValueAtTime(){},linearRampToValueAtTime(){}},connect(){return this;} }; }
+    createBufferSource() { const voice={playbackRate:{value:1},connect(){return this;},start(time){this.time=time;},stop(time){this.end=time;stops.push(time);} };this.voices.push(voice);return voice; }
+    async decodeAudioData() { return {duration:7}; }
+    async startRendering() {
+      const data=new Float32Array(this.frames);
+      for(const voice of this.voices) {
+        const start=Math.max(0,Math.round(voice.time*this.rate));
+        const end=Math.min(this.frames,Math.round((voice.end ?? voice.time+voice.buffer.duration/voice.playbackRate.value)*this.rate));
+        for(let i=start;i<end;i++) data[i]+=.1;
+      }
+      return {numberOfChannels:2,length:this.frames,sampleRate:this.rate,getChannelData:()=>data};
+    }
+  }
+  const previous=globalThis.OfflineAudioContext;globalThis.OfflineAudioContext=Context;
+  t.after(()=>{if(previous)globalThis.OfflineAudioContext=previous;else delete globalThis.OfflineAudioContext;});
+  t.mock.method(globalThis,'fetch',async()=>({ok:true,arrayBuffer:async()=>new ArrayBuffer(1)}));
+  const bar=Array(16).fill(null);
+  bar[15]={...natural,notePerformances:{C4:[{offsetSteps:.25,durationSteps:.5,velocity:.8}]}};
+  const project={totalBars:3,bpm:120,trackOrder:['melody'],matrix:{melody:[bar,Array(16).fill(null),Array(16).fill(null)]},volumes:{melody:0}};
+  const original=structuredClone(project);
+  const whole=await renderProjectToWav(project);lengths.length=0;
+  const chunks=await renderProjectToWav(project,{chunkSeconds:1});
+  assert.deepEqual(stops, [], 'natural melody samples must finish without scheduled note-offs');
+  const pcm=await whole.blob.arrayBuffer();
+  assert.ok(new DataView(pcm).getInt16(44+6*44100*4,true)>0,'the sample is still ringing at six seconds');
+  assert.deepEqual(new Uint8Array(await chunks.blob.arrayBuffer()),new Uint8Array(pcm));
+  assert.ok(lengths.some(frames=>frames>5*44100),'chunk preroll must retain the complete seven-second natural sample');
+  assert.deepEqual(project,original);
+});
 
 function setup() {
   const calls = [], samplers = [];

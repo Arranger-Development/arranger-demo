@@ -22,5 +22,6 @@ export function liveProgressPath(width, height, inset = 3, cornerRadius = 4) {
 // Match the audible snapshot, never the draft that may already have a queued edit.
 export function jamPhraseProgress(progress, track, phraseId) {
   if (!phraseId || progress?.snapshot?.phraseIds?.[track] !== phraseId) return 0;
+  if (progress.trackPositions?.[track]) return progress.trackPositions[track].fraction;
   return livePhraseProgress(progress, progress.id, progress.snapshot.phraseBars[track]);
 }

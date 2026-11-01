@@ -21,6 +21,7 @@ import {
 } from '../domain/chordCells.js';
 import { getMelodyCellNotes } from '../domain/melodyCells.js';
 import { getTrackTypeFromInstanceId } from '../domain/trackInstances.js';
+import { expandNotePerformances } from '../domain/notePerformances.js';
 
 const PLAYBACK_TRACK_TYPE_ORDER = Object.freeze(['drums', 'bass', 'chord', 'melody']);
 
@@ -118,7 +119,7 @@ function extractChordEvent(cell, bar, step) {
       label: cell.label ?? noteRoots.join('/'),
       notes,
       duration: cell.duration ?? '16n',
-      ...(Number.isInteger(cell.durationSteps) ? { durationSteps: cell.durationSteps } : {}),
+      ...(Number.isFinite(cell.durationSteps) && cell.durationSteps > 0 ? { durationSteps: cell.durationSteps } : {}),
       ...(cell.timbreId ? { timbreId: cell.timbreId } : {}),
       ...(cell.playbackMode === 'natural' ? { playbackMode: 'natural' } : {}),
     }, cell);
@@ -201,7 +202,9 @@ function createMelodyEvent(cell, note, bar, step) {
     note,
     duration: cell.duration ?? '16n',
   };
-  if (Number.isInteger(cell.durationSteps)) event.durationSteps = cell.durationSteps;
+  if (Number.isFinite(cell.durationSteps) && cell.durationSteps > 0) event.durationSteps = cell.durationSteps;
+  if (Number.isFinite(cell.noteDurationSteps?.[note]) && cell.noteDurationSteps[note] > 0) event.durationSteps = cell.noteDurationSteps[note];
+  if (Number.isFinite(cell.timingOffset)) event.timingOffset = cell.timingOffset;
   if (cell.timbreId) event.timbreId = cell.timbreId;
   if (cell.playbackMode === 'natural') event.playbackMode = 'natural';
   if (Number.isFinite(cell.velocity)) event.velocity = cell.velocity;
@@ -227,6 +230,9 @@ function extractBassEvent(cell, bar, step) {
     step,
     note: cell.note,
     duration: cell.duration ?? '16n',
+    ...(Number.isFinite(cell.durationSteps) && cell.durationSteps > 0 ? { durationSteps: cell.durationSteps } : {}),
+    ...(Number.isFinite(cell.timingOffset) ? { timingOffset: cell.timingOffset } : {}),
+    ...(Number.isFinite(cell.velocity) ? { velocity: cell.velocity } : {}),
   };
 }
 
@@ -245,7 +251,7 @@ function createMatrixPlaybackAdapter(matrixSource, options = {}) {
     };
   }
 
-  function getEventsForStep(bar, step) {
+  function getEventsForStep(bar, step, flatStep = bar * stepsPerBar + step) {
     const source = readMatrix();
     const matrix = source?.matrix ?? source;
     const instanceAware = Boolean(source?.matrix);
@@ -260,8 +266,10 @@ function createMatrixPlaybackAdapter(matrixSource, options = {}) {
         ) === trackType)
         .flatMap((trackId) => {
           const phraseLength = source?.phraseBars?.[trackId];
-          const sourceBar = Number.isInteger(phraseLength) && phraseLength > 0 ? bar % phraseLength : bar;
-          const cell = matrix?.[trackId]?.[sourceBar]?.[step] ?? null;
+          const length = (Number.isInteger(phraseLength) && phraseLength > 0 ? phraseLength : totalBars) * stepsPerBar;
+          const local = ((flatStep - (source?.trackStepOffsets?.[trackId] ?? 0)) % length + length) % length;
+          const sourceBar = Math.floor(local / stepsPerBar), sourceStep = local % stepsPerBar;
+          const cell = matrix?.[trackId]?.[sourceBar]?.[sourceStep] ?? null;
           let events = [];
           if (trackType === 'drums') {
             events = Array.isArray(cell?.drumHits) ? cell.drumHits.filter(hit => extractDrumsInstruments(cell).includes(hit.instrument)).map(hit => ({
@@ -274,13 +282,14 @@ function createMatrixPlaybackAdapter(matrixSource, options = {}) {
             const event = extractBassEvent(cell, bar, step);
             if (event) events = [event];
           } else if (trackType === 'chord') {
-            const event = extractChordEvent(cell, bar, step);
+            const event = extractChordEvent(cell, bar, sourceStep);
+            if (event) event.step = step;
             if (event) {
               if (cell.noteDurationSteps) {
                 const groups = new Map();
                 for (const note of event.notes) {
                   const steps = cell.noteDurationSteps[note];
-                  const durationSteps = Number.isInteger(steps) && steps > 0 ? steps : event.durationSteps ?? 1;
+                  const durationSteps = Number.isFinite(steps) && steps > 0 ? steps : event.durationSteps ?? 1;
                   if (!groups.has(durationSteps)) groups.set(durationSteps, []);
                   groups.get(durationSteps).push(note);
                 }
@@ -291,7 +300,7 @@ function createMatrixPlaybackAdapter(matrixSource, options = {}) {
             events = extractMelodyEvents(cell, bar, step);
           }
 
-          return events.map((event) => withPerformanceTimbre(instanceAware ? {
+          return expandNotePerformances(events, cell).map((event) => withPerformanceTimbre(instanceAware ? {
             ...event,
             trackId,
             trackType,
@@ -304,7 +313,7 @@ function createMatrixPlaybackAdapter(matrixSource, options = {}) {
     getEventsForFlatStep: (flatStep) => {
       const { bar, step } = getPositionForFlatStep(flatStep);
 
-      return getEventsForStep(bar, step);
+      return getEventsForStep(bar, step, flatStep);
     },
     getEventsForStep,
     getPositionForFlatStep,

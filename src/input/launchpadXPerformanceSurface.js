@@ -1,19 +1,23 @@
 import { JAM_TEMPLATE_PADS, JAM_PARAMETER_PADS, JAM_MOMENTARY_PADS } from './jamPadLayout.js';
 import { PERFORMANCE_TRACKS, hasSelection } from '../app/performanceModel.js';
+import { jamTemplateState } from '../app/jamPerformanceState.js';
 import { JAM_VOLUME_STEPS, JAM_FILTER_STEPS, JAM_TRACK_CC, JAM_PITCH_STEPS, JAM_REVERB_STEPS, nearestJamStep } from './performanceInput.js';
 
 const TRACK_COLORS = { drums: [19, 18, 17], chord: [11, 10, 9], bass: [43, 42, 41], melody: [51, 50, 49] };
 function fillFixedJamPads(surface, notes, active) {
   const { templates = {}, selection = {}, status = {}, beatPhase = 0,
     selectedTrack = 'drums', selectedTracks = [selectedTrack],
-    volumes = {}, cutoffs = {}, reverbs = {}, choppers = {}, brakes = {}, repeat = null } = surface;
+    volumes = {}, mutedTracks = {}, cutoffs = {}, reverbs = {}, choppers = {}, brakes = {}, repeat = null } = surface;
   for (const pad of JAM_TEMPLATE_PADS) {
     const colors = TRACK_COLORS[pad.trackId];
     const template = templates[pad.trackId]?.[pad.index];
     const selected = template && selection[pad.trackId] === template.id;
+    const state = mutedTracks[pad.trackId] || volumes[pad.trackId] <= -24 ? 'idle'
+      : template && ('playingPhraseIds' in status || 'queuedPhraseIds' in status)
+        ? jamTemplateState(status, pad.trackId, template.id) : selected ? 'playing' : 'idle';
     // Palette entries run from dim to bright, preserving the established track hues.
-    notes.set(pad.note, !template ? colors[0] : selected
-      ? colors[active && !status.loading && beatPhase >= .5 ? 1 : 2] : colors[1]);
+    notes.set(pad.note, !template ? colors[0] : state === 'queued'
+      ? colors[beatPhase >= .5 ? 2 : 1] : state === 'playing' ? colors[2] : colors[1]);
   }
   const hasTargets = selectedTracks.length > 0;
   const colors = TRACK_COLORS[selectedTrack] ?? TRACK_COLORS.drums;

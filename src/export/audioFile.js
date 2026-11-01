@@ -1,7 +1,9 @@
 import { getTotalBars } from '../domain/projectLength.js';
 import { getTrackOutputVolume } from '../domain/trackVolume.js';
+import { usesNaturalSampleTail } from '../domain/notePerformances.js';
 import { createMatrixPlaybackAdapter } from '../audio/matrixPlaybackAdapter.js';
 import { getPitchedSampleBank, getPerformanceSampleBank } from '../data/performanceTimbres.js';
+import { createTrackMixOutput } from '../audio/trackMixBalance.js';
 import {
   BEATS_PER_BAR,
   DEFAULT_BPM,
@@ -74,7 +76,7 @@ function findClosestSample(note, sampleFiles, preferHigher = false) {
 
 function getDurationSeconds(event, bpm) {
   const secondsPerBeat = 60 / bpm;
-  if (Number.isInteger(event.durationSteps) && event.durationSteps > 0) {
+  if (Number.isFinite(event.durationSteps) && event.durationSteps > 0) {
     return event.durationSteps * secondsPerBeat / 4;
   }
   if (event.duration === '1n') return secondsPerBeat * 4;
@@ -198,7 +200,8 @@ function scheduleSample(context, destination, buffer, selection, event, state, b
   const time = Math.max(0, getEventTime(event, bpm) - windowStart);
   const source = context.createBufferSource();
   const gain = context.createGain();
-  const duration = event.type === 'chord' && !event.timbreId
+  const gateDuration = event.gateDuration && !usesNaturalSampleTail(event);
+  const duration = gateDuration ? getDurationSeconds(event, bpm) : event.type === 'chord' && !event.timbreId
     ? 2
     : event.type === 'melody' && !event.timbreId
       ? buffer.duration
@@ -210,7 +213,7 @@ function scheduleSample(context, destination, buffer, selection, event, state, b
   gain.gain.value = getGainValue(getEventVolume(state, event));
   source.connect(gain).connect(destination);
   source.start(time);
-  if (['melody', 'chord'].includes(event.type) && event.timbreId && event.playbackMode !== 'natural') {
+  if (gateDuration || ['melody', 'chord'].includes(event.type) && event.timbreId && event.playbackMode !== 'natural') {
     const level = gain.gain.value;
     gain.gain.setValueAtTime(level, time + duration);
     gain.gain.linearRampToValueAtTime(0, time + duration + 0.1);
@@ -275,6 +278,11 @@ async function renderWholeProjectToWav(state, options = {}) {
   const master = context.createGain();
   master.gain.value = MASTER_GAIN;
   master.connect(context.destination);
+  const trackOutputs=new Map();
+  const outputFor=event=>{
+    if (!trackOutputs.has(event.trackId)) trackOutputs.set(event.trackId,options.balance === false ? master : createTrackMixOutput(context,event.trackId,master));
+    return trackOutputs.get(event.trackId);
+  };
 
   const events = collectProjectEvents(state, options);
   const selections = events.map((event) => ({
@@ -292,11 +300,11 @@ async function renderWholeProjectToWav(state, options = {}) {
     items.forEach((selection) => {
       const buffer = sampleBuffers.get(selection.file);
       if (buffer) {
-        scheduleSample(context, master, buffer, selection, event, state, bpm);
+        scheduleSample(context, outputFor(event), buffer, selection, event, state, bpm);
       } else {
         scheduleFallbackTone(
           context,
-          master,
+          outputFor(event),
           eventTime,
           duration,
           selection.noteMidi,
@@ -334,8 +342,9 @@ async function renderProjectToWav(state, options = {}) {
   for (const { event, selections: items } of selections) for (const item of items) {
     const rate = Number.isInteger(item.noteMidi) ? 2 ** ((item.noteMidi-item.sampleMidi)/12) : 1;
     const natural = buffers.get(item.file)?.duration / rate || 0.5;
-    const gated = event.playbackMode !== 'natural' && event.type !== 'drums' && !(event.type === 'melody' && !event.timbreId);
-    const duration = event.type === 'chord' && !event.timbreId ? 2 : getDurationSeconds(event,bpm);
+    const gateDuration = event.gateDuration && !usesNaturalSampleTail(event);
+    const gated = gateDuration || event.playbackMode !== 'natural' && event.type !== 'drums' && !(event.type === 'melody' && !event.timbreId);
+    const duration = event.type === 'chord' && !event.timbreId && !gateDuration ? 2 : getDurationSeconds(event,bpm);
     longestTail = Math.max(longestTail, gated ? Math.min(natural, duration + .1) : natural);
   }
   const frameCount = Math.ceil((duration + TAIL_SECONDS) * SAMPLE_RATE);
@@ -353,13 +362,18 @@ async function renderProjectToWav(state, options = {}) {
     const offset = renderFirst/SAMPLE_RATE;
     const context = new OfflineContext(2,end-renderFirst,SAMPLE_RATE);
     const master = context.createGain(); master.gain.value = MASTER_GAIN; master.connect(context.destination);
+    const trackOutputs=new Map();
+    const outputFor=event=>{
+      if (!trackOutputs.has(event.trackId)) trackOutputs.set(event.trackId,options.balance === false ? master : createTrackMixOutput(context,event.trackId,master));
+      return trackOutputs.get(event.trackId);
+    };
     for (const { event, selections: items } of selections) {
       const time = getEventTime(event,bpm);
       if (time < offset || time >= end/SAMPLE_RATE) continue;
       for (const item of items) {
         const buffer = buffers.get(item.file);
-        if (buffer) scheduleSample(context,master,buffer,item,event,state,bpm,offset);
-        else scheduleFallbackTone(context,master,time-offset,getDurationSeconds(event,bpm),item.noteMidi,event.type==='drums',getEventVolume(state,event));
+        if (buffer) scheduleSample(context,outputFor(event),buffer,item,event,state,bpm,offset);
+        else scheduleFallbackTone(context,outputFor(event),time-offset,getDurationSeconds(event,bpm),item.noteMidi,event.type==='drums',getEventVolume(state,event));
       }
     }
     const rendered = await context.startRendering();

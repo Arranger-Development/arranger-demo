@@ -41,6 +41,37 @@ function setup() {
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
+test('chord source calibration stays consistent across playback, audition, export and independent faders', async () => {
+  const {engine}=setup();
+  const mix={volumes:{chord:0,'chord-2':-7},mutedTracks:{}};
+  engine.setVolumeSource(()=>mix);
+  const voices=[];
+  for(const trackId of ['chord','chord-2']) for(const playbackMode of ['natural',undefined]) {
+    await engine.prepareMelodyTimbre(chord,trackId,playbackMode);
+    const sampler=engine.getMelodyBank(chord,trackId,playbackMode).sampler;
+    sampler.triggerAttack=(note,time,velocity)=>voices.push({trackId,note,time,velocity,db:sampler.volume.value});
+    sampler.triggerAttackRelease=(note,duration,time,velocity)=>voices.push({trackId,note,time,velocity,duration,db:sampler.volume.value});
+    const event={type:'chord',trackId,timbreId:chord,playbackMode,note:'E3',velocity:.6,durationSteps:2,gateDuration:playbackMode!=='natural'};
+    assert.equal(engine.triggerMelodyBankEvent(event,1,120),true);
+    const voice=voices.at(-1);
+    assert.equal(voice.db,mix.volumes[trackId]+4,'source calibration is combined with the user fader');
+    assert.equal(voice.velocity,.6,'authored dynamics remain intact');
+    assert.ok(Math.abs(10**(voice.db/20)*voice.velocity-10**(getEventVolume(mix,event)/20))<1e-12,
+      'WAV and live playback apply the same gain exactly once');
+  }
+  mix.volumes.chord=-10;
+  engine.refreshTrackVolume('chord');
+  assert.equal(engine.getMelodyBank(chord,'chord','natural').sampler.volume.value,-6);
+  assert.equal(engine.getMelodyBank(chord,'chord-2','natural').sampler.volume.value,-3);
+  mix.mutedTracks.chord=true;
+  engine.refreshTrackVolume('chord');
+  assert.equal(engine.getMelodyBank(chord,'chord','natural').sampler.volume.value,-Infinity);
+  assert.equal(getEventVolume(mix,{type:'chord',trackId:'chord',timbreId:chord}),-Infinity);
+  assert.equal(getEventVolume({volumes:{drums:0}},{type:'drums',trackId:'drums',timbreId:drums}),-7);
+  assert.equal(getEventVolume({volumes:{bass:0}},{type:'bass',trackId:'bass',timbreId:'deep-autumn-bass'}),0);
+  assert.equal(getEventVolume({volumes:{melody:0}},{type:'melody',trackId:'melody',timbreId:'deep-autumn-melody'}),2);
+});
+
 test('new bass and melody register measured sharp roots while old banks retain their roots', () => {
   const expected = {
     bass: ['E0', 'F#0', 'G#0', 'A0', 'B0', 'C#1', 'D#1', 'E1', 'F#1'],
@@ -163,8 +194,8 @@ test('real-time banks play original pitches and natural tails through selected c
   const kick = engine.drumTrackBanks.get('drums').get(drums).players.get('kick');
   const harmony = engine.getMelodyBank(chord, 'chord', 'natural').sampler;
   assert.deepEqual(kick.hits, [0]);
-  assert.equal(kick.volume.value, -3);
-  assert.equal(harmony.volume.value, -6);
+  assert.equal(kick.volume.value, -7);
+  assert.equal(harmony.volume.value, 4);
   assert.equal(getEventVolume(state, { type: 'drums', trackId: 'drums', timbreId: drums }), kick.volume.value);
   assert.equal(getEventVolume(state, { type: 'chord', trackId: 'chord', timbreId: chord }), harmony.volume.value);
   assert.ok(players.filter(p => !p.url.includes('DeepAutumn')).every(p => p.hits.length === 0));
@@ -196,8 +227,8 @@ test('dense drum retriggers crossfade old tails and schedule velocity changes at
   tone.Transport.tick(1);
   assert.deepEqual(kick.hits,[1,1.075]);
   assert.deepEqual(ramps,[
-    { value: -3, duration: .002, time: 1 },
-    { value: -3 + 20 * Math.log10(.5), duration: .002, time: 1.075 },
+    { value: -7, duration: .002, time: 1 },
+    { value: -7 + 20 * Math.log10(.5), duration: .002, time: 1.075 },
   ]);
   assert.ok(kick.fadeOut >= .003 && kick.fadeOut <= .005, 'a few milliseconds of release prevent abrupt tail cuts');
   assert.ok(kick.fadeIn > 0 && kick.fadeIn <= .001, 'the new hit retains its percussive attack');

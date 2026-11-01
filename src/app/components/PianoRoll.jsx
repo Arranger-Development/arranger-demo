@@ -78,6 +78,7 @@ function PianoRoll({
   onCellToggle,
   onNotePreview,
   onPitchInteraction,
+  showStepNumbers = false,
   trackId,
 }) {
   const noteIndexById = useMemo(() => new Map(
@@ -219,7 +220,7 @@ function PianoRoll({
                       ].filter(Boolean).join(' ')}
                       data-step={step}
                       key={step}
-                    />
+                    >{showStepNumbers ? step + 1 : null}</span>
                   );
                 })}
               </div>

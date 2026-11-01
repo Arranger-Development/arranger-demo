@@ -156,3 +156,29 @@ test('sequence snapshots are independent; stopping or starting a new sequence in
  f.controller.sequence([a],100);f.controller.sequence([segment('b')],120);waits.splice(0).forEach(r=>r());await f.ready();f.tick(0);assert.equal(f.notices.at(-1).playingId,'b');
  f.controller.launch(null,120);assert.equal(f.controller.isActive(),false);
 });
+
+test('phrase identities stay queued through scheduler lookahead until their own audible callback',async()=>{
+  let options;const notices=[];
+  const audio={async play(o){options=o;return true;},stop(){},stopAllVoices(){},setTempo(){}};
+  const controller=createSessionPlayback(audio,value=>notices.push(value));
+  const snapshot=phrase=>({...segment('same-combination-id'),repeat:null,phraseIds:{drums:phrase,bass:null,chord:null,melody:null}});
+  controller.launch(snapshot('a'),100,{edit:true});
+  assert.equal(notices.at(-1).queuedPhraseIds.drums,'a');
+  await new Promise(resolve=>setImmediate(resolve));
+  const first=options.playbackSource(0,0);first.onAudible();
+  assert.equal(notices.at(-1).playingPhraseIds.drums,'a');assert.equal(notices.at(-1).queuedPhraseIds,null);
+  options.playbackSource(5,.75).onAudible();
+  controller.launch(snapshot('b'),100,{edit:true});
+  const boundary=options.playbackSource(16,2.4);
+  assert.equal(notices.at(-1).playingPhraseIds.drums,'a');assert.equal(notices.at(-1).queuedPhraseIds.drums,'b');
+  controller.launch(snapshot('c'),100,{edit:true});
+  const version=notices.at(-1).requestVersion;
+  boundary.onAudible();
+  assert.equal(notices.at(-1).playingPhraseIds.drums,'b');assert.equal(notices.at(-1).queuedPhraseIds.drums,'c');
+  first.onAudible();assert.equal(notices.at(-1).playingPhraseIds.drums,'b','late older callback is ignored');
+  options.playbackSource(32,4.8).onAudible();
+  assert.equal(notices.at(-1).playingPhraseIds.drums,'c');assert.equal(notices.at(-1).queuedPhraseIds,null);
+  assert.equal(notices.at(-1).requestVersion,version);
+  controller.stop();boundary.onAudible();
+  assert.deepEqual(notices.at(-1).playingPhraseIds,{});assert.equal(notices.at(-1).queuedPhraseIds,null);
+});

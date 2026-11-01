@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createPerformanceEffects } from '../src/audio/performanceEffects.js';
+import { createMasterOutput } from '../src/audio/masterOutput.js';
 
 const param = () => ({ value: 0, setTargetAtTime(value) { this.value = value; }, setValueAtTime(value) { this.value = value; }, linearRampToValueAtTime(value,time) { this.ramp={value,time}; }, cancelScheduledValues(time) { this.cancelledAt=time; }, cancelAndHoldAtTime(time) { this.cancelledAt=time; } });
 const node = () => ({ outputs: [], gain: param(), frequency: param(), Q: param(), connect(target) { this.outputs.push(target); return target; }, disconnect() { this.outputs = []; } });
@@ -17,7 +18,8 @@ test('each audible track routes through its own repeat/filter/gain and only the 
       const n = { ...node(), ...Object.fromEntries(['threshold','knee','ratio','attack','release'].map(p => [p,param()])) };
       compressors.push(n); return n;
     } };
-  const engine = { async startAudio() {}, getToneContext: () => ({rawContext: context,
+  const sharedMaster = createMasterOutput(context);
+  const engine = { async startAudio() {}, getMasterOutput: () => sharedMaster, getToneContext: () => ({rawContext: context,
     createAudioWorkletNode(name) { const n = node(); n.messages = []; n.port = {postMessage: m => n.messages.push(m)}; if(name==='arranger-beat-repeat') repeats.push(n); else {n.parameters=new Map(['pitch','chopper','brake','clock'].map(p=>[p,param()]));expressions.push(n);} return n; }}),
     drumPlayers: new Map([['kick',node()]]), fallbackSynth: node(), bassSampler: node(), chordSampler: node(), chordSynth: node(),
     melodySampler: node(), melodyInputSampler: node(), melodyOneShotSampler: node(), melodyTrackBanks: new Map([['chord',new Map([['piano',{sampler:node()}]])]]) };
@@ -29,11 +31,13 @@ test('each audible track routes through its own repeat/filter/gain and only the 
   assert.equal(repeats[1].outputs[0],expressions[1]);
   assert.equal(expressions[1].outputs[0],filters[1]);
   const trackGains = filters.map(filter => filter.outputs[0].outputs[0]);
-  const master = trackGains[0].outputs[0];
-  assert.ok(trackGains.every(gain => gain.outputs.length === 1 && gain.outputs[0] === master), 'all four tracks share one protected output');
+  const balances=trackGains.map(gain=>gain.outputs[0]);
+  const master = balances[0].outputs[0].outputs[0];
+  assert.equal(master, sharedMaster, 'Jam reuses one master after independent track dynamics');
+  assert.ok(balances.every(balance=>balance.outputs.length===1&&balance.outputs[0].outputs[0]===master));
   assert.ok(filters.every((filter, i) => filter.outputs[1].outputs[0].outputs[0] === trackGains[i]), 'reverb tails also pass through the protected output');
   assert.equal(master.gain.value,10 ** (-6 / 20));
-  assert.equal(compressors.length,1);
+  assert.equal(compressors.length,5);
   assert.deepEqual(master.outputs,[compressors[0]]);
   assert.deepEqual(compressors[0].outputs,[context.destination]);
   assert.deepEqual(Object.fromEntries(['threshold','knee','ratio','attack','release'].map(p => [p,compressors[0][p].value])), {
@@ -54,5 +58,11 @@ test('each audible track routes through its own repeat/filter/gain and only the 
   assert.equal(expressions[1].parameters.get('pitch').value,0);
   effects.clock(32,5,120);assert.deepEqual(expressions[2].parameters.get('clock').ramp,{value:33,time:5.125});
   effects.cancel('bass','pitch',4); assert.equal(expressions[2].parameters.get('pitch').cancelledAt,4);
+  const messagesBefore=repeats.map(r=>r.messages.length);
+  effects.releaseTrack('bass',5);
+  assert.deepEqual(repeats[2].messages.at(-1),{clear:true,time:5});
+  assert.deepEqual(expressions[2].messages.at(-1),{clear:true,time:5});
+  assert.deepEqual(repeats.map((r,i)=>r.messages.length-messagesBefore[i]),[0,0,1,0]);
+  assert.equal(expressions[2].parameters.get('pitch').value,-7,'track release preserves effect settings');
   effects.reset(); assert.ok(repeats.every(r=>r.messages.at(-1).reset));
 });
