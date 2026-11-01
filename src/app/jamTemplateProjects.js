@@ -5,12 +5,55 @@ import { withPerformanceTimbre } from '../data/performanceTimbres.js';
 import { normalizeBpm } from '../domain/bpm.js';
 import { createClipRecord } from '../domain/clipHelpers.js';
 import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
+import { normalizeJamSlots, firstEmptyJamSlot, removeAndCompactJamSlots, compactJamSlots, moveJamSlots, relocateJamDraft, jamLauncherColumnCount } from './jamTemplateSlots.js';
 
 const copy = value => structuredClone(value);
 const uid = () => globalThis.crypto.randomUUID();
 const byTrack = make => Object.fromEntries(TRACKS.map(t => [t, make(t)]));
+function reconcileDraftLocation(draft, templates) {
+  if (!draft || !templates[draft.trackId]) return draft;
+  const row = templates[draft.trackId];
+  if (draft.editingTemplateId) {
+    const saved = row.find(p => p.id === draft.editingTemplateId);
+    if (saved) return { ...draft, slotIndex: saved.slotIndex };
+    const detached = { ...draft, dirty: true };
+    for (const key of ['id', 'editingTemplateId', 'slotIndex', 'targetSlot']) delete detached[key];
+    return detached;
+  }
+  return row.some(p => p.slotIndex === draft.targetSlot)
+    ? { ...draft, targetSlot: firstEmptyJamSlot(row) } : draft;
+}
+export function upgradeJamSlotLayout(w) {
+  if (w.slotLayoutVersion === 1) return w;
+  const templates = byTrack(t => compactJamSlots(w.templates[t]));
+  return { ...w, slotLayoutVersion: 1, templates,
+    draft: reconcileDraftLocation(w.draft, templates),
+    draftsByTrack: Object.fromEntries(Object.entries(w.draftsByTrack ?? {}).map(([t, draft]) => [t, reconcileDraftLocation(draft, templates)])),
+  };
+}
+export function jamTemplateRemoval(w, t, id) {
+  if (!TRACKS.includes(t)) return null;
+  const row = removeAndCompactJamSlots(w.templates[t], id);
+  if (!row) return null;
+  const templates = { ...w.templates, [t]: row };
+  const reconcile = draft => draft?.trackId === t ? reconcileDraftLocation(draft, templates) : draft;
+  return { templates,
+    selection: { ...w.selection, [t]: w.selection[t] === id ? null : w.selection[t] },
+    draft: reconcile(w.draft), draftsByTrack: { ...w.draftsByTrack, ...(w.draftsByTrack?.[t] ? { [t]: reconcile(w.draftsByTrack[t]) } : {}) },
+  };
+}
+export function jamTemplateReorder(w, move) {
+  const { trackId, from, to } = move;
+  if (trackId != null && !TRACKS.includes(trackId) || !Number.isSafeInteger(from) || !Number.isSafeInteger(to)
+    || from < 0 || to < 0 || from === to || Math.max(from, to) >= jamLauncherColumnCount(w.templates)) return null;
+  const affected = trackId ? [trackId] : TRACKS;
+  if (!affected.some(t => normalizeJamSlots(w.templates[t]).some(p => p.slotIndex === from))) return null;
+  const templates = { ...w.templates, ...Object.fromEntries(affected.map(t => [t, moveJamSlots(w.templates[t], from, to)])) };
+  return { templates, draft: relocateJamDraft(w.draft, move, templates),
+    draftsByTrack: Object.fromEntries(Object.entries(w.draftsByTrack ?? {}).map(([t, draft]) => [t, relocateJamDraft(draft, move, templates)])) };
+}
 export const jamTemplateProjectsKey = (genre, profile) => `arranger-jam-projects:v2:${profile ?? genre}`;
-// Creation-mode presentation only: array positions remain the Jam pad bindings.
+// Creation-mode sorting never changes the saved Jam slotIndex bindings.
 export function sortUserTemplatesForCreation(templates) {
   const savedAt = template => Number.isSafeInteger(template.savedAt) && template.savedAt > 0 ? template.savedAt : 0;
   return templates.map((template, index) => ({ template, index }))
@@ -22,7 +65,7 @@ export function validTemplate(template) {
     && Array.isArray(template.bars) && template.bars.length > 0 && template.bars.length <= MAX_PROJECT_BARS
     && template.bars.every(bar => Array.isArray(bar) && bar.length === 16);
 }
-const workspace = bpm => ({ bpm: normalizeBpm(bpm), templates: byTrack(() => []), selection: byTrack(() => null),
+const workspace = bpm => ({ bpm: normalizeBpm(bpm), slotLayoutVersion: 1, templates: byTrack(() => []), selection: byTrack(() => null),
   volumes: byTrack(() => 0), mutedTracks: byTrack(() => false), timbres: byTrack(() => null), draft: null, draftsByTrack: {} });
 export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
   const key = jamTemplateProjectsKey(genre, profile), listeners = new Set();
@@ -37,14 +80,18 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
       for (const p of value.projects) {
         if (!p.id || ids.has(p.id) || !p.workspace?.templates) throw new Error('Invalid project');
         ids.add(p.id);
-        for (const t of TRACKS) if (!Array.isArray(p.workspace.templates[t]) || !p.workspace.templates[t].every(x => validTemplate(x) && x.trackId === t)) throw new Error('Invalid templates');
-        p.workspace = { ...workspace(bpm), ...p.workspace, bpm: normalizeBpm(p.workspace.bpm) };
+        for (const t of TRACKS) {
+          if (!Array.isArray(p.workspace.templates[t]) || !p.workspace.templates[t].every(x => validTemplate(x) && x.trackId === t)) throw new Error('Invalid templates');
+          p.workspace.templates[t] = normalizeJamSlots(p.workspace.templates[t]);
+        }
+        p.workspace = { ...workspace(bpm), ...p.workspace, slotLayoutVersion: p.workspace.slotLayoutVersion ?? 0, bpm: normalizeBpm(p.workspace.bpm) };
         p.workspace.timbres = byTrack(t => TIMBRE_OPTIONS[t].includes(p.workspace.timbres?.[t]) ? p.workspace.timbres[t] : null);
         p.workspace.draftsByTrack ??= {};
         if (TRACKS.includes(p.workspace.draft?.trackId) && !p.workspace.draftsByTrack[p.workspace.draft.trackId]) {
           p.workspace.draftsByTrack = { ...p.workspace.draftsByTrack, [p.workspace.draft.trackId]: p.workspace.draft };
         }
         for (const t of TRACKS) if (!p.workspace.templates[t].some(x => x.id === p.workspace.selection[t])) p.workspace.selection[t] = null;
+        p.workspace = upgradeJamSlotLayout(p.workspace);
       }
       state = { ...value, activeId: ids.has(value.activeId) ? value.activeId : value.projects[0].id };
     }
@@ -76,6 +123,7 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
     });
     state = { version: 2, activeId: old.activeId, projects };
   }
+  for (const p of state.projects) for (const t of TRACKS) p.workspace.templates[t] = normalizeJamSlots(p.workspace.templates[t]);
   const current = () => state.projects.find(p => p.id === state.activeId);
   function commit(next, retainOnFailure = true) {
     let error;
@@ -93,13 +141,14 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
     initialize: () => commit(state), save: () => commit(state), patch,
     setDraft(draft) {
       if (!TRACKS.includes(draft?.trackId)) return false;
+      draft = reconcileDraftLocation(draft, current().workspace.templates);
       return patch({ draft, draftsByTrack: { ...current().workspace.draftsByTrack, [draft.trackId]: draft } });
     },
     setTimbre(t, timbreId) {
       if (!TIMBRE_OPTIONS[t]?.includes(timbreId)) return false;
       return patch({timbres:{...current().workspace.timbres,[t]:timbreId}});
     },
-    saveTemplate(draft, name, id = null) {
+    saveTemplate(draft, name, id = null, { slotIndex } = {}) {
       const t = draft.trackId;
       if (!TRACKS.includes(t) || !draft.bars?.some(bar => bar.some(Boolean))) return null;
       const label = {drums:'鼓',chord:'和弦',bass:'贝斯',melody:'旋律'}[t];
@@ -109,10 +158,17 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
       const savedAt = current().workspace.templates[t].reduce((latest, p) => (
         Number.isSafeInteger(p.savedAt) && p.savedAt > 0 ? Math.max(latest, p.savedAt) : latest
       ), 0) + 1;
-      const template = { ...copy(draft), timbreId:current().workspace.timbres?.[t] ?? draft.timbreId, id: id ?? uid(), name: name.trim() || `${label}${number}`, barCount: draft.bars.length, savedAt };
+      const row = normalizeJamSlots(current().workspace.templates[t]);
+      const existing = id && row.find(p => p.id === id);
+      const requestedSlot = slotIndex ?? draft.targetSlot;
+      const destination = existing?.slotIndex ?? (Number.isSafeInteger(requestedSlot) && requestedSlot >= 0 ? requestedSlot : firstEmptyJamSlot(row));
+      if (row.some(p => p.slotIndex === destination && p.id !== id)) return null;
+      const template = { ...copy(draft), slotIndex: destination, timbreId:current().workspace.timbres?.[t] ?? draft.timbreId, id: id ?? uid(), name: name.trim() || `${label}${number}`, barCount: draft.bars.length, savedAt };
+      delete template.targetSlot;
       if (!validTemplate(template)) return null;
       const before = current().workspace.templates;
       const templates = copy(before);
+      templates[t] = row;
       const at = templates[t].findIndex(p => p.id === template.id);
       if (at >= 0) templates[t][at] = template; else templates[t].push(template);
       if (!patch({ templates })) {
@@ -122,11 +178,16 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
       return template;
     },
     removeTemplate(t, id) {
-      const w = current().workspace;
-      const detach = draft => draft?.editingTemplateId === id ? {...draft,editingTemplateId:undefined,dirty:true} : draft;
-      return patch({ templates: { ...w.templates, [t]: w.templates[t].filter(p => p.id !== id) },
-        selection: { ...w.selection, [t]: w.selection[t] === id ? null : w.selection[t] },
-        draft:detach(w.draft), draftsByTrack:{...w.draftsByTrack,[t]:detach(w.draftsByTrack?.[t])} });
+      const change = jamTemplateRemoval(current().workspace, t, id);
+      return change ? patch(change) : false;
+    },
+    moveSlots(move, { projectId, templates } = {}) {
+      const p = current();
+      if (projectId !== undefined && projectId !== p.id || templates && templates !== p.workspace.templates) return false;
+      const change = jamTemplateReorder(p.workspace, move);
+      if (!change) return false;
+      return commit({ ...state, projects: state.projects.map(item => item.id === p.id
+        ? { ...item, workspace: { ...item.workspace, ...change } } : item) }, false);
     },
     renameTemplate(t, id, name) {
       const w = current().workspace, nextName = name.trim().slice(0,80);
@@ -187,7 +248,7 @@ export function jamCombinationSnapshot(w, override = null, solo = false) {
   const matrix = byTrack(t => Array.from({ length: phraseBars?.[t] ?? totalBars }, (_, b) => copy(selected[t]?.bars[b % selected[t].bars.length] ?? Array(16).fill(null))));
   const timbres = byTrack(t => w.timbres?.[t] ?? selected[t]?.timbreId ?? defaultTimbres()[t]);
   for (const t of TRACKS) for (const bar of matrix[t]) for (const cell of bar) if (cell) setTemplateTimbre(cell,t,timbres[t]);
-  return { id: 'jam-current-combination', matrix, totalBars, ...(phraseBars ? { phraseBars } : {}), repeat: null, kind: 'main', timbres, phraseIds: byTrack(t => selected[t]?.id ?? 'draft') };
+  return { id: 'jam-current-combination', matrix, totalBars, phraseBars: byTrack(t => selected[t]?.bars.length ?? 1), repeat: null, kind: 'main', timbres, phraseIds: byTrack(t => selected[t] ? selected[t].id ?? selected[t].editingTemplateId ?? 'draft' : null) };
 }
 export function applyUserTemplate(state, template, startBar, trackId = template.trackId) {
   if (!validTemplate(template) || startBar + template.bars.length > MAX_PROJECT_BARS) throw new Error(`模板超出${MAX_PROJECT_BARS}小节上限`);

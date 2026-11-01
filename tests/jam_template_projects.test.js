@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DIAL_DRUM_PRESETS, getDialDrumPreset } from '../src/data/dialDrumPresets.js';
 import { createMatrixPlaybackAdapter } from '../src/audio/matrixPlaybackAdapter.js';
 import { toggleDrumsCellInstrument } from '../src/domain/drumsCells.js';
-import { createJamTemplateProjects, getJamTemplateProjects, jamTemplateProjectsKey, jamCombinationSnapshot, applyUserTemplate, sortUserTemplatesForCreation } from '../src/app/jamTemplateProjects.js';
+import { createJamTemplateProjects, getJamTemplateProjects, jamTemplateProjectsKey, jamCombinationSnapshot, applyUserTemplate, sortUserTemplatesForCreation, upgradeJamSlotLayout } from '../src/app/jamTemplateProjects.js';
 import { createSession, createSessionEditor, TIMBRE_OPTIONS } from '../src/app/performanceSession.js';
 import { createJamProjects } from '../src/app/jamProjects.js';
 import createInitialMatrix from '../src/store/createInitialMatrix.js';
@@ -211,6 +211,101 @@ test('a legacy single editor draft is adopted by its track without discarding it
   store.patch({draft:draft()});
   const restored=createJamTemplateProjects(storage,'pop',null,100);
   assert.deepEqual(restored.current().workspace.draftsByTrack.drums.bars,draft().bars);
+});
+
+test('deletion compacts only the later visual slots across 32 columns and persists unchanged musical data',()=>{
+  const storage=memory(),store=createJamTemplateProjects(storage,'pop',null,100);
+  const saved=[0,40,7,8,16,31,32].map(slot=>store.saveTemplate({...draft(),targetSlot:slot},`Slot ${slot}`));
+  const other=store.saveTemplate({trackId:'bass',timbreId:'round-electric-bass',bars:draft().bars,targetSlot:31},'Other row');
+  const selected=saved.find(p=>p.slotIndex===32);
+  store.patch({selection:{...store.current().workspace.selection,drums:selected.id,bass:other.id}});
+  store.removeTemplate('drums',saved.find(p=>p.slotIndex===7).id);
+  const w=store.current().workspace;
+  assert.deepEqual(w.templates.drums.map(p=>[p.name,p.slotIndex]),[
+    ['Slot 0',0],['Slot 40',11],['Slot 8',7],['Slot 16',8],['Slot 31',9],['Slot 32',10],
+  ]);
+  assert.deepEqual(w.templates.bass,[other]);
+  assert.equal(w.selection.drums,selected.id);
+  for(const template of w.templates.drums) {
+    const original=saved.find(p=>p.id===template.id);
+    assert.deepEqual({...template,slotIndex:original.slotIndex},original);
+  }
+  assert.deepEqual(createJamTemplateProjects(storage,'pop',null,100).current().workspace,w);
+  const before=store.getSnapshot();
+  assert.equal(store.removeTemplate('drums','missing'),false);
+  assert.equal(store.removeTemplate('invalid',selected.id),false);
+  assert.equal(store.getSnapshot(),before);
+  store.removeTemplate('drums',saved[1].id); // Last visible item: nothing else moves.
+  assert.deepEqual(store.current().workspace.templates.drums.map(p=>p.slotIndex),[0,7,8,9,10]);
+  store.removeTemplate('drums',saved[0].id); // First item: all later items fill from zero.
+  assert.deepEqual(store.current().workspace.templates.drums.map(p=>p.slotIndex),[0,1,2,3]);
+});
+
+test('compaction preserves edits, relocates occupied draft targets and rejects stale history locations',()=>{
+  const store=createJamTemplateProjects(memory(),'pop',null,100);
+  const saved=Array.from({length:3},(_,slot)=>store.saveTemplate({...draft(),targetSlot:slot},`Slot ${slot}`));
+  const edited={...saved[2],editingTemplateId:saved[2].id,dirty:true,bars:structuredClone(getDialDrumPreset(0,0).bars)};
+  store.setDraft(edited);
+  store.removeTemplate('drums',saved[0].id);
+  assert.deepEqual(store.current().workspace.draft,{...edited,slotIndex:1});
+  store.setDraft(edited); // Undo history still has the old slot.
+  assert.equal(store.current().workspace.draft.slotIndex,1);
+  store.removeTemplate('drums',saved[2].id);
+  const detached=store.current().workspace.draft;
+  for(const field of ['id','editingTemplateId','slotIndex','targetSlot']) assert.equal(detached[field],undefined);
+  assert.deepEqual(detached.bars,edited.bars);assert.equal(detached.dirty,true);
+  store.setDraft(edited);
+  assert.deepEqual(store.current().workspace.draft,detached);
+  const restored=store.saveTemplate(detached,'Preserved');
+  assert.notEqual(restored.id,saved[2].id);
+  assert.equal(restored.slotIndex,1);
+
+  const pending={...draft(),targetSlot:2,dirty:true};
+  store.setDraft(pending);
+  store.saveTemplate({...draft(),targetSlot:3},'Later');
+  store.saveTemplate({...draft(),targetSlot:5},'Further');
+  store.removeTemplate('drums',saved[1].id);
+  assert.equal(store.current().workspace.draft.targetSlot,3,'blank draft moves out of the packed suffix');
+  assert.ok(store.saveTemplate(store.current().workspace.draft,'New draft'));
+});
+
+test('legacy projects close existing holes once, keeping notes, selected IDs and unsaved edits intact',()=>{
+  const storage=memory(),store=createJamTemplateProjects(storage,'pop',null,104);
+  const firstId=store.current().id;
+  const saved=[14,0,8].map(slot=>store.saveTemplate({...draft(),targetSlot:slot},`Drum ${slot}`));
+  const bass=store.saveTemplate({trackId:'bass',timbreId:'round-electric-bass',targetSlot:20,bars:[Array.from({length:16},(_,i)=>i===0?{
+    type:'bass',note:'C2',notePerformances:{C2:[{offset:0.03,duration:1.27,velocity:0.63}]},
+  }:null)]},'Bass');
+  store.patch({selection:{...store.current().workspace.selection,drums:saved[0].id,bass:bass.id}});
+  const pending={...draft(),name:'Unfinished',targetSlot:1,dirty:true};
+  store.setDraft(pending);
+  const editing={...bass,editingTemplateId:bass.id,dirty:true,params:{strength:25,groove:75}};
+  store.setDraft(editing);
+  store.create();
+  store.saveTemplate({...draft(),targetSlot:31},'Second project');
+  store.switchTo(firstId);
+  const key=jamTemplateProjectsKey('pop',null),raw=JSON.parse(storage.getItem(key));
+  for(const project of raw.projects) delete project.workspace.slotLayoutVersion;
+  storage.setItem(key,JSON.stringify(raw));
+  const before=storage.getItem(key),restored=createJamTemplateProjects(storage,'pop',null,104);
+  assert.equal(storage.getItem(key),before,'reading does not overwrite the source');
+  const w=restored.current().workspace;
+  assert.deepEqual(w.templates.drums.map(p=>p.slotIndex),[2,0,1],'keep dense library order; arrange by old visual order');
+  assert.equal(w.templates.bass[0].slotIndex,0);
+  for(const original of [...saved,bass]) {
+    const migrated=w.templates[original.trackId].find(p=>p.id===original.id);
+    assert.deepEqual({...migrated,slotIndex:original.slotIndex},original);
+  }
+  assert.equal(w.selection.drums,saved[0].id);assert.equal(w.selection.bass,bass.id);
+  assert.deepEqual(w.draft,{...editing,slotIndex:0});
+  assert.deepEqual(w.draftsByTrack.drums,{...pending,targetSlot:3});
+  assert.equal(restored.getSnapshot().projects[1].workspace.templates.drums[0].slotIndex,0);
+  assert.equal(upgradeJamSlotLayout(w),w,'the migration is idempotent');
+  assert.equal(restored.initialize(),true);
+  restored.saveTemplate({...draft(),targetSlot:14},'New explicit slot');
+  const reopened=createJamTemplateProjects(storage,'pop',null,104);
+  assert.deepEqual(reopened.current().workspace.templates.drums.map(p=>p.slotIndex),[2,0,1,14],'new intentional placements survive reload');
+  assert.equal(reopened.current().workspace.slotLayoutVersion,1);
 });
 
 

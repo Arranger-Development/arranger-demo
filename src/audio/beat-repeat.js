@@ -16,6 +16,7 @@ class BeatRepeatProcessor extends AudioWorkletProcessor {
     };
   }
   apply(data) {
+    if (data.clear) { this.slice = null; this.mix = 0; this.ring.forEach(r => r.fill(0)); return; }
     if (!data.held) { this.slice = null; return; }
     const length = Math.max(1, Math.min(this.size, Math.round(sampleRate * data.seconds)));
     this.slice = this.ring.map((ring) => Float32Array.from({ length }, (_, i) => ring[(this.write - length + i + this.size) % this.size]));

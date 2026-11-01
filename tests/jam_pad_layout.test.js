@@ -27,9 +27,20 @@ test('fixed Jam layout covers all 64 pads once and all 32 quadrant slots match i
     const playing = createLaunchpadXPerformanceLedFrame({...surface, selection:{[trackId]:`${trackId}-${index}`}, beatPhase:.75});
     assert.notEqual(light(idle,note), 0);
     assert.notEqual(light(idle,note), light(selected,note));
-    assert.notEqual(light(selected,note), light(playing,note));
+    assert.equal(light(selected,note), light(playing,note), 'playing pads stay steady instead of flashing');
     assert.equal(selected.length,80);
   }
+});
+
+test('audible phrase LEDs stay steady while queued phrase LEDs pulse independently', () => {
+  const status={mode:'jam',playingPhraseIds:{drums:'drums-0'},queuedPhraseIds:{drums:'drums-1'}};
+  const first=createLaunchpadXPerformanceLedFrame({...surface,status,beatPhase:.1});
+  const second=createLaunchpadXPerformanceLedFrame({...surface,status,beatPhase:.8});
+  assert.equal(light(first,81),light(second,81));
+  assert.notEqual(light(first,82),light(second,82));
+  const committed={...status,playingPhraseIds:status.queuedPhraseIds,queuedPhraseIds:null};
+  assert.equal(light(createLaunchpadXPerformanceLedFrame({...surface,status:committed,beatPhase:.1}),82),
+    light(createLaunchpadXPerformanceLedFrame({...surface,status:committed,beatPhase:.8}),82));
 });
 test('eight fixed levels ignore onscreen effect page; old page CCs remain off and inert', () => {
   for (const effectPage of ['mix','expression','arp']) {

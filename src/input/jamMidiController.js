@@ -11,7 +11,7 @@ export function findJamMidiInput(ports) {
     && /(?:4ac[01]f4c4|midif4c4)/i.test(port.name?.replace(/[^a-z0-9]/gi, '') ?? '')) ?? null;
 }
 
-export function jamMidiValue(parameter, raw) {
+export function jamMidiValue(parameter, raw, levels = [0, 25, 50, 75, 100]) {
   // The faders measured 1–127; accept both 0 and 1 as the bottom endpoint.
   const unit = raw <= 1 ? 0 : raw / 127;
   if (parameter === 'volume') return Math.round(-24 + unit * 30);
@@ -19,7 +19,7 @@ export function jamMidiValue(parameter, raw) {
   if (parameter === 'reverb') return Math.round(unit * 100) / 100;
   if (parameter === 'pitch') return raw >= 62 && raw <= 65 ? 0
     : round(raw < 62 ? -12 * (62 - Math.max(1, raw)) / 61 : 12 * (raw - 65) / 62);
-  return Math.round(raw / 127 * 4) * 25;
+  return levels[Math.round(raw / 127 * (levels.length - 1))];
 }
 
 function midiPosition(parameter, value) {
@@ -46,14 +46,14 @@ export function createJamMidiController({ getContext, dispatch }) {
       if (!parameter) return false;
       const context = getContext();
       const knob = parameter === 'strength' || parameter === 'groove';
-      if (!context?.active || context.blocked || (knob ? context.editingTrack !== 'drums' : !context.selectedTracks.length)
+      if (!context?.active || context.blocked || (knob ? !['drums','chord','bass','melody'].includes(context.editingTrack) : !context.selectedTracks.length)
         || (parameter === 'pitch' && !context.playing)) {
         slots.delete(parameter);
         if (parameter === 'pitch') releasePitch();
         return false;
       }
       const value = knob ? context.params[parameter] : context.values[parameter];
-      const key = knob ? `${context.projectId}:${context.editorVersion}`
+      const key = knob ? `${context.projectId}:${context.editorVersion}:${context.editingTrack}`
         : `${context.projectId}:${context.selectedTrack}:${context.selectedTracks.join(',')}:${parameter === 'pitch' ? context.playing : ''}`;
       let slot = slots.get(parameter);
       // Re-arm when a screen control, undo, template or another MIDI device changes the value.
@@ -67,9 +67,10 @@ export function createJamMidiController({ getContext, dispatch }) {
       }
       slot.raw = raw;
       if (!slot.latched) return false;
-      const next = jamMidiValue(parameter, raw);
+      const levels = context.parameterLevels?.[parameter] ?? [0, 25, 50, 75, 100];
+      const next = jamMidiValue(parameter, raw, levels);
       if (knob && next !== value) {
-        const boundary = (value / 25 + (next > value ? 0.5 : -0.5)) * 127 / 4;
+        const boundary = (levels.indexOf(value) + (next > value ? 0.5 : -0.5)) * 127 / (levels.length - 1);
         if (Math.abs(raw - boundary) < 2) return false;
       }
       if (next === value) return false;
@@ -77,7 +78,8 @@ export function createJamMidiController({ getContext, dispatch }) {
       if (parameter === 'pitch') {
         if (next === 0) releasePitch();
         else { pitchOwned = true; dispatch({ type: 'pitch', token: PITCH_TOKEN, value: next, pressed: true }); }
-      } else dispatch({ type: knob ? 'drumParameter' : parameter, parameter, value: next });
+      } else dispatch(knob ? { type: 'trackParameter', trackId: context.editingTrack, parameter, value: next }
+        : { type: parameter, parameter, value: next });
       return true;
     },
   };

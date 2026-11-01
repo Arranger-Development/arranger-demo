@@ -10,7 +10,10 @@ export function createJamAudition(playback, { readWorkspace, readDraft, onSoloCh
     stopArp();
     const w = readWorkspace();
     if (resume && resumeCombination) {
-      const snapshot = jamCombinationSnapshot(w, readDraft());
+      if (playback.resumeJam) { playback.resumeJam(); resumeCombination = false; return; }
+      const draft = readDraft();
+      const override = draft?.editingTemplateId && w.selection[draft.trackId] === draft.editingTemplateId ? draft : null;
+      const snapshot = jamCombinationSnapshot(w, override);
       if (snapshot) playback.launch(snapshot, w.bpm, {edit:true,quantize:'step',preservePhase:true});
       else playback.stop();
     } else playback.stop();
@@ -27,7 +30,9 @@ export function createJamAudition(playback, { readWorkspace, readDraft, onSoloCh
       track = draft.trackId;
       stopArp(); onSoloChange(true);
       const w = readWorkspace();
-      playback.launch(jamCombinationSnapshot(w,draft,true),w.bpm,{edit:true,quantize:'step',preservePhase:true});
+      const snapshot = jamCombinationSnapshot(w,draft,true);
+      if (playback.audition) playback.audition(snapshot, w.bpm);
+      else playback.launch(snapshot,w.bpm,{edit:true,quantize:'step',preservePhase:true});
     },
     stop() { release({resume:false}); playback.stop(); stopArp(); },
   };

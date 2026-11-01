@@ -6,14 +6,15 @@ export const DEEP_AUTUMN_BASS = 'deep-autumn-bass';
 export const DEEP_AUTUMN_MELODY = 'deep-autumn-melody';
 export const PERFORMANCE_SAMPLE_BANKS = Object.freeze({
   [DEEP_AUTUMN_DRUMS]: {
-    id: DEEP_AUTUMN_DRUMS, track: 'drums', label: '深秋鼓组', gainDb: -3,
+    id: DEEP_AUTUMN_DRUMS, track: 'drums', label: '深秋鼓组', gainDb: -7,
     sampleFiles: Object.fromEntries(['Kick', 'Snare', 'Hihat'].map((name) => [
       name.toLowerCase(), `samples/DeepAutumn/Drums/${name}.wav`,
     ])),
   },
   [DEEP_AUTUMN_CHORD]: {
-    // Dense five-note voicings need headroom when mixed with the other three tracks.
-    id: DEEP_AUTUMN_CHORD, track: 'chord', label: '深秋和弦', gainDb: -6,
+    // These quiet piano samples need source compensation before the user fader.
+    // The shared master output provides mix headroom and peak protection.
+    id: DEEP_AUTUMN_CHORD, track: 'chord', label: '深秋和弦', gainDb: 4,
     sampleFiles: Object.fromEntries([2, 3, 4].flatMap((octave) => (
       ['C#', 'D#', 'E', 'F#', 'G#', 'A', 'B'].map((root) => [
         `${root}${octave}`, `samples/DeepAutumn/Chord/${root.replace('#', 'Sharp')}${octave}.wav`,
@@ -27,7 +28,7 @@ export const PERFORMANCE_SAMPLE_BANKS = Object.freeze({
     sampleFiles: Object.fromEntries(['E0','F#0','G#0','A0','B0','C#1','D#1','E1','F#1'].map(note => [note, `samples/DeepAutumn/Bass/${note.replace('#', '')}.wav`])),
   },
   [DEEP_AUTUMN_MELODY]: {
-    id: DEEP_AUTUMN_MELODY, track: 'melody', label: '深秋旋律', gainDb: 0,
+    id: DEEP_AUTUMN_MELODY, track: 'melody', label: '深秋旋律', gainDb: 2,
     // Register the audible roots, not the unaltered source filenames.
     sampleFiles: Object.fromEntries(['C#3','D#3','E3','F#3','G#3','A3','B3','C#4','D#4','E4','F#4','G#4','A4','B4','C#5'].map(note => [note, `samples/DeepAutumn/Melody/${note.replace('#', '')}.wav`])),
   },

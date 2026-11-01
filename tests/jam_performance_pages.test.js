@@ -94,6 +94,13 @@ test('expression DSP bypass is transparent, pitch bends tails, chop gates, brake
   const brake=dsp();assert.ok(rms(brake.run(1,{brake:1}).slice(4000))<.001);assert.ok(rms(brake.run(1).slice(4000))>.7);
   brake.p.port.onmessage({data:{reset:true}});assert.ok(brake.p.ring.every(r=>r.every(v=>v===0)));
 });
+test('a phrase boundary clears expression history at audio time while another track retains its history',()=>{
+  const a=dsp(),b=dsp();a.run(.256,{pitch:-7});b.run(.256,{pitch:-7});
+  a.p.port.onmessage({data:{clear:true,time:.5}});
+  a.run(.128,{pitch:-7});assert.equal(a.p.clearTimes.length,1,'lookahead must not clear audio early');
+  a.run(.256,{pitch:-7});assert.equal(a.p.clearTimes.length,0);
+  assert.ok(b.p.ring.some(r=>r.some(v=>v!==0)),'other-track history remains intact');
+});
 
 test('track header toggles independent targets, permits empty selection and releases old holds',()=>{
   const calls=[],fx=createJamEffects({setPerformanceEffect:(track,values)=>calls.push({track,values})});

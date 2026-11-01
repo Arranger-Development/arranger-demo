@@ -1,0 +1,220 @@
+/* The launcher header and all four tracks share one column geometry and scrollport. */
+.jam-studio .studio-workbench { grid-template-columns:minmax(0,1fr) clamp(238px,22vw,300px); gap:16px; padding:14px 18px; }
+.jam-studio .studio-main { gap:12px; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; scrollbar-width:thin; scrollbar-color:#8e714b #221b14; }
+.jam-studio .studio-launcher { --identity:120px; flex:none; min-width:0; }
+.jam-studio .studio-strip-toolbar { display:flex; align-items:center; gap:4px; min-height:28px; margin-bottom:4px; color:var(--tj-muted); font-size:11px; }
+.jam-studio .studio-strip-toolbar > div { flex:1; min-width:0; display:flex; flex-wrap:wrap; align-items:center; gap:3px 16px; }
+.jam-studio .studio-bank-range { font-size:10px; color:var(--tj-accent); }
+.jam-studio .studio-strip-toolbar > button { flex:none; width:28px; height:26px; display:grid; place-items:center; color:var(--ink); border:1px solid var(--studio-line); border-radius:4px; background:var(--studio-soft); }
+.jam-studio .studio-strip-toolbar > button:disabled { opacity:.25; }
+.jam-studio .studio-strip-frame { position:relative; min-width:0; isolation:isolate; }
+.jam-studio .studio-strip-frame::before,.jam-studio .studio-strip-frame::after { content:''; position:absolute; top:0; bottom:10px; width:14px; z-index:9; pointer-events:none; opacity:0; }
+.jam-studio .studio-strip-frame::before { left:var(--identity); background:linear-gradient(90deg,var(--tj-panel),transparent); }
+.jam-studio .studio-strip-frame::after { right:0; background:linear-gradient(270deg,var(--tj-panel),transparent); }
+.jam-studio .studio-launcher[data-left=true] .studio-strip-frame::before,.jam-studio .studio-launcher[data-right=true] .studio-strip-frame::after { opacity:1; }
+.jam-studio .studio-launcher-scroll { min-width:0; max-width:100%; overflow-x:auto; overflow-y:hidden; padding:3px 6px 10px 0; scroll-padding-inline:calc(var(--identity) + var(--jam-gap,16px)) var(--jam-gap,16px); overscroll-behavior-x:contain; touch-action:pan-y; scrollbar-width:thin; scrollbar-color:#8e714b #221b14; overflow-anchor:none; }
+.jam-studio .studio-launcher-scroll[data-dragging=true] { cursor:grabbing; user-select:none; }
+.jam-studio .studio-launcher-scroll[data-dragging=true] * { cursor:grabbing; }
+.jam-studio .studio-launcher-scroll:focus-visible { outline:1px solid var(--tj-accent); outline-offset:-1px; }
+.jam-studio[data-editing] .studio-gallery { display:flex; flex-direction:column; gap:14px; width:max-content; min-width:0; padding:0; border:0; }
+.jam-studio[data-editing] .studio-column-launchers,
+.jam-studio[data-editing] .studio-instrument { display:grid; grid-template-columns:var(--identity) repeat(var(--jam-columns),var(--jam-pad,48px)); gap:var(--jam-gap,16px); width:max-content; padding:0; align-items:center; justify-content:start; }
+.jam-studio .studio-column-label { position:sticky; left:0; z-index:8; height:26px; display:flex; align-items:center; background:var(--tj-panel); box-shadow:4px 0 0 var(--tj-panel); }
+.jam-studio .studio-column-launchers > span { font-size:13px; font-weight:600; color:var(--tj-accent); }
+.jam-studio .studio-column-launch { position:relative; display:flex; align-items:center; justify-content:center; gap:3px; height:26px; border:1px solid var(--studio-line); border-radius:5px; color:var(--ink); background:var(--studio-soft); font-size:11px; }
+.jam-studio .studio-column-launch[data-mapped=true] { border-bottom-color:var(--tj-accent); }
+.jam-studio .studio-column-launch:disabled { opacity:.3; }
+.jam-studio .studio-column-launch[data-state=playing] { color:var(--hardware-gold,var(--tj-accent)); border-color:currentColor; }
+.jam-studio[data-editing] .studio-instrument { padding-block:2px; border-bottom:1px solid var(--studio-line); }
+.jam-studio[data-editing] .studio-instrument .studio-instrument-top { position:sticky; left:0; z-index:7; grid-column:1; display:grid; grid-template-columns:32px minmax(0,1fr) 18px; gap:4px; align-self:stretch; align-content:center; height:auto; min-height:56px; padding:0; background:var(--tj-panel); box-shadow:4px 0 0 var(--tj-panel); border:0; }
+.jam-studio[data-editing] .studio-instrument-art { width:32px; height:32px; }
+.jam-studio[data-editing] .studio-instrument-label { display:flex; flex-wrap:wrap; gap:3px 5px; min-width:0; text-align:left; }
+.jam-studio[data-editing] .studio-instrument-label strong { font-size:14px; }
+.jam-studio .studio-instrument-label .studio-editing-state { font-size:9px; color:var(--tj-accent); }
+.jam-studio[data-editing] .studio-instrument-timbre { width:100%; max-width:110px; }
+.jam-studio[data-editing] .studio-instrument-timbre select { text-align:left; font-size:10px; }
+.jam-studio[data-editing] .studio-track-mute { position:static; width:18px; height:26px; }
+.jam-studio[data-editing] .studio-template-list { display:contents; }
+.jam-studio[data-editing] .studio-template { isolation:isolate; display:flex; position:relative; width:100%; height:var(--jam-pad,48px); aspect-ratio:1; min-height:48px; flex:none; padding:0; overflow:visible; border:0; border-radius:7px; background:transparent; box-shadow:none; }
+.jam-studio .studio-instrument[data-track=drums] { --studio-gem:var(--asset-gem-green); }
+.jam-studio .studio-instrument[data-track=chord] { --studio-gem:var(--asset-gem-amber); }
+.jam-studio .studio-instrument[data-track=bass] { --studio-gem:var(--asset-gem-blue); }
+.jam-studio .studio-instrument[data-track=melody] { --studio-gem:var(--asset-gem-purple); }
+.jam-studio .studio-template::before { content:''; position:absolute; inset:0; z-index:-1; border-radius:7px; background:var(--studio-gem) center / 119% no-repeat; filter:brightness(.63) saturate(.8); transition:filter .14s; pointer-events:none; }
+.jam-studio .studio-template[data-state=playing]::before { filter:brightness(1.15) saturate(1.1); }
+.jam-studio .studio-template[data-state=queued]::before { filter:brightness(.95); }
+.jam-studio .studio-template[data-selected=true] { box-shadow:none; }
+.jam-studio .studio-template::after,
+.jam-studio .studio-column-launch::after { content:''; position:absolute; inset:2px; border-radius:6px; pointer-events:none; border:2px solid transparent; }
+.jam-studio .studio-template[data-state=queued]::after { border-color:var(--studio-track-tone); opacity:calc(.35 + var(--jam-breath,.5) * .65); box-shadow:0 0 calc(3px + var(--jam-breath,.5) * 11px) var(--studio-track-tone); }
+.jam-studio .studio-column-launch[data-state=queued]::after { border-color:var(--tj-accent); opacity:calc(.35 + var(--jam-breath,.5) * .65); box-shadow:0 0 calc(3px + var(--jam-breath,.5) * 9px) var(--tj-accent); }
+.jam-studio .studio-template[data-editing=true] { outline:1px solid var(--tj-accent); outline-offset:2px; }
+.jam-studio .studio-template-index { position:absolute; left:10%; top:7%; color:#ffedda; font-size:8px; text-shadow:0 1px 3px #000; }
+.jam-studio .studio-template-name { color:#fff1dd; font-size:clamp(10px,calc(var(--jam-pad,48px) * .14),12px); line-height:1.2; font-weight:600; text-shadow:0 1px 3px #000,0 0 5px #000; padding-inline:7%; }
+.jam-studio .studio-template:hover::before { filter:brightness(1.12); }
+.jam-studio .studio-template-tools { z-index:2; top:1px; right:1px; padding:1px; border-radius:4px; background:#15110fdf; }
+.jam-studio[data-editing] .studio-template-empty { align-items:center; justify-content:center; padding:0; color:var(--tj-accent); opacity:1; cursor:pointer; background:transparent; border:0; box-shadow:none; }
+.jam-studio .studio-template-empty::before,.jam-studio .studio-template-empty::after { display:none; }
+.jam-studio .studio-template-empty > svg { opacity:0; transition:opacity .12s; }
+.jam-studio .studio-template-empty:is(:hover,:focus-visible) > svg { opacity:1; }
+.jam-studio .studio-template-empty:focus-visible { outline:1px solid var(--tj-accent); outline-offset:-2px; }
+.jam-studio .studio-column-empty { height:26px; }
+.jam-studio :is(.studio-template,.studio-column-launch,.studio-column-empty) { transition:transform .14s ease; }
+.jam-studio :is(.studio-template-play,.studio-column-launch) { cursor:grab; user-select:none; -webkit-user-select:none; }
+.jam-studio [data-reorder-source=true] { opacity:.22; }
+.jam-studio .studio-reorder-preview { pointer-events:none; position:fixed; inset:0; z-index:1000; }
+.jam-studio .studio-reorder-ghost { position:absolute; display:flex; align-items:center; justify-content:center; border-radius:7px; opacity:.78; background:var(--studio-gem) center / 119% no-repeat; box-shadow:0 7px 22px #0008; color:#fff1dd; font-size:11px; font-weight:600; text-align:center; text-shadow:0 1px 3px #000; }
+.jam-studio .studio-reorder-ghost[data-track=drums] { --studio-gem:var(--asset-gem-green); }
+.jam-studio .studio-reorder-ghost[data-track=chord] { --studio-gem:var(--asset-gem-amber); }
+.jam-studio .studio-reorder-ghost[data-track=bass] { --studio-gem:var(--asset-gem-blue); }
+.jam-studio .studio-reorder-ghost[data-track=melody] { --studio-gem:var(--asset-gem-purple); }
+.jam-studio .studio-reorder-ghost span { padding:4px; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+.jam-studio .studio-reorder-preview[data-valid=false] .studio-reorder-ghost { opacity:.35; }
+.jam-studio .studio-reorder-insertion { position:absolute; width:2px; border-radius:2px; background:var(--tj-accent); box-shadow:0 0 8px var(--tj-accent); }
+.jam-studio .studio-reorder-announcement { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+@media(prefers-reduced-motion:reduce) { .jam-studio :is(.studio-template,.studio-column-launch,.studio-column-empty) { transition:none; } }
+.jam-studio[data-editing] .studio-editor { display:grid; grid-template-columns:215px minmax(0,1fr); gap:6px 18px; flex:none; padding-top:6px; border-top:1px solid var(--studio-line); animation:none; }
+.jam-studio .studio-editor-heading { grid-column:1 / -1; }
+.jam-studio .studio-editor-controls { grid-column:1; grid-row:2 / span 2; display:flex; flex-direction:column; justify-content:center; gap:20px; }
+.jam-studio .studio-editor-controls .studio-phrase-settings { width:100%; }
+.jam-studio .studio-editor-controls .studio-editor-knobs { gap:10px; padding:0; }
+.jam-studio .studio-grid-toolbar { grid-column:2; grid-row:2; font-size:12px; }
+.jam-studio .studio-editor > :is(.studio-chord-editor,.studio-drum-grid,.studio-piano-preview) { grid-column:2; grid-row:3; min-width:0; }
+.jam-studio .studio-editor-actions { grid-column:1 / -1; }
+.jam-studio .studio-editor-heading-actions { display:flex; align-items:center; gap:12px; flex:none; }
+.jam-studio .studio-editor-heading-actions .studio-editor-actions { padding:0; gap:10px; border:0; flex:none; }
+.jam-studio .studio-editor-heading .studio-template-name-field { max-width:240px; }
+.jam-studio .studio-chord-editor { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:5px 10px; }
+.jam-studio .studio-chord-editor .studio-chord-progression { grid-column:1; grid-row:1; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; margin:0; }
+.jam-studio .studio-chord-editor .studio-note-tools { grid-column:2; grid-row:1; gap:6px; margin:0; }
+.jam-studio .studio-chord-editor .studio-note-tools > span { max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.jam-studio .studio-chord-editor .studio-chord-roll { grid-column:1 / -1; grid-row:2; }
+.jam-studio .studio-piano-preview .piano-roll { --piano-roll-viewport-height:144px; font-size:11px; }
+.jam-studio .studio-piano-preview .note-key { font-size:10px; }
+.jam-studio .studio-chord-roll .piano-roll-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.jam-studio .studio-chord-roll .pitch-step-cell { background:var(--asset-grid-panel) center / cover; border:1px solid #5b4833; box-shadow:inset 0 1px 2px #0008; border-radius:2px; }
+.jam-studio .studio-chord-roll .pitch-step-cell.active { background:#e2a35f; border-color:#edc083; box-shadow:inset 0 1px #ffe5b3,0 0 4px #d7925e66; }
+.jam-studio .studio-editor[data-track=bass] .pitch-step-cell.active { background:#639fd2; border-color:#acd7fa; }
+.jam-studio .studio-editor[data-track=melody] .pitch-step-cell.active { background:#b779d4; border-color:#e1b7f4; }
+.jam-studio .studio-chord-roll .pitch-step-cell.note-sustain { border-radius:0; border-left-color:#c88644; border-right-color:#c88644; opacity:.86; }
+.jam-studio .studio-chord-roll .pitch-step-cell.previewing { outline:1px solid #fff1c9; outline-offset:-1px; }
+.jam-studio .studio-chord-roll .pitch-step-cell:hover { border-color:#ffe2a6; }
+.jam-studio .studio-chord-roll .rhythm-step-ruler { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1px; }
+.jam-studio .studio-chord-roll .rhythm-step-marker { color:var(--tj-muted); font-size:10px; line-height:16px; text-align:center; }
+.jam-studio .studio-note-tools { display:flex; flex-wrap:wrap; align-items:center; gap:10px; font-size:12px; color:var(--tj-muted); margin-bottom:6px; }
+.jam-studio .studio-chord-progression { font-size:11px; color:var(--tj-muted); margin-bottom:5px; overflow-wrap:anywhere; }
+.jam-studio .studio-note-tools > span { flex:1; }
+.jam-studio .studio-note-tools label { display:flex; align-items:center; gap:5px; }
+.jam-studio .studio-note-tools input { width:48px; padding:4px; background:var(--studio-soft); color:var(--ink); border:1px solid var(--studio-line); border-radius:3px; }
+.jam-studio .studio-note-tools button { display:grid; place-items:center; width:28px; height:28px; background:var(--studio-soft); color:var(--ink); border:1px solid var(--studio-line); border-radius:3px; }
+.jam-studio .studio-note-tools :disabled { opacity:.4; }
+.jam-studio .studio-drum-grid .drum-sequencer-grid { min-width:480px; }
+.jam-studio .studio-effects { display:block; position:static; align-self:stretch; width:100%; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:12px; border:1px solid var(--studio-line); border-top:3px solid var(--pw-track); border-radius:7px; background:var(--tj-panel); box-shadow:none; }
+.jam-studio .studio-effects h2 { font-size:19px; margin-bottom:12px; }
+.jam-studio .studio-effects-heading { display:flex; align-items:baseline; justify-content:space-between; gap:6px; }
+.jam-studio .studio-effects-heading > button { flex:none; font-size:10px; white-space:nowrap; }
+.jam-studio .studio-effects .effect-targets { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin-bottom:10px; }
+.jam-studio .studio-effects .effect-targets button { padding:7px 1px; }
+.jam-studio .studio-transport { min-height:48px; padding:8px 18px; }
+.jam-studio .studio-transport .template-play-button { padding:7px 14px; }
+/* Editing keeps the complete editor visible; only the browsing cards get smaller. */
+.jam-studio[data-editing=true] .studio-main { gap:8px; }
+.jam-studio[data-editing=true] .studio-editor { flex:1 0 auto; grid-template-rows:auto auto minmax(0,1fr); }
+.jam-studio[data-editing=true] .studio-chord-editor { grid-template-rows:auto minmax(184px,1fr); align-items:stretch; }
+.jam-studio[data-editing=true] .studio-chord-roll { container-type:size; min-height:184px; }
+.jam-studio[data-editing=true] .studio-chord-roll .piano-roll { --piano-roll-viewport-height:max(144px,calc(100cqh - 40px)); }
+.jam-studio[data-editing=true] .studio-drum-grid { container-type:size; min-height:136px; display:grid; align-items:center; --drum-step-size:clamp(24px,calc((100cqh - 58px) / 3),64px); }
+.jam-studio[data-editing=true] .studio-gallery { gap:4px; }
+.jam-studio[data-editing=true] .studio-launcher { --jam-editor-gem:56px; }
+.jam-studio[data-editing=true] .studio-template { width:min(var(--jam-pad,48px),var(--jam-editor-gem)); height:min(var(--jam-pad,48px),var(--jam-editor-gem)); min-height:0; justify-self:center; }
+.jam-studio[data-editing=true] .studio-instrument { padding-block:0; }
+.jam-studio[data-editing=true] .studio-instrument .studio-instrument-top { min-height:28px; }
+.jam-studio[data-editing=true] .studio-instrument-art { width:24px; height:24px; }
+.jam-studio[data-editing=true] .studio-instrument-label { display:grid; grid-template-columns:auto minmax(0,1fr); grid-template-rows:14px 14px; gap:0 3px; }
+.jam-studio[data-editing=true] .studio-instrument-label strong { grid-column:1; grid-row:1; font-size:12px; line-height:14px; }
+.jam-studio[data-editing=true] .studio-instrument-label .studio-editing-state { grid-column:2; grid-row:1; font-size:8px; line-height:12px; white-space:nowrap; }
+.jam-studio[data-editing=true] .studio-instrument-timbre { grid-column:1 / -1; grid-row:2; }
+.jam-studio[data-editing=true] .studio-template-name { font-size:10px; line-height:12px; }
+.jam-studio[data-editing=true] .studio-template-index { font-size:7px; }
+@media(min-width:840px) and (max-height:760px) {
+  .jam-studio[data-editing=true] .studio-launcher { --jam-editor-gem:28px; }
+  .jam-studio[data-editing=true] .studio-template-name { font-size:9px; line-height:10px; }
+  .jam-studio[data-editing=true] .studio-template-index { font-size:6px; }
+}
+@media(max-width:1100px) {
+  .jam-studio .studio-workbench { gap:10px; padding:10px; }
+  .jam-studio[data-editing] .studio-editor { grid-template-columns:185px minmax(0,1fr); gap:10px; }
+  .jam-studio .studio-editor-knobs .rotary-control { width:85px; }
+}
+@media(max-width:839px) {
+  .jam-studio .studio-workbench { grid-template-columns:minmax(300px,1fr) 238px; padding:8px; gap:8px; overflow-x:auto; }
+  .jam-studio[data-editing] .studio-editor { display:flex; flex-direction:column; }
+  .jam-studio .studio-editor-controls { flex-direction:row; align-items:center; }
+  .jam-studio .studio-editor-controls .studio-phrase-settings { width:40%; }
+  .jam-studio .studio-piano-preview { overflow-x:auto; }
+  .jam-studio .studio-chord-roll .piano-roll { min-width:470px; }
+  .jam-studio .studio-editor-actions { flex-wrap:wrap; }
+  .jam-studio .studio-effects { display:block; position:static; width:238px; padding:10px; }
+}
+@media(max-width:650px) {
+  .jam-studio .performance-header { flex-wrap:wrap; }
+  .jam-studio .performance-title { flex:1 0 100%; order:-1; }
+  .jam-studio .performance-title h1 { margin:0; white-space:nowrap; }
+  .jam-studio .studio-workbench { grid-template-columns:minmax(0,1fr) 180px; overflow:hidden; }
+  .jam-studio .studio-effects { width:180px; padding:8px; }
+  .jam-studio .studio-launcher { --identity:88px; }
+  .jam-studio[data-editing] .studio-instrument .studio-instrument-top { grid-template-columns:28px minmax(0,1fr); gap:3px; }
+  .jam-studio[data-editing] .studio-instrument-art { width:28px; height:28px; }
+  .jam-studio[data-editing] .studio-instrument-label { grid-column:2; grid-row:1 / span 2; }
+  .jam-studio[data-editing] .studio-track-mute { grid-column:1; grid-row:2; }
+  .jam-studio .studio-editor-controls { flex-direction:column; }
+  .jam-studio .studio-editor-controls .studio-phrase-settings { width:100%; }
+  .jam-studio .studio-editor-knobs .rotary-control { width:65px; }
+  .jam-studio .studio-editor-knobs .rotary-knob { width:52px; height:52px; }
+  .jam-studio .studio-editor-knobs .rotary-face { width:42px; height:42px; }
+  .jam-studio .studio-editor-heading,.jam-studio .studio-grid-toolbar,.jam-studio .studio-editor-actions > div { flex-wrap:wrap; }
+  .jam-studio .studio-editor-identity { flex-wrap:wrap; }
+  .jam-studio .studio-note-tools > span { flex-basis:100%; }
+  .jam-studio .studio-transport { display:flex; flex-wrap:wrap; gap:6px; padding:8px; }
+  .jam-studio .studio-transport .template-play-button { white-space:nowrap; }
+  .jam-studio .studio-transport .template-page-controls { justify-content:end; margin-left:auto; flex-wrap:wrap; white-space:nowrap; }
+  .jam-studio .studio-transport [role=status] { grid-column:1 / -1; grid-row:2; }
+  .jam-studio .studio-transport [role=status]:empty { display:none; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .jam-studio .studio-template[data-state=queued]::after,
+  .jam-studio .studio-column-launch[data-state=queued]::after { opacity:1; box-shadow:none; }
+  .jam-studio .studio-template::before { transition:none; }
+}
+@media(min-width:840px) and (max-height:680px) {
+  .jam-studio[data-editing=true] .studio-main { gap:4px; }
+  .jam-studio[data-editing=true] .studio-launcher { --jam-editor-gem:20px; }
+  .jam-studio[data-editing=true] .studio-gallery { gap:0; }
+  .jam-studio[data-editing=true] .studio-strip-toolbar { min-height:20px; margin-bottom:2px; }
+  .jam-studio[data-editing=true] .studio-strip-toolbar > button { width:24px; height:20px; }
+  .jam-studio[data-editing=true] .studio-column-launch,
+  .jam-studio[data-editing=true] .studio-column-label,
+  .jam-studio[data-editing=true] .studio-column-empty { height:18px; }
+  .jam-studio[data-editing=true] .studio-instrument .studio-instrument-top { min-height:22px; grid-template-columns:20px minmax(0,1fr) 16px; gap:2px; }
+  .jam-studio[data-editing=true] .studio-instrument-art { width:20px; height:20px; }
+  .jam-studio[data-editing=true] .studio-instrument-label { display:flex; flex-wrap:nowrap; align-items:center; gap:2px; }
+  .jam-studio[data-editing=true] .studio-instrument-label strong { font-size:11px; white-space:nowrap; }
+  .jam-studio[data-editing=true] .studio-instrument-label .studio-editing-state { position:absolute; right:0; top:-7px; font-size:7px; line-height:7px; }
+  .jam-studio[data-editing=true] .studio-instrument-timbre { min-width:0; flex:1; }
+  .jam-studio[data-editing=true] .studio-instrument-timbre select { font-size:8px; padding-inline:0 8px; }
+  .jam-studio[data-editing=true] .studio-track-mute { height:20px; width:16px; }
+  .jam-studio[data-editing=true] .studio-template { width:100%; height:22px; aspect-ratio:auto; }
+  .jam-studio[data-editing=true] .studio-template::before { width:20px; height:20px; inset:1px auto auto 0; background-size:119%; }
+  .jam-studio[data-editing=true] .studio-template-play { padding:1px 2px 1px 21px; }
+  .jam-studio[data-editing=true] .studio-template-name { display:block; white-space:nowrap; text-overflow:ellipsis; font-size:9px; padding:0; }
+  .jam-studio[data-editing=true] .studio-template-index { left:2px; top:3px; }
+  .jam-studio[data-editing=true] .studio-editor { gap:4px 12px; padding-top:4px; grid-template-rows:auto minmax(0,1fr) auto; }
+  .jam-studio[data-editing=true] .studio-editor-controls { gap:8px; grid-row:2; }
+  .jam-studio[data-editing=true] .studio-grid-toolbar { grid-column:1; grid-row:3; display:grid; grid-template-columns:1fr auto; gap:0 4px; }
+  .jam-studio[data-editing=true] .studio-grid-toolbar > span { grid-column:1 / -1; }
+  .jam-studio[data-editing=true] .studio-editor > :is(.studio-chord-editor,.studio-drum-grid) { grid-column:2; grid-row:2 / span 2; }
+  .jam-studio[data-editing=true] .studio-editor-heading-actions :is(.studio-solo,.studio-save) { min-height:26px; padding-block:4px; }
+  .jam-studio[data-editing=true] .studio-editor-heading .studio-template-name-field { max-width:160px; }
+  .jam-studio[data-editing=true] .studio-editor-heading-actions { gap:8px; }
+  .jam-studio[data-editing=true] .studio-editor-heading-actions .studio-editor-actions { gap:6px; }
+}

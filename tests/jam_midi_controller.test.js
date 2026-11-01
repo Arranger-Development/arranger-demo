@@ -9,7 +9,7 @@ function setup() {
   const commands = [];
   const controller = createJamMidiController({ getContext: () => context, dispatch(command) {
     commands.push(command);
-    if (command.type === 'drumParameter') context.params[command.parameter] = command.value;
+    if (command.type === 'trackParameter') context.params[command.parameter] = command.value;
     else context.values[command.type] = command.type === 'pitch' && !command.pressed ? 0 : command.value;
   } });
   return { context, commands, controller, send: (cc, raw) => controller.handle([0xb3, cc, raw]) };
@@ -129,7 +129,7 @@ test('empty effect targets disable faders without disabling drum editing knobs',
   send(1, 102); send(1, 127); send(4, 64); send(4, 127);
   assert.equal(commands.length, 0);
   send(5, 64); send(5, 127);
-  assert.equal(commands.at(-1).type, 'drumParameter');
+  assert.equal(commands.at(-1).type, 'trackParameter');
   assert.equal(context.params.strength, 100);
 });
 
@@ -154,16 +154,23 @@ test('stopping disables pitch but leaves stopped-state mix adjustments available
   send(1, 102); send(1, 1); assert.equal(context.values.volume, -24);
 });
 
-test('knobs change only drum drafts and emit five real preset levels with boundary hysteresis', () => {
+test('knobs address the edited track and emit five levels with boundary hysteresis and pickup', () => {
   const { context, commands, send } = setup();
   send(5, 64); send(5, 0);
   send(5, 16); assert.equal(context.params.strength, 0);
   for (const raw of [18, 50, 83, 127]) send(5, raw);
   assert.deepEqual(commands.map(c => c.value), [0, 25, 50, 75, 100]);
-  assert.ok(commands.every(c => c.type === 'drumParameter' && c.parameter === 'strength'));
+  assert.ok(commands.every(c => c.type === 'trackParameter' && c.trackId === 'drums' && c.parameter === 'strength'));
   send(6, 64); send(6, 127); assert.equal(context.params.groove, 100);
-  context.editingTrack = 'bass'; const count = commands.length;
-  send(5, 64); send(6, 0); assert.equal(commands.length, count);
+  for (const trackId of ['bass','chord','melody']) {
+    context.editingTrack = trackId; context.params = { strength: 50, groove: 50 };
+    const count = commands.length;
+    send(5, 127); assert.equal(commands.length, count, 'changing track re-arms pickup');
+    send(5, 64); send(5, 0);
+    assert.equal(commands.at(-1).trackId, trackId); assert.equal(context.params.strength, 0);
+  }
+  context.editingTrack = null; const count = commands.length;
+  send(5, 64); send(5, 127); assert.equal(commands.length, count);
 });
 
 test('newly opened templates and undo re-arm knob pickup', () => {

@@ -35,3 +35,12 @@ test('reset cancels timestamped repeat messages as well as clearing the audio hi
  const p=processor();block(p,.9,256);p.port.onmessage({data:{held:true,seconds:.125,time:1}});
  p.port.onmessage({data:{reset:true}});block(p,0,1200);assert.equal(p.slice,null);assert.equal(p.queue.length,0);
 });
+test('a phrase pause clears its captured repeat at the scheduled boundary without clearing another processor',()=>{
+  const a=processor(),b=processor();block(a,.8,256);block(b,.4,256);
+  for(const p of [a,b])p.port.onmessage({data:{held:true,seconds:.125}});
+  a.port.onmessage({data:{clear:true,time:.5}});
+  assert.ok(block(a,0,256)[0][200]>.5,'old phrase remains audible until the boundary');
+  assert.ok(block(b,0,256)[0][200]>.3);
+  assert.ok(block(a,0,128)[0].every(v=>v===0),'no held old-phrase audio remains after pause');
+  assert.ok(block(b,0,128)[0].some(v=>v>.3),'the other track continues');
+});

@@ -17,6 +17,70 @@ import { dispatchCommand } from '../src/input/commandDispatcher.js';
 
 const SAMPLE_ASSET_VERSION = 'sample-refresh-20260608';
 
+test('per-track release cancels only the target cached voices and prepared banks', () => {
+  const engine = new AudioEngine({ tone: createFakeTone() }), calls = [];
+  const sampler = id => ({ releaseAll: time => calls.push([id,time]) });
+  engine.bassSampler = sampler('bass'); engine.chordSampler = sampler('chord'); engine.chordSynth = sampler('chordSynth');
+  engine.melodySampler = sampler('melody');
+  engine.drumPlayers = new Map([['kick',{ stop: time => calls.push(['kick',time]) }]]);
+  engine.melodyTrackBanks.set('bass',new Map([['bank',{sampler:sampler('bassBank')}]]));
+  engine.melodyTrackBanks.set('chord',new Map([['bank',{sampler:sampler('chordBank')}]]));
+  engine.drumTrackBanks.set('drums',new Map([['bank',{players:new Map([['snare',{stop:time=>calls.push(['snare',time])}]])}]]));
+  engine.stopTrackVoices('bass',4);
+  assert.deepEqual(calls,[['bassBank',4],['bass',4]]);
+  calls.length=0;engine.stopTrackVoices('chord',5);
+  assert.deepEqual(calls,[['chordBank',5],['chord',5],['chordSynth',5]]);
+  calls.length=0;engine.stopTrackVoices('drums',6);
+  assert.deepEqual(calls,[['kick',6],['snare',6]]);
+});
+
+test('the live scheduler uses independent offsets and releases only requested tracks at their boundary', async () => {
+  const tone = createFakeTone(), engine = new AudioEngine({ tone, playerFactory:createPlayerFactory(tone.calls) });
+  const matrix = { bass:[Array.from({length:16},()=>({type:'bass',note:'C2'}))],
+    chord:[Array.from({length:16},()=>null),Array.from({length:16},()=>({type:'notes',notes:['E4']}))] };
+  let source={matrix,totalBars:2,phraseBars:{bass:1,chord:2},trackStepOffsets:{bass:16,chord:0},releaseTrackIds:['bass']};
+  await engine.play({bpm:100,matrixSource:()=>matrix,totalBars:2,playbackSource:()=>source});
+  const released=[],events=[];
+  engine.stopTrackVoices=(...args)=>released.push(args);
+  engine.stopAllVoices=()=>assert.fail('a track change must not release all voices');
+  engine.triggerBassSampler=(note)=>events.push(['bass',note]);
+  engine.triggerChordEvent=event=>events.push(['chord',event.notes]);
+  engine.transportAbsoluteStep=16;tone.Transport.scheduledCallback(10);
+  assert.deepEqual(released,[['bass',10]]);
+  assert.deepEqual(events,[['bass','C2'],['chord',['E4']]]);
+  source={...source,releaseTrackIds:[]};
+  engine.transportAbsoluteStep=32;tone.Transport.scheduledCallback(12.4);
+  assert.equal(released.length,1);assert.equal(events.length,3,'chord wraps independently into its empty first bar');
+});
+
+test('authored pitched events retain exact timing and durations when using gated voices', async () => {
+  const tone = createFakeTone();
+  const engine = new AudioEngine({ tone, playerFactory:createPlayerFactory(tone.calls),
+    chordSamplerFactory:createVolumeAwareChordSamplerFactory(tone.calls),samplerFactory:createVolumeAwareSamplerFactory(tone.calls) });
+  const bar = cell => [cell,...Array(15).fill(null)];
+  const matrix = {
+    chord: [bar({ type:'notes',notes:['C4'],timbreId:'piano',playbackMode:'natural',
+      notePerformances:{C4:[{offsetSteps:.125,durationSteps:1.75,velocity:.5},{offsetSteps:.625,durationSteps:.5,velocity:.7}]}})],
+    bass: [bar({ type:'bass',note:'C1',notePerformances:{C1:[{offsetSteps:.375,durationSteps:2.25,velocity:.6}]}})],
+    melody: [bar({type:'melody',note:'G4',timbreId:'piano',notePerformances:{G4:[{offsetSteps:.25,durationSteps:.875,velocity:.8}]}})],
+  };
+  await engine.play({bpm:120,matrixSource:()=>matrix,totalBars:1});
+  tone.Transport.scheduledCallback(10);
+  const calls=tone.calls.filter(([method])=>method==='sampler.triggerAttackRelease').map(call=>call.slice(1,4));
+  assert.deepEqual(calls,[['C1',.28125,10.046875],['C4',.21875,10.015625],['C4',.0625,10.078125],['G4',.109375,10.03125]]);
+  assert.equal(tone.calls.some(([method])=>method==='sampler.triggerAttack'),false);
+  await engine.stop();
+});
+
+test('natural sample banks preserve legacy tails but honor authored gate duration and velocity', () => {
+  const engine=new AudioEngine({tone:createFakeTone()});
+  const calls=[];
+  engine.getMelodyBank=()=>({ready:true,sampler:{volume:{value:0},triggerAttack:(...args)=>calls.push(['natural',...args]),triggerAttackRelease:(...args)=>calls.push(['gated',...args])}});
+  engine.triggerMelodyBankEvent({trackId:'chord',note:'C4',timbreId:'piano',playbackMode:'natural',durationSteps:1},3,120);
+  engine.triggerMelodyBankEvent({trackId:'chord',note:'E4',timbreId:'piano',playbackMode:'natural',durationSteps:1.5,gateDuration:true,velocity:.65},4,120);
+  assert.deepEqual(calls,[['natural','C4',3,1],['gated','E4',.1875,4,.65]]);
+});
+
 test('live preview length changes keep absolute phase and progress waits for the audible boundary', async () => {
   const tone = createFakeTone();
   let clock = 0;

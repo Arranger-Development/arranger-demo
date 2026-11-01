@@ -13,7 +13,14 @@ class JamExpression extends AudioWorkletProcessor {
   constructor() {
     super(); this.size = Math.ceil(sampleRate * 2); this.ring = [new Float32Array(this.size),new Float32Array(this.size)];
     this.write = 0; this.phase = 0; this.brakeHead = 0; this.braking = false; this.chopGain = 1; this.pitchMix = 0; this.brakeMix = 0;
-    this.port.onmessage = ({data}) => { if (data.reset) { this.ring.forEach(r => r.fill(0)); this.braking = false; this.pitchMix = this.brakeMix = 0; } };
+    this.clearTimes = [];
+    this.port.onmessage = ({data}) => {
+      if (data.reset) { this.clearTimes = []; this.clearVoices(); }
+      if (data.clear && Number.isFinite(data.time)) { this.clearTimes.push(data.time); this.clearTimes.sort((a,b) => a-b); }
+    };
+  }
+  clearVoices() {
+    this.ring.forEach(r => r.fill(0)); this.braking = false; this.pitchMix = this.brakeMix = 0;
   }
   read(ch, pos) {
     const p = ((pos % this.size) + this.size) % this.size, i = Math.floor(p), f = p-i;
@@ -23,6 +30,7 @@ class JamExpression extends AudioWorkletProcessor {
     const output = outputs[0], input = inputs[0]; if (!output?.[0]) return true;
     const window = sampleRate * .05;
     for (let i=0;i<output[0].length;i++) {
+      while (this.clearTimes.length && this.clearTimes[0] <= currentTime+i/sampleRate) { this.clearTimes.shift(); this.clearVoices(); }
       const pitch = parameters.pitch[parameters.pitch.length === 1 ? 0 : i];
       const chop = parameters.chopper[parameters.chopper.length === 1 ? 0 : i];
       const brake = parameters.brake[parameters.brake.length === 1 ? 0 : i];

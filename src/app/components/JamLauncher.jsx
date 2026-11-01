@@ -1,0 +1,107 @@
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Plus, Play, Volume2, VolumeX } from 'lucide-react';
+import JamTemplateCard from './JamTemplateCard.jsx';
+import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS } from '../performanceModel.js';
+import { TIMBRE_OPTIONS } from '../performanceSession.js';
+import { jamTemplateRange } from '../jamTemplateSlots.js';
+import { jamColumnState, jamTemplateState } from '../jamPerformanceState.js';
+import { createJamStripController, jamStripLayout, JAM_STRIP_GAP } from '../jamStripController.js';
+import useJamReorder from './useJamReorder.js';
+
+export default function JamLauncher({ active, templates, columnCount, bank, onBankChange, navigationRef,
+  editingTrack, editingTemplateId, auditioning = false, selection, status, mutedTracks, volumes, timbres, timbreLabel, artSources, artNodes,
+  onOpenEditor, onTimbreChange, onToggleMute, onTrigger, onLaunchColumn, onRemove, onMove }) {
+  const scrollRef = useRef(null);
+  const hintId = useId();
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const columns = useMemo(() => Object.fromEntries(TRACKS.map(t => [t, jamTemplateRange(templates[t], 0, columnCount)])), [templates, columnCount]);
+  const [controller] = useState(() => {
+    let element = null;
+    const interaction = createJamStripController({
+      read: () => {
+        const el = element;
+        if (!el) return { left: 0, max: 0, pitch: 48 + JAM_STRIP_GAP, visible: 0, columns: 16 };
+        const style = getComputedStyle(el), identity = parseFloat(style.getPropertyValue('--identity')) || 120;
+        const gap = parseFloat(style.getPropertyValue('--jam-gap')) || JAM_STRIP_GAP;
+        return { left: el.scrollLeft, max: Math.max(0, el.scrollWidth - el.clientWidth),
+          pitch: (parseFloat(style.getPropertyValue('--jam-pad')) || 48) + gap, gap,
+          visible: Math.max(0, el.clientWidth - identity - 6), columns: Number(style.getPropertyValue('--jam-columns')) || 16 };
+      },
+      write: left => { if (element) element.scrollLeft = left; },
+      onBank: onBankChange,
+      onEdges: next => setEdges(old => old.left === next.left && old.right === next.right ? old : next),
+    });
+    return { ...interaction, attach: el => { element = el; } };
+  });
+  const reorder = useJamReorder({ scrollRef, templates, onMove, onScroll: controller.scroll, navigationRef, enabled: active });
+  const { drag } = reorder;
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    controller.attach(el);
+    const resize = () => {
+      if (!el.clientWidth) return;
+      const style = getComputedStyle(el), identity = parseFloat(style.getPropertyValue('--identity')) || 120;
+      const previousPitch = (parseFloat(style.getPropertyValue('--jam-pad')) || 48) + (parseFloat(style.getPropertyValue('--jam-gap')) || JAM_STRIP_GAP);
+      const previousLeft = el.scrollLeft;
+      const layout = jamStripLayout(el.clientWidth, identity);
+      el.style.setProperty('--jam-pad', `${layout.pad}px`);
+      el.style.setProperty('--jam-gap', `${layout.gap}px`);
+      controller.resize(previousPitch, previousLeft);
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [controller, columnCount]);
+  useLayoutEffect(() => {
+    const api = { showBank: controller.showBank, revealSlot: controller.revealSlot };
+    navigationRef.current = api;
+    return () => { if (navigationRef.current === api) navigationRef.current = null; };
+  }, [controller, navigationRef]);
+  return <section className="studio-launcher" aria-label="乐句浏览" data-left={edges.left} data-right={edges.right}>
+    <div className="studio-strip-toolbar">
+      <div><span id={hintId}>拖宝石或列头排序 · 滚动浏览</span><span className="studio-bank-range" aria-label="快捷键与控制器对应列">快捷键 / 控制器 {bank * 8 + 1}–{bank * 8 + 8}</span></div>
+      <button type="button" aria-label="向左滚动乐句" title="向左滚动八列" disabled={!edges.left} onClick={() => controller.moveBy(-8)}><ChevronLeft size={16}/></button>
+      <button type="button" aria-label="向右滚动乐句" title="向右滚动八列" disabled={!edges.right} onClick={() => controller.moveBy(8)}><ChevronRight size={16}/></button>
+    </div>
+    <div className="studio-strip-frame"><div ref={scrollRef} className="studio-launcher-scroll" role="region" aria-label="连续乐句列表" aria-describedby={hintId} tabIndex={0}
+      style={{ '--jam-columns': columnCount, '--jam-gap': `${JAM_STRIP_GAP}px` }} data-dragging={Boolean(drag)}
+      {...reorder.handlers}
+      onScroll={() => { controller.scroll(); reorder.refresh(); }}
+      onKeyDown={event => {
+        reorder.handlers.onKeyDown(event);
+        if (event.defaultPrevented) return;
+        if (event.target !== event.currentTarget) return;
+        const distance = { ArrowLeft: -1, ArrowRight: 1, PageUp: -8, PageDown: 8 }[event.key];
+        if (distance) { event.preventDefault(); event.stopPropagation(); controller.moveBy(distance); }
+      }}>
+      <div className="studio-gallery" aria-label="四轨乐器与模板">
+        <div className="studio-column-launchers"><span className="studio-column-label">整列播放</span>{Array.from({ length: columnCount }, (_, index) => {
+          const state = jamColumnState(status, columns, index), mapped = Math.floor(index / 8) === bank;
+          return TRACKS.some(t => columns[t][index]) ? <button type="button" key={index} className="studio-column-launch" data-slot-index={index} data-state={state} data-mapped={mapped}
+            {...reorder.cellProps(null,index)} aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
+            aria-label={`播放第 ${index + 1} 列${state === 'queued' ? '，等待下一小节进入' : ''}`} title="点击整列播放 · 拖动整列排序 · Alt＋方向键移动" onClick={() => onLaunchColumn(index)}><Play size={10}/><span>{index + 1}</span></button>
+            : <span className="studio-column-empty" key={index} data-slot-index={index} {...reorder.cellProps(null,index)} aria-hidden="true"/>;
+        })}</div>
+        {TRACKS.map(t => <section className="studio-instrument" data-track={t} data-active={editingTrack === t} key={t} aria-label={`${LABELS[t]}模板`}>
+          <div className="studio-instrument-top"><button type="button" className="studio-instrument-open" aria-label={`创作${LABELS[t]}模板`} onClick={() => onOpenEditor(t)} aria-expanded={editingTrack === t}>
+            <span className="studio-instrument-art" data-art-track={t} ref={node => { artNodes.current[t] = node; }}><img src={artSources[t]} alt="" draggable={false} decoding="async"/></span>
+          </button><div className="studio-instrument-label"><strong>{LABELS[t]}</strong><span className="studio-editing-state">{editingTrack === t ? '编辑中' : ''}</span><label className="studio-instrument-timbre" title="切换音色"><select aria-label={`${LABELS[t]}音色`} value={timbres[t]} onChange={e => onTimbreChange(t,e.target.value)}>{TIMBRE_OPTIONS[t].map(id => <option key={id} value={id}>{timbreLabel(id)}</option>)}</select></label></div><button type="button" className="studio-track-mute" aria-label={`${mutedTracks[t] ? '取消静音' : '静音'}${LABELS[t]}`} aria-pressed={mutedTracks[t]} onClick={() => onToggleMute(t)} title={mutedTracks[t] ? '取消静音' : '静音'}>{mutedTracks[t] ? <VolumeX size={14}/> : <Volume2 size={14}/>}</button></div>
+          <div className="studio-template-list" aria-label={`${LABELS[t]}已保存乐句`}>{columns[t].map((p, index) => p
+            ? <JamTemplateCard key={p.id} template={p} index={index} reorderProps={reorder.cellProps(t,index)} selected={selection[t] === p.id}
+              canCancel={!auditioning && status.playingPhraseIds?.[t] === p.id && status.mode !== 'stopped' && !mutedTracks[t] && volumes[t] > -24}
+              state={mutedTracks[t] || volumes[t] <= -24 ? 'idle' : jamTemplateState(status,t,p.id)} editing={editingTemplateId === p.id}
+              onSelect={() => onTrigger(t,p.id)} onEdit={() => onOpenEditor(t,p)} onRemove={() => onRemove(p)}/>
+            : <button type="button" key={`empty-${index}`} className="studio-template studio-template-empty" data-slot-index={index} {...reorder.cellProps(t,index)} aria-label={`新建${LABELS[t]}乐句，第 ${index + 1} 格`} onClick={() => onOpenEditor(t,null,false,index)}><Plus size={20} aria-hidden="true"/></button>)}</div>
+        </section>)}
+      </div>
+    </div></div>
+    {drag && <div className="studio-reorder-preview" aria-hidden="true" data-valid={drag.valid}>
+      {drag.valid && <div className="studio-reorder-insertion" style={{left:drag.targetLeft-4,top:drag.targetTop,height:drag.targetHeight}}/>}
+      {drag.ghosts.map(g => g.name && <div className="studio-reorder-ghost" data-track={g.trackId} key={g.trackId}
+        style={{left:drag.left+drag.dx,top:g.top,width:drag.width,height:g.height}}><span>{g.name}</span></div>)}
+    </div>}
+    <span className="studio-reorder-announcement" role="status" aria-live="polite">{drag ? drag.valid ? `移动到第 ${drag.to+1} ${drag.trackId ? '格' : '列'}` : '请移回原轨道或列区域，松手取消' : ''}</span>
+  </section>;
+}
+void [ChevronLeft, ChevronRight, Plus, Play, Volume2, VolumeX, JamTemplateCard];
