@@ -6,6 +6,7 @@ import { createJamAudition } from '../src/app/jamAudition.js';
 import { createSessionPlayback } from '../src/app/sessionPlayback.js';
 import { createMatrixPlaybackAdapter } from '../src/audio/matrixPlaybackAdapter.js';
 import { getDialDrumPreset } from '../src/data/dialDrumPresets.js';
+import { jamColumnState } from '../src/app/jamPerformanceState.js';
 
 const ready = () => new Promise(resolve => setImmediate(resolve));
 test('continuous strip launches the global 32nd column atomically without changing the retained draft',async()=>{
@@ -44,7 +45,7 @@ function fixture() {
   const audition=createJamAudition(playback,{readWorkspace:()=>store.current().workspace,readDraft:()=>store.current().workspace.draft});
   return {store,audio,playback,audition,drums,second,bass,get plays(){return plays;},
     toggle(template,draft=null){toggleJamTemplate({projectStore:store,playback,audition,trackId:template.trackId,templateId:template.id,draft});},
-    tick(step){absolute=step;const source=options.playbackSource(step,step*.15);source.onAudible?.();return source;},
+    tick(step,audible=true){absolute=step;const source=options.playbackSource(step,step*.15);if(audible)source.onAudible?.();return source;},
     events(source,step){return createMatrixPlaybackAdapter(source,{totalBars:source.totalBars}).getEventsForFlatStep(step);},
   };
 }
@@ -232,4 +233,57 @@ test('column launch uses the current page, restores audible tracks, and ignores 
   assert.equal(launchJamColumn({...args,columnIndex:7}),false);
   assert.equal(launchJamColumn({...args,columnIndex:8}),false);
   await ready();f.tick(0);f.tick(32);assert.equal(f.playback.isActive(),true);
+});
+
+test('column transport switches play to pause and back, preserving phrases and selections',async()=>{
+  const f=fixture(), states=[];
+  const playback=createSessionPlayback(f.audio,state=>states.push(state));
+  const audition=createJamAudition(playback,{readWorkspace:()=>f.store.current().workspace,readDraft:()=>f.store.current().workspace.draft});
+  const click=()=>launchJamColumn({projectStore:f.store,playback,audition,slotIndex:0,toggle:true});
+  const columns=Object.fromEntries(Object.entries(f.store.current().workspace.templates).map(([t,phrases])=>[t,phrases]));
+  const before=structuredClone(f.store.current().workspace.templates);
+  assert.equal(click(),true);await ready();f.tick(0);
+  assert.equal(jamColumnState(states.at(-1),columns,0),'playing');
+  const selection=structuredClone(f.store.current().workspace.selection);
+  assert.equal(click(),true);
+  assert.equal(playback.isActive(),false);
+  assert.equal(jamColumnState(states.at(-1),columns,0),'idle');
+  assert.deepEqual(f.store.current().workspace.selection,selection);
+  assert.deepEqual(f.store.current().workspace.templates,before);
+  assert.equal(click(),true);await ready();
+  assert.equal(f.tick(0).trackStepOffsets.drums,0);
+  assert.equal(jamColumnState(states.at(-1),columns,0),'playing');
+});
+
+test('column transport can pause a loading request without a late audio start',async()=>{
+  const f=fixture();let finish;
+  f.audio.preparePerformanceEffects=()=>new Promise(resolve=>{finish=resolve;});
+  const click=()=>launchJamColumn({projectStore:f.store,playback:f.playback,audition:f.audition,slotIndex:0,toggle:true});
+  assert.equal(click(),true);
+  assert.equal(click(),true);
+  finish();await ready();
+  assert.equal(f.playback.isActive(),false);assert.equal(f.plays,0);
+});
+
+test('pausing a queued column prevents its prepared callback from restoring playback',async()=>{
+  const f=fixture();
+  launchJamColumn({projectStore:f.store,playback:f.playback,audition:f.audition,slotIndex:0,toggle:true});
+  await ready();f.tick(0);f.tick(3);
+  const args={projectStore:f.store,playback:f.playback,audition:f.audition,slotIndex:1,toggle:true};
+  launchJamColumn(args);
+  const prepared=f.tick(16,false);
+  assert.equal(launchJamColumn(args),true);
+  prepared.onAudible?.();
+  assert.equal(f.playback.isActive(),false);
+  assert.equal(f.playback.getProgress(),null);
+});
+
+test('the audible column pause still works while a different column is queued',async()=>{
+  const f=fixture();
+  const click=slotIndex=>launchJamColumn({projectStore:f.store,playback:f.playback,audition:f.audition,slotIndex,toggle:true});
+  click(0);await ready();f.tick(0);f.tick(3);click(1);
+  assert.equal(f.playback.getProgress().snapshot.phraseIds.drums,f.drums.id);
+  assert.equal(f.playback.getDesiredPhraseIds().drums,f.second.id);
+  assert.equal(click(0),true);
+  assert.equal(f.playback.isActive(),false);
 });

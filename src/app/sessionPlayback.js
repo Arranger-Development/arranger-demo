@@ -78,13 +78,14 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
         const localStep = absoluteStep - scheduled.startStep;
         emit({ bar: Math.floor(localStep / 16) % scheduled.snapshot.totalBars, step: localStep % 16 }); } };
   }
-  async function start(nextMode, targets, tempo, record = false) {
+  async function start(nextMode, targets, tempo, record = false, editorOverlay = false) {
     stop(); const request = ++generation;
     mode = nextMode; bpm = tempo; loading = true; cycle = 1; lastStep = -1; startStep = 0;
     current = targets[0]; queuedRequest = current;
     if (nextMode === 'jam' && current.id === 'jam-current-combination') {
       jam = createJamTrackPlayback(() => ++requestVersion);
-      jam.replace(current.snapshot, 0);
+      if (editorOverlay) jam.audition(current.snapshot, 0, { restart: true });
+      else jam.replace(current.snapshot, 0);
     }
     automation?.start();
     if (record) {
@@ -114,6 +115,10 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
   return {
     stop, isActive, isReady: () => isActive() && !loading,
     getDesiredPhraseIds: () => jam?.desiredIds() ?? { drums: null, chord: null, bass: null, melody: null },
+    updatePhrase(snapshot,trackId,id) {
+      if (!jam || !isActive() || finishing || !snapshot) return;
+      jam.updatePhrase(snapshot,trackId,id,lastStep+1);emit();
+    },
     toggleTrack(snapshot, trackId, tempo, { restart = false } = {}) {
       if (automation?.isRecording() || !snapshot) return;
       if (!isActive() || !jam || finishing) { void start('jam', [targetFor(snapshot)], tempo); return; }
@@ -125,9 +130,9 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
       jam.remove(trackId, id, lastStep + 1);
       if (!jam.hasWork() && lastStep < 0) stop(); else emit();
     },
-    audition(snapshot, tempo) {
-      if (!isActive() || !jam || finishing) { void start('jam', [targetFor(snapshot)], tempo); return; }
-      jam.audition(snapshot, lastStep + 1); emit();
+    audition(snapshot, tempo, { restart = false } = {}) {
+      if (!isActive() || !jam || finishing) { void start('jam', [targetFor(snapshot)], tempo, false, true); return; }
+      jam.audition(snapshot, lastStep + 1, { restart }); emit();
     },
     resumeJam() { if (jam) { jam.audition(null, lastStep + 1); emit(); } },
     record(snapshot, tempo) {

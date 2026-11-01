@@ -158,3 +158,62 @@ test('audition holds underlying starts and pending launches, then restores their
   assert.equal(f.state.trackPositions.bass.localStep,17);assert.equal(f.state.trackPositions.chord.localStep,1);
   assert.equal(f.state.queuedPhraseIds,null);
 });
+
+test('auto-retained phrase edits replace only that track at the next step and preserve other queued boundaries',async()=>{
+  const f=fixture();f.toggle('bass','a',4);await ready();f.tick(0);f.tick(5);f.toggle('chord','c',3);
+  const next=phrase('bass','a',4);next.matrix.bass.forEach(bar=>bar.forEach(cell=>{cell.note='G2';}));
+  f.playback.updatePhrase(next,'bass','a');const at6=f.tick(6);
+  assert.equal(f.events(at6,6).find(e=>e.trackId==='bass').note,'G2');
+  assert.deepEqual(at6.releaseTrackIds,['bass']);assert.equal(f.state.trackPositions.bass.startStep,0);
+  assert.equal(f.state.queuedPhraseIds.chord,'c');f.tick(16);
+  assert.equal(f.state.trackPositions.chord.startStep,16);assert.equal(f.state.trackPositions.bass.startStep,0);assert.equal(f.plays,1);
+});
+
+test('editing a queued ID keeps its original bar boundary and rejects callbacks from a previously prepared version',async()=>{
+  const f=fixture();f.toggle('bass','a',4);await ready();f.tick(0);f.tick(5);f.toggle('bass','b',2);
+  const prepared=f.read(16),next=phrase('bass','b',2);next.matrix.bass.forEach(bar=>bar.forEach(cell=>{cell.note='A2';}));
+  f.playback.updatePhrase(next,'bass','b');prepared.onAudible();
+  assert.equal(f.state.playingPhraseIds.bass,'a');assert.equal(f.state.queuedPhraseIds.bass,'b');
+  const current=f.tick(17);assert.equal(f.events(current,17)[0].note,'A2');
+  assert.equal(f.state.trackPositions.bass.startStep,16);assert.equal(f.state.trackPositions.bass.localStep,1);
+  assert.equal(f.state.queuedPhraseIds,null);prepared.onAudible();assert.equal(f.state.trackPositions.bass.localStep,1);
+});
+
+test('a queued edit before its boundary is audible on that same boundary; cancellation restores the old phrase',async()=>{
+  const f=fixture();f.toggle('bass','a');await ready();f.tick(0);f.tick(5);f.toggle('bass','b');
+  const next=phrase('bass','b');next.matrix.bass[0].forEach(cell=>{cell.note='F#2';});
+  f.playback.updatePhrase(next,'bass','b');const boundary=f.tick(16);
+  assert.equal(f.events(boundary,16)[0].note,'F#2');assert.equal(f.state.trackPositions.bass.localStep,0);
+  const g=fixture();g.toggle('bass','a');await ready();g.tick(0);g.tick(5);g.toggle('bass','b');g.read(16);
+  g.playback.updatePhrase(next,'bass','b');g.toggle('bass','b');g.tick(17);
+  assert.equal(g.state.playingPhraseIds.bass,'a');assert.equal(g.state.trackPositions.bass.startStep,0);assert.equal(g.state.queuedPhraseIds,null);
+});
+
+test('retained edits beneath editor solo are heard on resume; a new phrase ID never joins the old mix',async()=>{
+  const f=fixture();f.toggle('bass','a',4);await ready();f.tick(0);f.tick(5);
+  f.playback.audition(phrase('chord','editor',1),100);f.tick(6);
+  const next=phrase('bass','a',4);next.matrix.bass.forEach(bar=>bar.forEach(cell=>{cell.note='B2';}));
+  f.playback.updatePhrase(next,'bass','a');const hidden=f.tick(7);assert.deepEqual(hidden.releaseTrackIds,[]);
+  f.playback.updatePhrase(phrase('melody','new',1),'melody','new');f.playback.resumeJam();const resumed=f.tick(8);
+  assert.equal(f.events(resumed,8)[0].note,'B2');assert.equal(f.state.trackPositions.bass.startStep,0);
+  assert.equal(f.state.playingPhraseIds.melody,null);assert.equal(f.plays,1);
+});
+
+test('clearing a retained block stops its sound and undo can restore its origin while editing',async()=>{
+  const f=fixture();f.toggle('bass','a',4);await ready();f.tick(0);f.tick(5);
+  f.playback.audition(phrase('chord','editor',1),100);f.tick(6);
+  const empty=phrase('bass','a',4);empty.matrix.bass=empty.matrix.bass.map(()=>Array(16).fill(null));empty.phraseIds.bass=null;
+  f.playback.updatePhrase(empty,'bass','a');f.tick(7);
+  const restored=phrase('bass','a',4);f.playback.updatePhrase(restored,'bass','a');f.tick(8);
+  f.playback.resumeJam();f.tick(9);assert.equal(f.state.trackPositions.bass.startStep,0);assert.equal(f.state.playingPhraseIds.bass,'a');
+  f.playback.updatePhrase(empty,'bass','a');assert.equal(f.tick(10).done,true);assert.equal(f.state.mode,'stopped');
+  f.playback.updatePhrase(restored,'bass','a');assert.equal(f.playback.isActive(),false,'editing a stopped phrase cannot start it');
+});
+
+test('cancelling an already prepared replacement restores the latest auto-retained version of its audible predecessor',async()=>{
+  const f=fixture();f.toggle('bass','a',4);await ready();f.tick(0);f.tick(5);f.toggle('bass','b',2);const prepared=f.read(16);
+  const next=phrase('bass','a',4);next.matrix.bass.forEach(bar=>bar.forEach(cell=>{cell.note='G#2';}));
+  f.playback.updatePhrase(next,'bass','a');f.toggle('bass','b');const restored=f.tick(17);
+  assert.equal(f.events(restored,17)[0].note,'G#2');assert.equal(f.state.trackPositions.bass.startStep,0);
+  assert.equal(f.state.playingPhraseIds.bass,'a');prepared.onAudible();assert.equal(f.state.playingPhraseIds.bass,'a');
+});

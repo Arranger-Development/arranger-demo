@@ -3,6 +3,14 @@ import { createJamMidiConnection, createJamMidiController } from './jamMidiContr
 
 function createDevice() {
   let context = { active: false, controlsRef: null, focused: true };
+  const controller = createJamMidiController({
+    getContext() {
+      const current = context;
+      const snapshot = current.controlsRef?.current?.getMidiContext();
+      return snapshot ? { ...snapshot, active: current.active && current.focused } : null;
+    },
+    dispatch: command => context.controlsRef?.current?.dispatch({ ...command, source: 'midi' }),
+  });
   const connection = createJamMidiConnection({
     requestAccess: async () => {
       if (!navigator.requestMIDIAccess) throw new Error('当前浏览器不支持 MIDI，请使用 Chrome 或 Edge');
@@ -14,29 +22,25 @@ function createDevice() {
         ]);
       } finally { clearTimeout(timer); }
     },
-    controller: createJamMidiController({
-      getContext() {
-        const current = context;
-        const snapshot = current.controlsRef?.current?.getMidiContext();
-        return snapshot ? { ...snapshot, active: current.active && current.focused } : null;
-      },
-      dispatch: command => context.controlsRef?.current?.dispatch(command),
-    }),
+    controller,
   });
-  return { connection, update(next) { context = { ...context, ...next }; } };
+  return { connection, controller, update(next) { context = { ...context, ...next }; },
+    resetEditor() { controller.reset(); controller.showPositions(); } };
 }
 
 export default function useJamMidiController({ active, controlsRef }) {
   const [device] = useState(createDevice);
-  const { connection } = device;
+  const { connection, controller } = device;
   const state = useSyncExternalStore(connection.subscribe, connection.getSnapshot);
+  const knobPositions = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const faderPositions = useSyncExternalStore(controller.subscribe, controller.getFaderSnapshot);
   useLayoutEffect(() => {
     device.update({ active, controlsRef });
     if (!active) connection.reset();
   }, [active, controlsRef, connection, device]);
   useEffect(() => {
     const blur = () => { device.update({ focused: false }); connection.reset(); };
-    const focus = () => { device.update({ focused: true }); };
+    const focus = () => { device.update({ focused: true }); controller.syncFaders(); };
     const visibility = () => { if (document.hidden) blur(); else device.update({ focused: document.hasFocus() }); };
     device.update({ focused: document.hasFocus() });
     window.addEventListener('blur', blur);
@@ -48,6 +52,8 @@ export default function useJamMidiController({ active, controlsRef }) {
       document.removeEventListener('visibilitychange', visibility);
       connection.dispose();
     };
-  }, [connection, device]);
-  return { ...state, connect: connection.connect, reset: connection.reset };
+  }, [connection, controller, device]);
+  return { ...state, knobPositions, faderPositions, connect: connection.connect, reset: device.resetEditor,
+    syncFaders: controller.syncFaders, suspendPitch: controller.suspendPitch,
+    useSoftwareValue: controller.useSoftwareValue };
 }

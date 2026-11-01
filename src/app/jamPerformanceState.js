@@ -6,15 +6,29 @@ export function jamTemplateState(status, track, id) {
 }
 
 export function jamColumnState(status, templates, index) {
-  const entries = Object.entries(templates).filter(([, row]) => row[index]);
+  const entries = Object.entries(templates).filter(([, row]) => row[index] && !isEmptyJamPhrase(row[index]));
   if (!entries.length || status.mode === 'stopped') return 'idle';
-  const matches = ids => ids && Object.entries(templates).every(([t, row]) => (ids[t] ?? null) === (row[index]?.id ?? null));
+  const matches = ids => ids && Object.entries(templates).every(([t, row]) => (ids[t] ?? null) === (isEmptyJamPhrase(row[index]) ? null : row[index]?.id ?? null));
   if (matches(status.queuedPhraseIds) && !matches(status.playingPhraseIds)) return 'queued';
   return matches(status.playingPhraseIds) ? 'playing' : 'idle';
 }
 
 export function jamParameterLevels(trackId, parameter) {
   return trackId === 'chord' && parameter === 'groove' ? [0, 20, 40, 60, 80, 100] : [0, 25, 50, 75, 100];
+}
+
+// Keep stored parameter keys stable: groove is Ableton's Level axis, strength
+// is its Int axis. Hardware keys describe the physical left/right CC5/CC6 knobs.
+export function jamTrackKnobs(trackId) {
+  if (['chord','bass','melody'].includes(trackId)) return [
+    { parameter: 'groove', hardwareParameter: 'strength', label: trackId === 'chord' ? '色彩' : '旋律',
+      lowLabel: trackId === 'chord' ? '清晰' : '纯净', highLabel: trackId === 'chord' ? '朦胧' : '丰富' },
+    { parameter: 'strength', hardwareParameter: 'groove', label: '律动', lowLabel: '轻盈', highLabel: '激昂' },
+  ];
+  return [
+    { parameter: 'strength', hardwareParameter: 'strength', label: '强度', lowLabel: '温和', highLabel: '强烈' },
+    { parameter: 'groove', hardwareParameter: 'groove', label: '律动', lowLabel: '平稳', highLabel: '活跃' },
+  ];
 }
 
 export function jamTrackParameters(params, trackId) {
@@ -26,3 +40,4 @@ export function jamTrackParameters(params, trackId) {
     })(),
   ]));
 }
+import { isEmptyJamPhrase } from './jamPhraseContent.js';

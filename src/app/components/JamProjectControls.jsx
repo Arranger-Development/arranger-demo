@@ -1,6 +1,6 @@
 import { useId, useRef } from 'react';
 
-export default function JamProjectControls({ project, projects, disabled, onSave, onNew, onOpen, onRename }) {
+export default function JamProjectControls({ project, projects, disabled, onNew, onOpen, onRename }) {
   const id = useId(), menu = useRef(null);
   const close = () => menu.current?.hidePopover();
   return <div className="jam-project-controls" role="group" aria-label="Jam 项目">
@@ -13,9 +13,8 @@ export default function JamProjectControls({ project, projects, disabled, onSave
         <label>项目名称<input aria-label="Jam 项目名称" name="name" required maxLength={80} defaultValue={project.name}/></label>
         <button type="submit">重命名</button>
       </form>
-      <small>保存在当前浏览器。项目包含我的模板、当前组合和编辑草稿。</small>
+      <small>所有修改自动保留在当前浏览器。</small>
     </div>
-    <button type="button" className="performance-connect" disabled={disabled} onClick={onSave}>保存项目</button>
     <button type="button" className="performance-connect" disabled={disabled} onClick={onNew}>新建项目</button>
   </div>;
 }

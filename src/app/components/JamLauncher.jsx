@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Play, Volume2, VolumeX } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Play, Pause, Volume2, VolumeX } from 'lucide-react';
 import JamTemplateCard from './JamTemplateCard.jsx';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS } from '../performanceModel.js';
 import { TIMBRE_OPTIONS } from '../performanceSession.js';
@@ -7,10 +7,11 @@ import { jamTemplateRange } from '../jamTemplateSlots.js';
 import { jamColumnState, jamTemplateState } from '../jamPerformanceState.js';
 import { createJamStripController, jamStripLayout, JAM_STRIP_GAP } from '../jamStripController.js';
 import useJamReorder from './useJamReorder.js';
+import { isEmptyJamPhrase } from '../jamPhraseContent.js';
 
 export default function JamLauncher({ active, templates, columnCount, bank, onBankChange, navigationRef,
-  editingTrack, editingTemplateId, auditioning = false, selection, status, mutedTracks, volumes, timbres, timbreLabel, artSources, artNodes,
-  onOpenEditor, onTimbreChange, onToggleMute, onTrigger, onLaunchColumn, onRemove, onMove }) {
+  editingTrack, editingTemplateId, draftsByTrack = {}, auditioning = false, selection, status, mutedTracks, volumes, timbres, timbreLabel, artSources, artNodes,
+  onOpenEditor, onTimbreChange, onToggleMute, onTrigger, onLaunchColumn, onRemove, onRemoveDraft, onMove }) {
   const scrollRef = useRef(null);
   const hintId = useId();
   const [edges, setEdges] = useState({ left: false, right: false });
@@ -60,7 +61,7 @@ export default function JamLauncher({ active, templates, columnCount, bank, onBa
   }, [controller, navigationRef]);
   return <section className="studio-launcher" aria-label="乐句浏览" data-left={edges.left} data-right={edges.right}>
     <div className="studio-strip-toolbar">
-      <div><span id={hintId}>拖宝石或列头排序 · 滚动浏览</span><span className="studio-bank-range" aria-label="快捷键与控制器对应列">快捷键 / 控制器 {bank * 8 + 1}–{bank * 8 + 8}</span></div>
+      <div><span id={hintId}>拖动排序 · 自动保留 · 空格暂停/继续 · Esc静音</span><span className="studio-bank-range" aria-label="快捷键与控制器对应列">快捷键 / 控制器 {bank * 8 + 1}–{bank * 8 + 8}</span></div>
       <button type="button" aria-label="向左滚动乐句" title="向左滚动八列" disabled={!edges.left} onClick={() => controller.moveBy(-8)}><ChevronLeft size={16}/></button>
       <button type="button" aria-label="向右滚动乐句" title="向右滚动八列" disabled={!edges.right} onClick={() => controller.moveBy(8)}><ChevronRight size={16}/></button>
     </div>
@@ -77,10 +78,11 @@ export default function JamLauncher({ active, templates, columnCount, bank, onBa
       }}>
       <div className="studio-gallery" aria-label="四轨乐器与模板">
         <div className="studio-column-launchers"><span className="studio-column-label">整列播放</span>{Array.from({ length: columnCount }, (_, index) => {
-          const state = jamColumnState(status, columns, index), mapped = Math.floor(index / 8) === bank;
-          return TRACKS.some(t => columns[t][index]) ? <button type="button" key={index} className="studio-column-launch" data-slot-index={index} data-state={state} data-mapped={mapped}
+          const state = auditioning ? 'idle' : jamColumnState(status, columns, index), mapped = Math.floor(index / 8) === bank;
+          const action = state === 'idle' ? '播放' : '暂停';
+          return TRACKS.some(t => columns[t][index] && !isEmptyJamPhrase(columns[t][index])) ? <button type="button" key={index} className="studio-column-launch" data-slot-index={index} data-state={state} data-mapped={mapped}
             {...reorder.cellProps(null,index)} aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
-            aria-label={`播放第 ${index + 1} 列${state === 'queued' ? '，等待下一小节进入' : ''}`} title="点击整列播放 · 拖动整列排序 · Alt＋方向键移动" onClick={() => onLaunchColumn(index)}><Play size={10}/><span>{index + 1}</span></button>
+            aria-label={`${action}第 ${index + 1} 列${state === 'queued' ? '，等待下一小节进入' : ''}`} aria-pressed={state !== 'idle'} title={`点击${action}整列 · 拖动整列排序 · Alt＋方向键移动`} onClick={() => onLaunchColumn(index)}>{state === 'idle' ? <Play size={10}/> : <Pause size={10}/>}<span>{index + 1}</span></button>
             : <span className="studio-column-empty" key={index} data-slot-index={index} {...reorder.cellProps(null,index)} aria-hidden="true"/>;
         })}</div>
         {TRACKS.map(t => <section className="studio-instrument" data-track={t} data-active={editingTrack === t} key={t} aria-label={`${LABELS[t]}模板`}>
@@ -88,10 +90,14 @@ export default function JamLauncher({ active, templates, columnCount, bank, onBa
             <span className="studio-instrument-art" data-art-track={t} ref={node => { artNodes.current[t] = node; }}><img src={artSources[t]} alt="" draggable={false} decoding="async"/></span>
           </button><div className="studio-instrument-label"><strong>{LABELS[t]}</strong><span className="studio-editing-state">{editingTrack === t ? '编辑中' : ''}</span><label className="studio-instrument-timbre" title="切换音色"><select aria-label={`${LABELS[t]}音色`} value={timbres[t]} onChange={e => onTimbreChange(t,e.target.value)}>{TIMBRE_OPTIONS[t].map(id => <option key={id} value={id}>{timbreLabel(id)}</option>)}</select></label></div><button type="button" className="studio-track-mute" aria-label={`${mutedTracks[t] ? '取消静音' : '静音'}${LABELS[t]}`} aria-pressed={mutedTracks[t]} onClick={() => onToggleMute(t)} title={mutedTracks[t] ? '取消静音' : '静音'}>{mutedTracks[t] ? <VolumeX size={14}/> : <Volume2 size={14}/>}</button></div>
           <div className="studio-template-list" aria-label={`${LABELS[t]}已保存乐句`}>{columns[t].map((p, index) => p
-            ? <JamTemplateCard key={p.id} template={p} index={index} reorderProps={reorder.cellProps(t,index)} selected={selection[t] === p.id}
+            ? <JamTemplateCard key={p.id} template={{...p,name:p.name || `${LABELS[t]}乐句`}} isEmpty={isEmptyJamPhrase(p)} index={index} reorderProps={reorder.cellProps(t,index)} selected={selection[t] === p.id}
               canCancel={!auditioning && status.playingPhraseIds?.[t] === p.id && status.mode !== 'stopped' && !mutedTracks[t] && volumes[t] > -24}
-              state={mutedTracks[t] || volumes[t] <= -24 ? 'idle' : jamTemplateState(status,t,p.id)} editing={editingTemplateId === p.id}
-              onSelect={() => onTrigger(t,p.id)} onEdit={() => onOpenEditor(t,p)} onRemove={() => onRemove(p)}/>
+              state={isEmptyJamPhrase(p) || mutedTracks[t] || volumes[t] <= -24 ? 'idle' : jamTemplateState(status,t,p.id)} editing={editingTemplateId === p.id}
+              onSelect={() => isEmptyJamPhrase(p)?onOpenEditor(t,p):onTrigger(t,p.id)} onEdit={() => onOpenEditor(t,p)} onRemove={() => onRemove(p)}/>
+            : !draftsByTrack[t]?.editingTemplateId && draftsByTrack[t]?.targetSlot === index
+            ? <JamTemplateCard key={`draft-${index}`} isDraft template={{...draftsByTrack[t],name:draftsByTrack[t].name || `${LABELS[t]}草稿`}} index={index}
+              editing={editingTrack === t} reorderProps={reorder.cellProps(t,index)}
+              onSelect={() => onOpenEditor(t,null,false,index)} onEdit={() => onOpenEditor(t,null,false,index)} onRemove={() => onRemoveDraft(t,draftsByTrack[t])}/>
             : <button type="button" key={`empty-${index}`} className="studio-template studio-template-empty" data-slot-index={index} {...reorder.cellProps(t,index)} aria-label={`新建${LABELS[t]}乐句，第 ${index + 1} 格`} onClick={() => onOpenEditor(t,null,false,index)}><Plus size={20} aria-hidden="true"/></button>)}</div>
         </section>)}
       </div>
@@ -104,4 +110,4 @@ export default function JamLauncher({ active, templates, columnCount, bank, onBa
     <span className="studio-reorder-announcement" role="status" aria-live="polite">{drag ? drag.valid ? `移动到第 ${drag.to+1} ${drag.trackId ? '格' : '列'}` : '请移回原轨道或列区域，松手取消' : ''}</span>
   </section>;
 }
-void [ChevronLeft, ChevronRight, Plus, Play, Volume2, VolumeX, JamTemplateCard];
+void [ChevronLeft, ChevronRight, Plus, Play, Pause, Volume2, VolumeX, JamTemplateCard];

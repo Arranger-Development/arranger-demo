@@ -15,22 +15,31 @@ export const PERFORMANCE_SAMPLE_BANKS = Object.freeze({
     // These quiet piano samples need source compensation before the user fader.
     // The shared master output provides mix headroom and peak protection.
     id: DEEP_AUTUMN_CHORD, track: 'chord', label: '深秋和弦', gainDb: 4,
+    // These piano files use Ableton octave labels; Tone.js roots are one higher.
     sampleFiles: Object.fromEntries([2, 3, 4].flatMap((octave) => (
       ['C#', 'D#', 'E', 'F#', 'G#', 'A', 'B'].map((root) => [
-        `${root}${octave}`, `samples/DeepAutumn/Chord/${root.replace('#', 'Sharp')}${octave}.wav`,
+        `${root}${octave + 1}`, `samples/DeepAutumn/Chord/${root.replace('#', 'Sharp')}${octave}.wav`,
       ])
     ))),
   },
   [DEEP_AUTUMN_BASS]: {
     id: DEEP_AUTUMN_BASS, track: 'bass', label: '深秋贝斯', gainDb: 0,
-    // These source filenames omit sharps. Keep the legacy bass octave convention;
-    // see docs/deep-autumn-pitch-mapping.md for measured pitches and provenance.
-    sampleFiles: Object.fromEntries(['E0','F#0','G#0','A0','B0','C#1','D#1','E1','F#1'].map(note => [note, `samples/DeepAutumn/Bass/${note.replace('#', '')}.wav`])),
+    // Source filenames use Ableton octaves and omit sharps. Register their
+    // measured pitches in Tone.js notation; filenames and musical notes stay intact.
+    sampleFiles: Object.fromEntries([
+      ['E1','E0'], ['F#1','F0'], ['G#1','G0'], ['A1','A0'], ['B1','B0'],
+      ['C#2','C1'], ['D#2','D1'], ['E2','E1'], ['F#2','F1'],
+    ].map(([note,file]) => [note, `samples/DeepAutumn/Bass/${file}.wav`])),
   },
   [DEEP_AUTUMN_MELODY]: {
     id: DEEP_AUTUMN_MELODY, track: 'melody', label: '深秋旋律', gainDb: 2,
-    // Register the audible roots, not the unaltered source filenames.
-    sampleFiles: Object.fromEntries(['C#3','D#3','E3','F#3','G#3','A3','B3','C#4','D#4','E4','F#4','G#4','A4','B4','C#5'].map(note => [note, `samples/DeepAutumn/Melody/${note.replace('#', '')}.wav`])),
+    // Match the user's original sample octaves to the visible Ableton labels:
+    // UI E4 is stored as E5, and must play E4.wav unchanged. These are playback
+    // bindings, not declarations that E4.wav physically has an E5 fundamental.
+    sampleFiles: Object.fromEntries(['C#3','D#3','E3','F#3','G#3','A3','B3','C#4','D#4','E4','F#4','G#4','A4','B4','C#5'].map(note => [
+      note.replace(/\d+$/, octave => Number(octave) + 1),
+      `samples/DeepAutumn/Melody/${note.replace('#', '')}.wav`,
+    ])),
   },
 });
 

@@ -2,6 +2,7 @@ import { JAM_TEMPLATE_PADS, JAM_PARAMETER_PADS, JAM_MOMENTARY_PADS } from './jam
 import { PERFORMANCE_TRACKS, hasSelection } from '../app/performanceModel.js';
 import { jamTemplateState } from '../app/jamPerformanceState.js';
 import { JAM_VOLUME_STEPS, JAM_FILTER_STEPS, JAM_TRACK_CC, JAM_PITCH_STEPS, JAM_REVERB_STEPS, nearestJamStep } from './performanceInput.js';
+import { isEmptyJamPhrase } from '../app/jamPhraseContent.js';
 
 const TRACK_COLORS = { drums: [19, 18, 17], chord: [11, 10, 9], bass: [43, 42, 41], melody: [51, 50, 49] };
 function fillFixedJamPads(surface, notes, active) {
@@ -10,7 +11,8 @@ function fillFixedJamPads(surface, notes, active) {
     volumes = {}, mutedTracks = {}, cutoffs = {}, reverbs = {}, choppers = {}, brakes = {}, repeat = null } = surface;
   for (const pad of JAM_TEMPLATE_PADS) {
     const colors = TRACK_COLORS[pad.trackId];
-    const template = templates[pad.trackId]?.[pad.index];
+    const candidate = templates[pad.trackId]?.[pad.index];
+    const template = isEmptyJamPhrase(candidate) ? null : candidate;
     const selected = template && selection[pad.trackId] === template.id;
     const state = mutedTracks[pad.trackId] || volumes[pad.trackId] <= -24 ? 'idle'
       : template && ('playingPhraseIds' in status || 'queuedPhraseIds' in status)
@@ -84,8 +86,8 @@ export function createLaunchpadXPerformanceLedFrame(surface = {}, now = 0) {
   controls.set(19, version === 5 ? 0 : recording.phase === 'recording' ? 5 : recording.phase === 'armed' ? (Math.floor(now / 300) % 2 ? 5 : 0) : 7);
   controls.set(93, page > 0 ? 13 : 0);
   controls.set(94, (version === 5 ? page + 1 < pageCount : (page + 1) * 8 < sections.length) ? 13 : 0);
-  controls.set(97, storageError ? 5 : now - savedAt < 700 ? 17 : (version === 5 ? canSave : hasSelection(drafts[editingId]?.selection)) ? 9 : 0);
-  controls.set(98, status.loading ? (Math.floor(now / 300) % 2 ? 7 : 5) : active ? 5 : (version === 5 ? hasSelection(selection) || canSave : sections.length) ? 17 : 0);
+  controls.set(97, surface.manualSave === false ? 0 : storageError ? 5 : now - savedAt < 700 ? 17 : (version === 5 ? canSave : hasSelection(drafts[editingId]?.selection)) ? 9 : 0);
+  controls.set(98, status.loading ? (Math.floor(now / 300) % 2 ? 7 : 5) : active ? 5 : (version === 5 ? hasSelection(selection) || canSave || surface.canPlayEditor : sections.length) ? 17 : 0);
   const frame = [];
   for (let row = 8; row >= 1; row--) for (let col = 1; col <= 8; col++) frame.push([0x90, row * 10 + col, notes.get(row * 10 + col) ?? 0]);
   for (const cc of [91,92,93,94,95,96,97,98,89,79,69,59,49,39,29,19]) frame.push([0xb0, cc, controls.get(cc) ?? 0]);

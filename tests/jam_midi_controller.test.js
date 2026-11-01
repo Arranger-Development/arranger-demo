@@ -56,10 +56,11 @@ test('both measured fader bottom 1 and MIDI bottom 0 reach silence, filter off, 
   for (const raw of [62, 63, 64, 65]) assert.equal(jamMidiValue('pitch', raw), 0);
 });
 
-test('faders wait for pickup; a crossing catches the current value even if MIDI skipped it', () => {
+test('faders apply their first received value immediately without pickup', () => {
   const { send, commands } = setup();
-  send(1, 10); send(1, 90);
-  assert.equal(commands.length, 0);
+  send(1, 10);
+  assert.equal(commands.at(-1).value, -22);
+  send(1, 90); assert.equal(commands.at(-1).value, -3);
   send(1, 110);
   assert.deepEqual(commands.at(-1), { type: 'volume', parameter: 'volume', value: 2 });
   send(1, 127);
@@ -89,38 +90,38 @@ test('filter fader strengthens upward and returns to off at the bottom', () => {
   send(2, 1); assert.equal(context.values.cutoff, 20000);
 });
 
-test('reversed filter pickup matches current cutoff and re-arms when switching targets', () => {
+test('filter follows the first value and immediately controls a newly selected target', () => {
   const { send, context, commands } = setup();
   context.values.cutoff = 5000;
-  send(2, 20); send(2, 60);
-  assert.equal(commands.length, 0);
+  send(2, 20); assert.equal(context.values.cutoff, 16900);
+  send(2, 60); assert.equal(context.values.cutoff, 10600);
   send(2, 96); assert.equal(context.values.cutoff, 5000);
   send(2, 127); assert.equal(context.values.cutoff, 100);
   context.selectedTrack = 'bass'; context.selectedTracks = ['bass']; context.values.cutoff = 20000;
   const count = commands.length;
-  send(2, 126); assert.equal(commands.length, count);
+  send(2, 126); assert.equal(commands.length, count + 1);
   send(2, 1); send(2, 64);
   assert.equal(context.values.cutoff, 10000);
 });
 
-test('changing target selection or project re-arms pickup rather than jumping the new target', () => {
+test('changing target selection or project does not require crossing the software value', () => {
   const { send, context, commands } = setup();
   send(1, 102); send(1, 127);
   context.selectedTrack = 'bass'; context.selectedTracks = ['bass']; context.values.volume = 0;
   const before = commands.length;
-  send(1, 126); assert.equal(commands.length, before);
+  send(1, 126); assert.equal(commands.length, before + 1);
   send(1, 102); send(1, 80); assert.equal(context.values.volume, -5);
   context.projectId = 'project2'; context.values.volume = 0;
   const after = commands.length;
-  send(1, 81); assert.equal(commands.length, after);
+  send(1, 81); assert.equal(commands.length, after + 1);
 });
 
-test('mouse and Launchpad changes re-arm the physical control', () => {
+test('first fader message after mouse or Launchpad changes takes over directly', () => {
   const { send, context, commands } = setup();
   send(3, 0); send(3, 64);
   context.values.reverb = 0.9;
   const before = commands.length;
-  send(3, 65); assert.equal(commands.length, before);
+  send(3, 65); assert.equal(commands.length, before + 1); assert.equal(context.values.reverb, 0.51);
   send(3, 115); send(3, 127); assert.equal(context.values.reverb, 1);
 });
 
@@ -154,7 +155,7 @@ test('stopping disables pitch but leaves stopped-state mix adjustments available
   send(1, 102); send(1, 1); assert.equal(context.values.volume, -24);
 });
 
-test('knobs address the edited track and emit five levels with boundary hysteresis and pickup', () => {
+test('knobs address the edited track directly and emit five levels with boundary hysteresis', () => {
   const { context, commands, send } = setup();
   send(5, 64); send(5, 0);
   send(5, 16); assert.equal(context.params.strength, 0);
@@ -163,24 +164,83 @@ test('knobs address the edited track and emit five levels with boundary hysteres
   assert.ok(commands.every(c => c.type === 'trackParameter' && c.trackId === 'drums' && c.parameter === 'strength'));
   send(6, 64); send(6, 127); assert.equal(context.params.groove, 100);
   for (const trackId of ['bass','chord','melody']) {
+    send(5, 127);
     context.editingTrack = trackId; context.params = { strength: 50, groove: 50 };
     const count = commands.length;
-    send(5, 127); assert.equal(commands.length, count, 'changing track re-arms pickup');
-    send(5, 64); send(5, 0);
-    assert.equal(commands.at(-1).trackId, trackId); assert.equal(context.params.strength, 0);
+    send(5, 127); assert.equal(commands.length, count, 'unchanged report must not change a newly opened track');
+    send(5, 126); assert.equal(context.params.groove, 100, 'left Level knob takes over without crossing 50');
+    assert.equal(context.params.strength,50,'left knob leaves the right Int axis unchanged');
+    send(5, 0);
+    assert.equal(commands.at(-1).trackId, trackId); assert.equal(context.params.groove, 0);
   }
   context.editingTrack = null; const count = commands.length;
   send(5, 64); send(5, 127); assert.equal(commands.length, count);
 });
 
-test('newly opened templates and undo re-arm knob pickup', () => {
+test('new templates and undo preserve notes until actual movement, then take over immediately', () => {
   const { context, commands, send } = setup();
   send(5, 64); send(5, 127);
   context.editorVersion += 1; context.params.strength = 50;
-  const count = commands.length; send(5, 126); assert.equal(commands.length, count);
-  send(5, 64); send(5, 0); assert.equal(context.params.strength, 0);
+  const count = commands.length; send(5, 127); assert.equal(commands.length, count);
+  send(5, 126); assert.equal(context.params.strength, 100);
+  send(5, 0); assert.equal(context.params.strength, 0);
   context.params.strength = 50;
-  const count2 = commands.length; send(5, 1); assert.equal(commands.length, count2);
+  send(5, 1); assert.equal(context.params.strength, 0);
+});
+
+test('opening position snapshots update continuous UI values without changing the musical draft', () => {
+  const { controller, commands, context, send } = setup();
+  const events = []; const unsubscribe = controller.subscribe(() => events.push(controller.getSnapshot()));
+  assert.deepEqual(controller.getSnapshot(), { strength: null, groove: null });
+  controller.handle([0xb3, 5, 38], { positionOnly: true });
+  controller.handle([0xb3, 6, 76], { positionOnly: true });
+  assert.equal(commands.length, 0);
+  assert.deepEqual(context.params, { strength: 50, groove: 50 });
+  assert.deepEqual(controller.getSnapshot().strength, { raw: 38, percent: 30, display: true });
+  assert.equal(controller.getSnapshot().groove.percent, 60);
+  send(5, 38); assert.equal(commands.length, 0);
+  send(5, 39); assert.equal(context.params.strength, 25);
+  assert.equal(controller.getSnapshot().strength.percent, 31);
+  assert.equal(events.length, 3);
+  unsubscribe(); send(5, 40); assert.equal(events.length, 3);
+});
+
+test('unreported initial position never swallows the first real movement', () => {
+  const { controller, send, context } = setup();
+  assert.equal(controller.getSnapshot().strength, null);
+  assert.equal(send(5, 38), true);
+  assert.equal(context.params.strength, 25);
+  assert.equal(controller.getSnapshot().strength.percent, 30);
+});
+
+test('positions are captured without an editor and across inactive/blocked contexts, with no deferred edits', () => {
+  const { controller, context, commands, send } = setup();
+  context.editingTrack = null; send(5, 38);
+  context.editingTrack = 'bass'; controller.reset(); controller.showPositions();
+  assert.equal(controller.getSnapshot().strength.percent, 30);
+  assert.equal(commands.length, 0);
+  send(5, 38); assert.equal(commands.length, 0);
+  send(5, 39); assert.equal(context.params.groove, 25);
+  context.blocked = true; send(6, 20);
+  context.blocked = false; send(6, 20); assert.equal(context.params.strength, 50);
+  context.active = false; send(6, 25);
+  context.active = true; send(6, 25); assert.equal(context.params.strength, 50);
+  send(6, 26); assert.equal(context.params.strength, 25);
+});
+
+test('software edits and undo show musical values without losing hardware positions; disconnect clears positions', () => {
+  const { controller, send } = setup();
+  send(5, 38); send(6, 76);
+  controller.useSoftwareValue('strength');
+  assert.deepEqual(controller.getSnapshot().strength, { raw: 38, percent: 30, display: false });
+  assert.equal(controller.getSnapshot().groove.display, true);
+  send(5, 38); assert.equal(controller.getSnapshot().strength.display, false, 'duplicate hardware report cannot override undo');
+  send(5, 39); assert.equal(controller.getSnapshot().strength.display, true);
+  controller.useSoftwareValue();
+  assert.equal(controller.getSnapshot().groove.display, false);
+  controller.reset(); controller.showPositions();
+  assert.equal(controller.getSnapshot().groove.display, true);
+  controller.disconnect(); assert.deepEqual(controller.getSnapshot(), { strength: null, groove: null });
 });
 
 test('inactive mode and open confirmations ignore controls', () => {
@@ -263,4 +323,102 @@ test('permission denial and failed device open report errors; teardown cancels l
   let resolve; const late = createJamMidiConnection({ controller, requestAccess: () => new Promise(r => { resolve = r; }) });
   const connecting = late.connect(); late.dispose(); resolve(setup.access); await connecting;
   assert.equal(setup.access.listeners.get('statechange')?.size ?? 0, 0);
+});
+
+test('port opening snapshots arrive before readiness and cannot generate notes or an undo command', async () => {
+  const { controller, commands, context } = setup();
+  const device = input(), access = new EventSource(); access.inputs = new Map([['knobs', device]]);
+  device.open = async () => {
+    device.emit('midimessage', { data: [0xb3, 5, 38] });
+    await flush();
+    device.emit('midimessage', { data: [0xb3, 6, 76] });
+  };
+  const connection = createJamMidiConnection({ controller, requestAccess: async () => access });
+  await connection.connect();
+  assert.equal(connection.getSnapshot().status, 'connected');
+  assert.equal(controller.getSnapshot().strength.percent, 30);
+  assert.equal(controller.getSnapshot().groove.percent, 60);
+  assert.equal(commands.length, 0);
+  assert.deepEqual(context.params, { strength: 50, groove: 50 });
+  device.emit('midimessage', { data: [0xb3, 5, 39] });
+  assert.equal(commands.length, 1); assert.equal(context.params.strength, 25);
+  device.state = 'disconnected'; access.emit('statechange'); await flush();
+  assert.deepEqual(controller.getSnapshot(), { strength: null, groove: null });
+  device.open = async () => {}; device.state = 'connected'; access.emit('statechange'); await flush();
+  assert.equal(connection.getSnapshot().status, 'connected');
+  assert.equal(controller.getSnapshot().strength, null, 'no fake cached value after reconnect');
+  device.emit('midimessage', { data: [0xb3, 5, 126] });
+  assert.equal(context.params.strength, 100, 'first real movement after reconnect is not discarded');
+  connection.dispose();
+});
+
+test('failed or cancelled opening removes its listener and never leaves a stale physical position', async () => {
+  const { controller, commands } = setup();
+  const device = input(), access = new EventSource(); access.inputs = new Map([['knobs', device]]);
+  let resolve;
+  device.open = () => new Promise(r => { resolve = r; });
+  const connection = createJamMidiConnection({ controller, requestAccess: async () => access });
+  const connecting = connection.connect(); await flush();
+  device.emit('midimessage', { data: [0xb3, 5, 38] });
+  assert.equal(controller.getSnapshot().strength.percent, 30);
+  connection.dispose(); resolve(); await connecting;
+  assert.equal(connection.getSnapshot().status, 'idle');
+  assert.equal(device.listeners.get('midimessage').size, 0);
+  assert.equal(controller.getSnapshot().strength, null);
+  device.emit('midimessage', { data: [0xb3, 5, 127] }); assert.equal(commands.length, 0);
+});
+
+test('measured startup fader batch is recorded and applied once opening succeeds, without touching phrase parameters', async () => {
+  const { controller, commands, context } = setup();
+  context.playing = false; context.values.cutoff = 800; context.values.reverb = .4;
+  const device = input(), access = new EventSource(); access.inputs = new Map([['faders', device]]);
+  device.open = async () => {
+    for (const [cc, raw] of [[1,127],[2,0],[3,1],[4,65]]) device.emit('midimessage', { data: [0xb3, cc, raw] });
+    assert.equal(commands.length, 0, 'failed/cancelled opening must not apply an initial batch');
+  };
+  const connection = createJamMidiConnection({ controller, requestAccess: async () => access });
+  await connection.connect();
+  assert.deepEqual(context.values, { volume: 6, cutoff: 20000, reverb: 0, pitch: 0 });
+  assert.deepEqual(controller.getFaderSnapshot(), {
+    volume: { raw: 127, value: 6 }, cutoff: { raw: 0, value: 20000 },
+    reverb: { raw: 1, value: 0 }, pitch: { raw: 65, value: 0 },
+  });
+  assert.deepEqual(context.params, { strength: 50, groove: 50 });
+  assert.deepEqual(controller.getSnapshot(), { strength: null, groove: null });
+  assert.deepEqual(commands.map(c => c.type), ['volume','cutoff','reverb']);
+  controller.syncFaders(); assert.equal(commands.length, 3, 'consumed initial values cannot override later software changes');
+  connection.dispose(); assert.ok(Object.values(controller.getFaderSnapshot()).every(v => v === null));
+});
+
+test('unfocused or inactive startup is recorded; pitch waits for playback and resumes from its recorded position', () => {
+  const { controller, commands, context, send } = setup();
+  context.active = false; context.playing = false;
+  send(1,127); send(4,100); send(5,38);
+  assert.equal(commands.length, 0);
+  assert.equal(controller.getFaderSnapshot().pitch.value, 6.8);
+  context.active = true; controller.syncFaders();
+  assert.equal(context.values.volume, 6); assert.equal(context.values.pitch, 0);
+  assert.equal(context.params.strength, 50, 'knob data must never be replayed as an initial phrase edit');
+  context.playing = true; controller.syncFaders(); assert.equal(context.values.pitch, 6.8);
+  context.playing = false; controller.suspendPitch(); controller.syncFaders(); assert.equal(context.values.pitch, 0);
+  context.playing = true; controller.syncFaders(); assert.equal(context.values.pitch, 6.8);
+  controller.disconnect(); assert.equal(context.values.pitch, 0);
+  controller.syncFaders(); assert.equal(context.values.pitch, 0);
+});
+
+test('startup failure discards recorded faders before they can change software values', async () => {
+  const { controller, commands } = setup();
+  const device = input(), access = new EventSource(); access.inputs = new Map([['device', device]]);
+  device.open = async () => { device.emit('midimessage', { data: [0xb3,1,127] }); throw new Error('unplugged'); };
+  const connection = createJamMidiConnection({ controller, requestAccess: async () => access });
+  await connection.connect(); controller.syncFaders();
+  assert.equal(connection.getSnapshot().status, 'error'); assert.equal(commands.length, 0);
+  assert.equal(controller.getFaderSnapshot().volume, null);
+  connection.dispose();
+});
+
+test('fader value matching the display anchor still applies to all selected effect targets', () => {
+  const { context, commands, send } = setup(); context.selectedTracks = ['drums','chord'];
+  send(3,0);
+  assert.deepEqual(commands.at(-1), { type: 'reverb', parameter: 'reverb', value: 0 });
 });

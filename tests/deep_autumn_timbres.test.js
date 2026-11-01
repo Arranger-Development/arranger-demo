@@ -7,6 +7,8 @@ import { DEEP_AUTUMN_DRUMS as drums, DEEP_AUTUMN_CHORD as chord, PERFORMANCE_SAM
 import { createSection, createSession, snapshotSection, createArrangementImport, readSession, sessionKey } from '../src/app/performanceSession.js';
 import { collectProjectEvents, renderProjectToWav, getEventVolume } from '../src/export/audioFile.js';
 import { createProjectFile } from '../src/export/projectFile.js';
+import { getJamPitchedPreset } from '../src/app/jamPitchedPresets.js';
+import { formatNoteLabel } from '../src/app/noteDisplay.js';
 
 const profile = 'ai-demo-1';
 function project() {
@@ -41,6 +43,22 @@ function setup() {
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
+test('melody 0/0 UI E4 binds directly to the original E4 WAV in editor and playback banks',async()=>{
+  const preset=getJamPitchedPreset('melody',0,0),before=structuredClone(preset);
+  const note=preset.bars[0][2].note;
+  assert.equal(note,'E5','stored/source MIDI remains unchanged');
+  assert.equal(formatNoteLabel(note),'E4');
+  assert.equal(banks['deep-autumn-melody'].sampleFiles[note],'samples/DeepAutumn/Melody/E4.wav');
+  const {engine}=setup();
+  for(const trackId of ['melody','melody-2']) {
+    assert.equal(await engine.triggerMelodyInputOneShot(note,0,{trackId,timbreId:'deep-autumn-melody',playbackMode:'natural'}),true);
+    const sampler=engine.getMelodyBank('deep-autumn-melody',trackId,'natural').sampler;
+    assert.match(sampler.urls[note],/\/Melody\/E4.wav\?/);
+    assert.equal(sampler.hits.at(-1).note,note);
+  }
+  assert.deepEqual(preset,before);
+});
+
 test('chord source calibration stays consistent across playback, audition, export and independent faders', async () => {
   const {engine}=setup();
   const mix={volumes:{chord:0,'chord-2':-7},mutedTracks:{}};
@@ -72,23 +90,58 @@ test('chord source calibration stays consistent across playback, audition, expor
   assert.equal(getEventVolume({volumes:{melody:0}},{type:'melody',trackId:'melody',timbreId:'deep-autumn-melody'}),2);
 });
 
-test('new bass and melody register measured sharp roots while old banks retain their roots', () => {
+test('bass measured roots and melody UI sample bindings retain source files and old banks', () => {
   const expected = {
-    bass: ['E0', 'F#0', 'G#0', 'A0', 'B0', 'C#1', 'D#1', 'E1', 'F#1'],
-    melody: ['C#3', 'D#3', 'E3', 'F#3', 'G#3', 'A3', 'B3', 'C#4', 'D#4', 'E4', 'F#4', 'G#4', 'A4', 'B4', 'C#5'],
+    bass: ['E1', 'F#1', 'G#1', 'A1', 'B1', 'C#2', 'D#2', 'E2', 'F#2'],
+    melody: ['C#4', 'D#4', 'E4', 'F#4', 'G#4', 'A4', 'B4', 'C#5', 'D#5', 'E5', 'F#5', 'G#5', 'A5', 'B5', 'C#6'],
   };
   for (const [track, roots] of Object.entries(expected)) {
     const urls = createMelodySampleUrls('/', `deep-autumn-${track}`);
     assert.deepEqual(Object.keys(urls), roots);
     for (const root of roots) {
       assert.equal(new URL(urls[root], 'http://localhost').pathname,
-        `/samples/DeepAutumn/${track === 'bass' ? 'Bass' : 'Melody'}/${root.replace('#', '')}.wav`);
+        `/samples/DeepAutumn/${track === 'bass' ? 'Bass' : 'Melody'}/${root.replace(/(-?\d+)$/, octave => Number(octave) - 1).replace('#','')}.wav`);
     }
   }
   assert.match(createBassSampleUrls('/').C1, /\/Bass\/Bass_C1_v0.22.wav/);
   assert.match(createBassSampleUrls('/').A0, /\/Bass\/Bass_A0_v0.22.wav/);
   assert.match(createMelodySampleUrls('/', 'piano').C4, /\/Melody\/Melody_C4_v0.22.wav/);
   assert.match(createMelodySampleUrls('/', 'piano').A3, /\/Melody\/Melody_A3_v0.22.wav/);
+});
+
+test('all nine Deep Autumn bass roots match the measured WAV fundamental, including their octave', async () => {
+  const frequencies = { E1:41.2034, 'F#1':46.2493, 'G#1':51.9131, A1:55, B1:61.7354,
+    'C#2':69.2957, 'D#2':77.7817, E2:82.4069, 'F#2':92.4986 };
+  for (const [root,file] of Object.entries(banks['deep-autumn-bass'].sampleFiles)) {
+    assert.ok(frequencies[root], `unexpected root ${root}`);
+    const wav=await readFile(new URL(`../public/${file}`,import.meta.url));
+    let format, data;
+    for (let offset=12;offset+8<=wav.length;) {
+      const size=wav.readUInt32LE(offset+4),id=wav.toString('ascii',offset,offset+4);
+      if(id==='fmt ')format=offset+8;
+      if(id==='data')data={offset:offset+8,size};
+      offset+=8+size+(size%2);
+    }
+    assert.ok(format&&data, `${file}: PCM chunks missing`);
+    assert.equal(wav.readUInt16LE(format),1,'uncompressed PCM fixture');
+    const channels=wav.readUInt16LE(format+2),rate=wav.readUInt32LE(format+4);
+    const bytes=wav.readUInt16LE(format+14)/8,frameBytes=channels*bytes;
+    const sample=frame=>Array.from({length:channels},(_,channel)=>wav.readIntLE(data.offset+frame*frameBytes+channel*bytes,bytes))
+      .reduce((sum,value)=>sum+value,0)/channels;
+    // Interpolated positive zero crossings in the stable sustain; these bass
+    // recordings have a dominant fundamental. Measure bytes, not filename labels.
+    const crossings=[];
+    let previous=sample(Math.floor(rate*.15)-1);
+    for(let frame=Math.floor(rate*.15);frame<Math.min(Math.floor(rate*1.15),data.size/frameBytes);frame++) {
+      const current=sample(frame);
+      if(previous<=0&&current>0)crossings.push(frame-1-previous/(current-previous));
+      previous=current;
+    }
+    assert.ok(crossings.length>20,`${file}: insufficient sustained cycles`);
+    const measured=(crossings.length-1)*rate/(crossings.at(-1)-crossings[0]);
+    const cents=1200*Math.log2(measured/frequencies[root]);
+    assert.ok(Math.abs(cents)<10,`${root}: measured ${measured.toFixed(2)} Hz (${cents.toFixed(1)} cents)`);
+  }
 });
 
 test('natural, sharp and out-of-range notes use corrected realtime roots and WAV transposition', async (t) => {
@@ -109,22 +162,29 @@ test('natural, sharp and out-of-range notes use corrected realtime roots and WAV
   t.mock.method(globalThis, 'fetch', async url => { urls.push(url); return { ok: true, arrayBuffer: async () => new ArrayBuffer(1) }; });
   // Each fixture is [requested note, source root, original filename, semitone shift].
   const cases = {
+    chord: [
+      ['C#3', 'C#3', 'CSharp2', 0], ['E3', 'E3', 'E2', 0],
+      ['A4', 'A4', 'A3', 0], ['G#5', 'G#5', 'GSharp4', 0],
+      ['C4', 'C#4', 'CSharp3', -1], ['F4', 'F#4', 'FSharp3', -1],
+      ['G4', 'G#4', 'GSharp3', -1], ['D4', 'D#4', 'DSharp3', -1],
+      ['C#2', 'C#3', 'CSharp2', -12], ['B5', 'B5', 'B4', 0],
+    ],
     bass: [
-      ['C1', 'C#1', 'C1', -1], ['C#1', 'C#1', 'C1', 0],
-      ['D1', 'D#1', 'D1', -1], ['D#1', 'D#1', 'D1', 0],
-      ['F0', 'F#0', 'F0', -1], ['F#0', 'F#0', 'F0', 0],
-      ['G0', 'G#0', 'G0', -1], ['G#0', 'G#0', 'G0', 0],
-      ['E0', 'E0', 'E0', 0], ['A0', 'A0', 'A0', 0], ['B0', 'B0', 'B0', 0],
-      ['C0', 'E0', 'E0', -4], ['F#2', 'F#1', 'F1', 12],
+      ['C2', 'C#2', 'C1', -1], ['C#2', 'C#2', 'C1', 0],
+      ['D2', 'D#2', 'D1', -1], ['D#2', 'D#2', 'D1', 0],
+      ['F1', 'F#1', 'F0', -1], ['F#1', 'F#1', 'F0', 0],
+      ['G1', 'G#1', 'G0', -1], ['G#1', 'G#1', 'G0', 0],
+      ['E1', 'E1', 'E0', 0], ['A1', 'A1', 'A0', 0], ['B1', 'B1', 'B0', 0],
+      ['F#2', 'F#2', 'F1', 0], ['C0', 'E1', 'E0', -16], ['B2', 'F#2', 'F1', 5],
     ],
     melody: [
-      ['C4', 'C#4', 'C4', -1], ['C#4', 'C#4', 'C4', 0],
-      ['D4', 'D#4', 'D4', -1], ['D#4', 'D#4', 'D4', 0],
-      ['F3', 'F#3', 'F3', -1], ['F#3', 'F#3', 'F3', 0],
-      ['G3', 'G#3', 'G3', -1], ['G#3', 'G#3', 'G3', 0],
-      ['E4', 'E4', 'E4', 0], ['A3', 'A3', 'A3', 0], ['B4', 'B4', 'B4', 0],
-      ['C3', 'C#3', 'C3', -1], ['C5', 'C#5', 'C5', -1],
-      ['C#5', 'C#5', 'C5', 0], ['B5', 'C#5', 'C5', 10],
+      ['C4', 'C#4', 'C3', -1], ['C#4', 'C#4', 'C3', 0],
+      ['D4', 'D#4', 'D3', -1], ['D#4', 'D#4', 'D3', 0],
+      ['F4', 'F#4', 'F3', -1], ['F#4', 'F#4', 'F3', 0],
+      ['G4', 'G#4', 'G3', -1], ['G#4', 'G#4', 'G3', 0],
+      ['E5', 'E5', 'E4', 0], ['A4', 'A4', 'A3', 0], ['B5', 'B5', 'B4', 0],
+      ['C3', 'C#4', 'C3', -13], ['C5', 'C#5', 'C4', -1],
+      ['C#5', 'C#5', 'C4', 0], ['E4', 'E4', 'E3', 0],
     ],
   };
   for (const [track, entries] of Object.entries(cases)) {
@@ -132,7 +192,7 @@ test('natural, sharp and out-of-range notes use corrected realtime roots and WAV
     for (const [note, root, file, semitones] of entries) {
       const timbreId = `deep-autumn-${track}`;
       const state = { totalBars: 1, bpm: 120, trackOrder: [track], matrix: {
-        [track]: [[{ type: track, note, timbreId, requestedTimbreId: timbreId, playbackMode: 'natural' }]],
+        [track]: [[{ ...(track === 'chord' ? {type:'notes',notes:[note]} : {type:track,note}), timbreId, requestedTimbreId: timbreId, playbackMode: 'natural' }]],
       } };
       await engine.play({ matrixSource: () => state.matrix, totalBars: 1 });
       tone.Transport.tick(0);
@@ -140,6 +200,8 @@ test('natural, sharp and out-of-range notes use corrected realtime roots and WAV
       assert.equal(sampler.hits.at(-1).note, note, 'musical note data must not be transposed');
       const sourcePath = new URL(sampler.urls[root], 'http://localhost').pathname;
       assert.ok(sourcePath.endsWith(`/${file}.wav`));
+      assert.equal(await engine.triggerMelodyInputOneShot(note, 2, {trackId:track,timbreId,playbackMode:'natural'}), true);
+      assert.deepEqual(sampler.hits.at(-1), {note,time:2}, 'editor input preserves pitch and uses the same sample bank');
       await engine.stop();
       urls.length = 0; voices.length = 0;
       await renderProjectToWav(state);
@@ -164,8 +226,8 @@ test('48 local WAVs match source hashes and sharp filenames map to standard note
     assert.equal(createHash('sha256').update(bytes).digest('hex'), entry.sha256);
   }
   const urls = createMelodySampleUrls('/arranger-demo/', chord);
-  assert.match(urls['C#2'], /\/Chord\/CSharp2.wav\?/);
-  assert.match(urls['G#4'], /\/Chord\/GSharp4.wav\?/);
+  assert.match(urls['C#3'], /\/Chord\/CSharp2.wav\?/);
+  assert.match(urls['G#5'], /\/Chord\/GSharp4.wav\?/);
   assert.ok(Object.values(urls).every(url => !url.includes('#')));
   assert.match(createMelodySampleUrls('/', 'piano').C2, /samples\/Melody\/Melody_C2_v0.22.wav/);
 });
@@ -269,19 +331,19 @@ test('WAV render requests the same local banks and leaves drum and harmony sampl
   t.after(() => { if (original) globalThis.OfflineAudioContext = original; else delete globalThis.OfflineAudioContext; });
   t.mock.method(globalThis, 'fetch', async (url) => { urls.push(url); return { ok: true, arrayBuffer: async () => new ArrayBuffer(1) }; });
   const { state } = project();
-  state.matrix.bass[0][0] = { type: 'bass', note: 'F#0', timbreId: 'deep-autumn-bass', requestedTimbreId: 'deep-autumn-bass', playbackMode: 'natural' };
-  state.matrix.melody[0][0] = { type: 'melody', note: 'D#4', timbreId: 'deep-autumn-melody', playbackMode: 'natural' };
+  state.matrix.bass[0][0] = { type: 'bass', note: 'F#1', timbreId: 'deep-autumn-bass', requestedTimbreId: 'deep-autumn-bass', playbackMode: 'natural' };
+  state.matrix.melody[0][0] = { type: 'melody', note: 'D#5', timbreId: 'deep-autumn-melody', playbackMode: 'natural' };
   await renderProjectToWav(state, { chunkSeconds: 1 });
   assert.ok(urls.some(url => url.includes('/Bass/F0.wav')));
   assert.ok(urls.some(url => url.includes('/Melody/D4.wav')));
   assert.ok(urls.length > 3 && urls.every(url => url.includes('/samples/DeepAutumn/')));
-  assert.ok(urls.some(url => url.includes('/Drums/Kick.wav')) && urls.some(url => url.includes('/Chord/CSharp3.wav')));
+  assert.ok(urls.some(url => url.includes('/Drums/Kick.wav')) && urls.some(url => url.includes('/Chord/CSharp2.wav')));
   assert.ok(voices.length > 0 && voices.every(voice => !voice.stopped));
   urls.length = 0;
   await renderProjectToWav({ totalBars: 1, bpm: 100, trackOrder: ['chord'], matrix: {
-    chord: [[{ type: 'notes', notes: ['C3'], timbreId: chord, playbackMode: 'natural' }]],
+    chord: [[{ type: 'notes', notes: ['C4'], timbreId: chord, playbackMode: 'natural' }]],
   } });
-  assert.deepEqual(urls, ['/samples/DeepAutumn/Chord/CSharp3.wav'], 'equidistant source selection matches Tone.Sampler, not the lower B2');
+  assert.deepEqual(urls, ['/samples/DeepAutumn/Chord/CSharp3.wav'], 'equidistant source selection matches Tone.Sampler, not the lower B3');
 });
 
 
