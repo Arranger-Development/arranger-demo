@@ -16,7 +16,7 @@ function fillFixedJamPads(surface, notes, active) {
       : template && ('playingPhraseIds' in status || 'queuedPhraseIds' in status)
         ? jamTemplateState(status, pad.trackId, template.id) : selected ? 'playing' : 'idle';
     // Palette entries run from dim to bright, preserving the established track hues.
-    notes.set(pad.note, !template ? colors[0] : state === 'queued'
+    notes.set(pad.note, !template ? 0 : state === 'queued'
       ? colors[beatPhase >= .5 ? 2 : 1] : state === 'playing' ? colors[2] : colors[1]);
   }
   const hasTargets = selectedTracks.length > 0;
