@@ -1,11 +1,10 @@
 // Physical coordinates shared by input decoding and LED output (Launchpad X).
-const quadrants = [
-  ['drums', 8, 1], ['chord', 8, 5],
-  ['bass', 6, 1], ['melody', 6, 5],
+const phraseRows = [
+  ['drums', 8], ['chord', 7], ['bass', 6], ['melody', 5],
 ];
-export const JAM_TEMPLATE_PADS = Object.freeze(quadrants.flatMap(([trackId, topRow, leftColumn]) =>
+export const JAM_TEMPLATE_PADS = Object.freeze(phraseRows.flatMap(([trackId, row]) =>
   Array.from({ length: 8 }, (_, index) => Object.freeze({
-    note: (topRow - Math.floor(index / 4)) * 10 + leftColumn + index % 4,
+    note: row * 10 + index + 1,
     trackId, index,
   }))));
 export const JAM_PARAMETER_PADS = Object.freeze([
