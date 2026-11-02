@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { JAM_PAD_LAYOUT } from '../src/input/jamPadLayout.js';
-import { createPerformanceMidiInput, JAM_VOLUME_STEPS, JAM_FILTER_STEPS, JAM_REVERB_STEPS } from '../src/input/performanceInput.js';
+import { JAM_PAD_LAYOUT, JAM_COLUMN_PADS } from '../src/input/jamPadLayout.js';
+import { createPerformanceMidiInput } from '../src/input/performanceInput.js';
 import { createLaunchpadXPerformanceLedFrame, createLedFrameSender } from '../src/input/launchpadXPerformanceSurface.js';
 import { createJamEffects } from '../src/app/jamEffects.js';
 import { createJamTemplateProjects } from '../src/app/jamTemplateProjects.js';
 import { createSessionPlayback } from '../src/app/sessionPlayback.js';
-import { toggleJamTemplate } from '../src/app/jamTemplateSelection.js';
+import { toggleJamTemplate, launchJamColumn } from '../src/app/jamTemplateSelection.js';
 import { jamTemplatePage } from '../src/app/jamTemplateSlots.js';
 
 const positions = {
@@ -18,11 +18,11 @@ const templates = Object.fromEntries(Object.keys(positions).map(track => [track,
 const light = (frame, n, status = 0x90) => frame.find(m => m[0] === status && m[1] === n)?.[2];
 const surface = { version: 5, templates, status: {mode:'jam'} };
 
-test('fixed Jam layout covers all 64 pads once and all four phrase rows match input and LEDs', () => {
-  assert.equal(JAM_PAD_LAYOUT.length, 64);
-  assert.equal(new Set(JAM_PAD_LAYOUT.map(p => p.note)).size, 64);
+test('fixed Jam layout assigns 48 pads once and all four phrase rows match input and LEDs', () => {
+  assert.equal(JAM_PAD_LAYOUT.length, 48);
+  assert.equal(new Set(JAM_PAD_LAYOUT.map(p => p.note)).size, 48);
   assert.deepEqual(JAM_PAD_LAYOUT.map(p=>p.note).sort((a,b)=>a-b),
-    Array.from({length:8},(_,row)=>Array.from({length:8},(_,col)=>(row+1)*10+col+1)).flat());
+    [1,4,5,6,7,8].flatMap(row=>Array.from({length:8},(_,col)=>row*10+col+1)));
   const input = createPerformanceMidiInput();
   for (const [trackId, notes] of Object.entries(positions)) for (const [index, note] of notes.entries()) {
     assert.deepEqual(input.handle([0x90,note,127], templates, surface), {type:'template',trackId,templateId:`${trackId}-${index}`});
@@ -45,15 +45,16 @@ function livePadFixture() {
     bars:[Array.from({length:16},(_,i)=>i===0?track==='drums'?{instruments:['kick']}:track==='bass'?{type:'bass',note:'C2'}:{type:'notes',notes:['C4']}:null)]},`${track}-${slot}`));
   let options, absolute=0, status, plays=0, bank=0;
   const playback=createSessionPlayback({async play(o){options=o;plays++;return true;},stop(){},stopAllVoices(){},setTempo(){},getAbsolutePlaybackStep:()=>absolute},next=>{status=next;});
-  const input=createPerformanceMidiInput(), audition={getTrack:()=>null,release(){}};
+  const input=createPerformanceMidiInput(), audition={getTrack:()=>null,release(){},stop(){playback.stop();}};
   const visible=()=>Object.fromEntries(Object.keys(positions).map(t=>[t,jamTemplatePage(store.current().workspace.templates[t],bank)]));
   function command(note) {
-    const result=input.handle([0x90,note,127],visible(),{version:5});
-    input.handle([0x80,note,0],visible(),{version:5});return result;
+    const result=input.handle([0x90,note,127],visible(),{version:5,page:bank});
+    input.handle([0x80,note,0],visible(),{version:5,page:bank});return result;
   }
   return {store,phrases,playback,command,setBank:value=>{bank=value;},
     get status(){return status;},get plays(){return plays;},
-    press(note){const cmd=command(note);if(cmd?.type==='template')toggleJamTemplate({projectStore:store,playback,audition,trackId:cmd.trackId,templateId:cmd.templateId});return cmd;},
+    press(note){const cmd=command(note);if(cmd?.type==='template')toggleJamTemplate({projectStore:store,playback,audition,trackId:cmd.trackId,templateId:cmd.templateId});
+      if(cmd?.type==='launchColumn')launchJamColumn({projectStore:store,playback,audition,slotIndex:cmd.slotIndex,toggle:true});return cmd;},
     tick(step){absolute=step;const value=options.playbackSource(step,step*.15);value.onAudible?.();return value;},
     lights(phase){return createLaunchpadXPerformanceLedFrame({...surface,templates:visible(),status,beatPhase:phase});},
   };
@@ -79,12 +80,86 @@ test('four physical rows layer, pause and replace only their own track through t
   assert.equal(f.plays,1);
 });
 
+test('white column pads launch all tracks once, queue at the bar, pause and restart from zero',async()=>{
+  const f=livePadFixture();
+  assert.equal(light(f.lights(0),41),2);
+  assert.deepEqual(f.press(41),{type:'launchColumn',slotIndex:0});
+  await new Promise(resolve=>setImmediate(resolve));f.tick(0);f.tick(5);
+  assert.equal(light(f.lights(.1),41),3);assert.equal(light(f.lights(.8),41),3);
+  f.press(45);
+  assert.equal(light(f.lights(.1),45),2);assert.equal(light(f.lights(.8),45),3);
+  assert.equal(light(f.lights(.1),41),3,'original column remains steadily playing');
+  f.tick(15);assert.equal(f.status.playingPhraseIds.drums,f.phrases.drums[0].id);
+  f.tick(16);
+  for(const t of Object.keys(positions)) {
+    assert.equal(f.status.playingPhraseIds[t],f.phrases[t][1].id);
+    assert.equal(f.status.trackPositions[t].startStep,16);
+  }
+  assert.equal(f.plays,1);
+  assert.equal(light(f.lights(.1),45),3);assert.equal(light(f.lights(.8),45),3);
+  assert.equal(light(f.lights(0),41),2);
+  f.press(45);assert.equal(f.playback.isActive(),false);assert.equal(light(f.lights(0),45),2);
+  f.press(45);await new Promise(resolve=>setImmediate(resolve));f.tick(0);
+  assert.equal(f.status.trackPositions.drums.startStep,0);assert.equal(f.plays,2);
+});
+
+test('column pads follow banks, moved columns, holes, deletion and only-empty saved blocks',()=>{
+  const f=livePadFixture();f.setBank(3);
+  assert.deepEqual(f.command(48),{type:'launchColumn',slotIndex:31});
+  assert.equal(f.command(41),null);assert.equal(light(f.lights(0),41),0);
+  f.store.moveSlots({trackId:null,from:31,to:24});
+  assert.deepEqual(f.command(41),{type:'launchColumn',slotIndex:24});
+  assert.equal(f.command(48),null);assert.equal(light(f.lights(0),48),0);
+  for(const t of Object.keys(positions))f.store.removeTemplate(t,f.phrases[t][4].id);
+  assert.equal(f.command(41),null);assert.equal(light(f.lights(0),41),0);
+  const empty={id:'blank',trackId:'drums',bars:[Array(16).fill(null)]};
+  const row={drums:[empty],chord:[],bass:[],melody:[]},input=createPerformanceMidiInput();
+  assert.equal(input.handle([0x90,41,127],row,{version:5,page:1}),null);
+  assert.equal(light(createLaunchpadXPerformanceLedFrame({...surface,templates:row}),41),0);
+  row.bass=[{id:'real',bars:[[{type:'bass',note:'C2'},...Array(15).fill(null)]]}];
+  input.handle([0x80,41,0],row,{version:5});
+  assert.deepEqual(input.handle([0x90,41,127],row,{version:5,page:1}),{type:'launchColumn',slotIndex:8});
+  assert.equal(light(createLaunchpadXPerformanceLedFrame({...surface,templates:row}),41),2);
+});
+
+test('column pads stop empty tracks at the boundary and repeating a queued pad cancels playback',async()=>{
+  const f=livePadFixture();
+  f.store.moveSlots({trackId:'bass',from:4,to:7});
+  f.press(41);await new Promise(resolve=>setImmediate(resolve));f.tick(0);f.tick(5);
+  f.press(45);f.tick(15);assert.equal(f.status.playingPhraseIds.bass,f.phrases.bass[0].id);
+  const next=f.tick(16);
+  assert.equal(f.status.playingPhraseIds.bass,null);assert.ok(next.matrix.bass.flat().every(cell=>cell===null));
+  assert.equal(f.status.playingPhraseIds.chord,f.phrases.chord[1].id);
+  f.tick(20);f.press(41);assert.equal(light(f.lights(.8),41),3);
+  f.press(41);assert.equal(f.playback.isActive(),false);
+  assert.equal(light(f.lights(.8),41),2);assert.equal(f.plays,1);
+});
+
+test('column playback lights ignore effect targets and show idle while editor solo is active',()=>{
+  const ids=Object.fromEntries(Object.keys(positions).map(t=>[t,`${t}-0`]));
+  const s={...surface,selectedTracks:[],status:{mode:'jam',playingPhraseIds:ids}};
+  assert.equal(light(createLaunchpadXPerformanceLedFrame(s),41),3);
+  assert.equal(light(createLaunchpadXPerformanceLedFrame({...s,auditioning:true}),41),2);
+  assert.equal(light(createLaunchpadXPerformanceLedFrame({...s,status:{mode:'stopped'}}),41),2);
+  assert.equal(light(createLaunchpadXPerformanceLedFrame({...s,status:{mode:'jam',playingPhraseIds:{drums:ids.drums}}}),41),2,'partial column is not a full column launch');
+});
+
+test('new frames explicitly clear all old fader lights even with active effects',()=>{
+  const sender=createLedFrameSender(),messages=[],output={send:m=>messages.push(m)};
+  const oldFaders=[21,31].flatMap(first=>Array.from({length:8},(_,i)=>[0x90,first+i,17]));
+  sender.send(output,oldFaders);messages.length=0;
+  const frame=createLaunchpadXPerformanceLedFrame({...surface,reverbs:{drums:1},cutoffs:{drums:100},volumes:{drums:6}});
+  sender.send(output,frame);
+  for(const [,note] of oldFaders)assert.ok(messages.some(([s,n,v])=>s===0x90&&n===note&&v===0));
+  assert.equal(frame.filter(([s])=>s===0x90).length,64);
+});
+
 test('every row follows global slots through eight-column banks, whole-column ordering, deletion and holes',()=>{
   const f=livePadFixture();
   assert.equal(f.store.moveSlots({trackId:null,from:0,to:31}),true);
   f.setBank(1);
   for(const [track,notes] of Object.entries(positions)) {
-    assert.equal(f.command(notes[0]),null,'empty global slot 8 stays inert');
+    assert.deepEqual(f.command(notes[0]),{type:'editPhrase',trackId:track,slotIndex:8},'empty global slot 8 opens its editor');
     assert.equal(f.command(notes[7]).templateId,f.phrases[track][3].id,'global slot 15 contains the shifted phrase from slot 16');
   }
   f.setBank(3);
@@ -92,7 +167,7 @@ test('every row follows global slots through eight-column banks, whole-column or
     assert.equal(f.command(notes[7]).templateId,f.phrases[track][0].id);
     f.store.removeTemplate(track,f.phrases[track][4].id);
     assert.equal(f.command(notes[6]).templateId,f.phrases[track][0].id,'deleted slot compacts within this row');
-    assert.equal(f.command(notes[7]),null);
+    assert.deepEqual(f.command(notes[7]),{type:'editPhrase',trackId:track,slotIndex:31});
   }
 });
 
@@ -119,16 +194,20 @@ test('audible phrase LEDs stay steady while queued phrase LEDs pulse independent
     assert.equal(light(createLaunchpadXPerformanceLedFrame({...surface,status:committed,beatPhase:.8}),notes[4]),bright[track]);
   }
 });
-test('eight fixed levels ignore onscreen effect page; old page CCs remain off and inert', () => {
+test('column pads ignore effect pages, while removed fader rows and old page CCs remain off and inert', () => {
   for (const effectPage of ['mix','expression','arp']) {
     const input = createPerformanceMidiInput(), s = {...surface,effectPage};
-    for (const [type, first, values] of [['reverb',41,JAM_REVERB_STEPS], ['cutoff',31,JAM_FILTER_STEPS], ['volume',21,JAM_VOLUME_STEPS]]) {
-      for (const [index,value] of values.entries()) {
-        assert.deepEqual(input.handle([0x90,first+index,127],templates,s),{type,value});
-        assert.equal(input.handle([0x80,first+index,0],templates,s),null);
-      }
+    for (const {note,index} of JAM_COLUMN_PADS) {
+      assert.deepEqual(input.handle([0x90,note,127],templates,{...s,page:3}),{type:'launchColumn',slotIndex:24+index});
+      assert.equal(input.handle([0x90,note,100],templates,{...s,page:4}),null,'held pad cannot launch again after paging');
+      assert.equal(input.handle([0x80,note,0],templates,s),null);
     }
     const frame = createLaunchpadXPerformanceLedFrame(s);
+    for(const first of [21,31])for(let n=first;n<first+8;n++) {
+      assert.equal(input.handle([0x90,n,127],templates,s),null);
+      assert.equal(input.handle([0x80,n,0],templates,s),null);
+      assert.equal(light(frame,n),0);
+    }
     for (const cc of [49,39,29,19]) {
       assert.equal(input.handle([0xb0,cc,127],templates,s),null);
       assert.equal(light(frame,cc,0xb0),0);
@@ -168,7 +247,7 @@ test('only saved phrase slots light up; holes stay off through loading, playback
       else assert.equal(light(frame,note),0,'unsaved slots must send an explicit zero');
     }
     const full=createLaunchpadXPerformanceLedFrame({...surface,beatPhase,...extra});
-    assert.deepEqual(frame.filter(([s,n])=>s!==0x90||n<51),full.filter(([s,n])=>s!==0x90||n<51),'effects and sidebar lights do not depend on phrase holes');
+    assert.deepEqual(frame.filter(([s,n])=>s!==0x90||n<40),full.filter(([s,n])=>s!==0x90||n<40),'effects and sidebar lights do not depend on phrase holes');
   }
 });
 test('LED sender clears previously lit pads after empty-bank navigation, deletion and insertion ordering',()=>{
@@ -189,15 +268,19 @@ test('LED sender clears previously lit pads after empty-bank navigation, deletio
     assert.ok(messages.some(([s,n,v])=>s===0x90&&n===notes[7]&&v!==0),'the saved phrase lights at its new slot');
   }
 });
-test('selected-track LEDs show parameter levels and bottom holds disable when stopped or without targets', () => {
+test('bottom effects keep their base lights while stopped or loading and turn off without targets', () => {
   const s={...surface,selectedTrack:'bass',selectedTracks:['drums','bass'],volumes:{bass:-9},cutoffs:{bass:1000},reverbs:{bass:3/7},repeat:8,choppers:{bass:16},brakes:{bass:1}};
   const frame=createLaunchpadXPerformanceLedFrame(s);
-  for (const note of [44,34,24]) assert.equal(light(frame,note),41);
+  for (const note of [44,34,24]) assert.equal(light(frame,note),note===44?2:0);
   assert.equal(light(frame,12),41); assert.equal(light(frame,16),3); assert.equal(light(frame,18),3);
-  for (const extra of [{status:{mode:'stopped'}},{status:{mode:'jam',loading:true}},{selectedTracks:[]}]) {
+  for (const extra of [{status:{mode:'stopped'}},{status:{mode:'jam',loading:true}}]) {
     const frame=createLaunchpadXPerformanceLedFrame({...s,...extra});
-    for(let n=11;n<=18;n++) assert.equal(light(frame,n),0);
+    for(let n=11;n<=13;n++) assert.equal(light(frame,n),43);
+    for(let n=14;n<=17;n++) assert.equal(light(frame,n),37);
+    assert.equal(light(frame,18),5);
   }
+  const noTargets=createLaunchpadXPerformanceLedFrame({...s,selectedTracks:[]});
+  for(let n=11;n<=18;n++) assert.equal(light(noTargets,n),0);
 });
 test('hold commands retain ownership across simultaneous presses, page changes and release/reset', () => {
   const input=createPerformanceMidiInput(),fx=createJamEffects({setPerformanceEffect(){}});
@@ -213,8 +296,8 @@ test('hold commands retain ownership across simultaneous presses, page changes a
   const send=(note,pressed=true,cc=false)=>dispatch(input.handle([cc?0xb0:pressed?0x90:0x80,note,pressed?127:0],templates,{...surface,effectPage:'arp'}));
   send(69,true,true);send(69,false,true);
   assert.deepEqual(fx.getSnapshot().selectedTracks,['drums','bass']);
-  send(48);send(32);send(26);
-  for(const track of ['drums','bass']) { assert.equal(fx.getSnapshot().reverbs[track],1);assert.equal(fx.getSnapshot().cutoffs[track],250);assert.equal(fx.getSnapshot().volumes[track],-3); }
+  send(32);send(26);
+  for(const track of ['drums','bass']) { assert.equal(fx.getSnapshot().reverbs[track],0);assert.equal(fx.getSnapshot().cutoffs[track],20000);assert.equal(fx.getSnapshot().volumes[track],0); }
   assert.equal(fx.getSnapshot().reverbs.melody,0);
   send(11);send(12);send(11,false);send(16);send(18);
   assert.equal(fx.getSnapshot().repeats.bass,8);assert.equal(fx.getSnapshot().choppers.drums,16);assert.equal(fx.getSnapshot().brakes.bass,1);
@@ -249,9 +332,10 @@ test('current Jam track keys toggle independently on single presses and LEDs mat
     for (const [t, key] of Object.entries(trackKeys)) {
       assert.equal(light(frame, key, 0xb0), brightness[t][Number(expected.includes(t))]);
     }
-    if (!expected.length) for (let note = 21; note <= 48; note++) {
+    if (!expected.length) for (let note = 21; note <= 38; note++) {
       if (note % 10 >= 1 && note % 10 <= 8) assert.equal(light(frame, note), 0);
     }
+    assert.equal(light(frame,41),2,'column playback is independent of effect targets');
   };
   click('bass', ['drums','bass']);
   click('chord', ['drums','bass','chord']);

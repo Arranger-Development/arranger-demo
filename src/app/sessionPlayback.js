@@ -115,9 +115,11 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
   return {
     stop, isActive, isReady: () => isActive() && !loading,
     getDesiredPhraseIds: () => jam?.desiredIds() ?? { drums: null, chord: null, bass: null, melody: null },
-    updatePhrase(snapshot,trackId,id) {
+    getQueuedPhraseIds: () => jam?.state().queuedPhraseIds ?? null,
+    hasJamPlayback: () => Boolean(jam?.hasWork()),
+    updatePhrase(snapshot,trackId,id,options) {
       if (!jam || !isActive() || finishing || !snapshot) return;
-      jam.updatePhrase(snapshot,trackId,id,lastStep+1);emit();
+      jam.updatePhrase(snapshot,trackId,id,lastStep+1,options);emit();
     },
     toggleTrack(snapshot, trackId, tempo, { restart = false } = {}) {
       if (automation?.isRecording() || !snapshot) return;
