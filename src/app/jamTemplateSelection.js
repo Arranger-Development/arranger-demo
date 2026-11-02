@@ -7,7 +7,9 @@ import { isEmptyJamPhrase } from './jamPhraseContent.js';
 export function deleteJamTemplate({ projectStore, playback, audition, trackId, templateId }) {
   const before = projectStore.current().workspace;
   if (!before.templates[trackId]?.some(p => p.id === templateId)) return false;
-  const soloTrack = audition.getTrack();
+  const editorTrack = audition.getTrack();
+  const soloTrack = audition.getMode?.() === 'mix' ? null : editorTrack;
+  const deletingEditor = editorTrack === trackId && before.draft?.editingTemplateId === templateId;
   const deletingSolo = soloTrack === trackId && before.draft?.editingTemplateId === templateId;
   const continuing = deletingSolo ? audition.wasPlaying() : playback.isActive();
   // Read the current reducer even when Fast Refresh retained an older store instance.
@@ -15,7 +17,7 @@ export function deleteJamTemplate({ projectStore, playback, audition, trackId, t
   const w = projectStore.current().workspace;
   // Storage failure may still retain the deletion in memory; keep audio consistent.
   if (w.templates[trackId].some(p => p.id === templateId)) return false;
-  if (deletingSolo) audition.release({ resume: continuing });
+  if (deletingEditor) audition.release({ resume: continuing });
   if ((!deletingSolo && soloTrack) || !continuing) return saved;
   if (playback.removeTrack) {
     playback.removeTrack(trackId, templateId);
@@ -45,14 +47,16 @@ export function launchJamColumn({ projectStore, playback, audition, columnIndex,
   // Explicit launches stay idempotent; the column's transport button toggles
   // either its audible mix or its pending request, including during loading.
   const matches = ids => ids && PERFORMANCE_TRACKS.every(t => (ids[t] ?? null) === selection[t]);
-  if (toggle && !audition.getTrack() && playback.isActive()
+  const mixEditor = audition.getMode?.() === 'mix';
+  const soloActive = !mixEditor && audition.getTrack();
+  if (toggle && !soloActive && playback.isActive()
     && (matches(playback.getDesiredPhraseIds()) || matches(playback.getProgress()?.snapshot.phraseIds))) {
-    audition.stop();
+    if (mixEditor) audition.pause(); else audition.stop();
     return true;
   }
-  if (!audition.getTrack() && playback.isActive() && PERFORMANCE_TRACKS.every(t => w.selection[t] === selection[t]
+  if (!soloActive && playback.isActive() && PERFORMANCE_TRACKS.every(t => w.selection[t] === selection[t]
     && (!selection[t] || !w.mutedTracks[t] && w.volumes[t] > -24))) return false;
-  audition.release();
+  if (mixEditor) audition.holdMix(); else audition.release();
   projectStore.patch({ selection,
     mutedTracks: { ...w.mutedTracks, ...Object.fromEntries(PERFORMANCE_TRACKS.filter(t => selection[t]).map(t => [t, false])) },
     volumes: { ...w.volumes, ...Object.fromEntries(PERFORMANCE_TRACKS.filter(t => selection[t]).map(t => [t, w.volumes[t] <= -24 ? 0 : w.volumes[t]])) },
@@ -66,9 +70,13 @@ export function launchJamColumn({ projectStore, playback, audition, columnIndex,
 export function toggleJamTemplate({ projectStore, playback, audition, trackId, templateId }) {
   const current = projectStore.current().workspace;
   if (!current.templates[trackId]?.some(template => template.id === templateId && !isEmptyJamPhrase(template))) return false;
-  audition.release();
+  if (audition.getMode?.() === 'mix') audition.holdMix(trackId); else audition.release();
   const snapshot = jamCombinationSnapshot({ ...current, selection: { [trackId]: templateId } });
-  playback.toggleTrack(snapshot, trackId, current.bpm, { restart: current.mutedTracks[trackId] || current.volumes[trackId] <= -24 });
+  const restartingCurrent = audition.getMode?.() === 'mix' && playback.getQueuedPhraseIds?.()?.[trackId] === templateId
+    && playback.getProgress()?.snapshot.phraseIds[trackId] === templateId;
+  if (restartingCurrent && !current.mutedTracks[trackId] && current.volumes[trackId] > -24) playback.removeTrack(trackId,templateId);
+  else playback.toggleTrack(snapshot, trackId, current.bpm, { restart: current.mutedTracks[trackId] || current.volumes[trackId] <= -24 });
+  if (audition.getMode?.() === 'mix' && !Object.values(playback.getDesiredPhraseIds()).some(Boolean)) audition.holdMix();
   projectStore.patch({
     selection: playback.getDesiredPhraseIds(),
     mutedTracks: {...current.mutedTracks,[trackId]:false},

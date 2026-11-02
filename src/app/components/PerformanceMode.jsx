@@ -55,7 +55,16 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const [playback] = useState(() => createSessionPlayback(audio, setStatus));
   const [editingTrack, setEditingTrack] = useState(null);
   const [solo, setSolo] = useState(false), [message, setMessage] = useState('');
-  const [audition] = useState(() => createJamAudition(playback, {readWorkspace:() => projectStore.current().workspace, readDraft:() => projectStore.current().workspace.draft, onSoloChange:setSolo}));
+  const [audition] = useState(() => createJamAudition(playback, {
+    readWorkspace:() => projectStore.current().workspace, readDraft:() => projectStore.current().workspace.draft, onSoloChange:setSolo,
+    onMixChange({selection,trackId,restoreSound}) {
+      const current=projectStore.current().workspace;
+      projectStore.patch({selection,...(restoreSound ? {
+        mutedTracks:{...current.mutedTracks,[trackId]:false},
+        volumes:{...current.volumes,[trackId]:current.volumes[trackId]<=-24?0:current.volumes[trackId]},
+      } : {})});
+    },
+  }));
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [page, setPage] = useState(0);
   const [phraseHistory] = useState(() => createJamPhraseHistory((pid,id) => {
@@ -122,6 +131,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const editorPosition = trackPosition && (solo ? trackPosition.editorRevision === audition.getRevision()
     : trackPosition.phraseId === draft.editingTemplateId) ? trackPosition : null;
   const editorPlaying = Boolean(draft && audition.isPlaying());
+  const editorQueued = Boolean(draft && status.mode !== 'stopped' && status.queuedPhraseIds?.[draft.trackId] === draft.editingTemplateId);
   const history = phraseHistory.get(project.id,draft?.editingTemplateId);
   const sourceGenre = project.genreId ?? genreId, sourceProfile = project.profileId ?? profileId;
   const catalog = performanceTemplates(sourceGenre, sourceProfile);
@@ -149,6 +159,9 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     playback.launch(snapshot, projectStore.current().workspace.bpm, { edit: true, quantize, preservePhase: true });
   }
   function syncPhraseAudio(phrase, restart = false) {
+    if (audition.getMode() === 'mix' && audition.getPhraseId() === phrase.id) {
+      audition.update({...phrase,editingTemplateId:phrase.id},{restart}); return;
+    }
     const snapshot=jamCombinationSnapshot(projectStore.current().workspace,phrase,true);
     if (!hasJamNotes(phrase)) snapshot.phraseIds[phrase.trackId]=null;
     playback.updatePhrase?.(snapshot,phrase.trackId,phrase.id);
@@ -186,7 +199,8 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     if (!editingTrack) captureArt();
     setEditingTrack(t);setMessage('');setEditBar(0);
     void audio.startAudio();
-    audition.open({...phrase,editingTemplateId:phrase.id});
+    const mode = playback.isActive() && playback.hasJamPlayback() ? 'mix' : undefined;
+    audition.open({...phrase,editingTemplateId:phrase.id},{mode});
   }
   function finishEditor() {
     clearTimeout(midiGesture.current);endGesture();
@@ -247,7 +261,8 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     return true;
   }
   function toggleMute(t) {
-    if (audition.getTrack() === t) audition.pause();
+    if (audition.getMode() === 'mix') audition.holdMix(t);
+    else if (audition.getTrack() === t) audition.pause();
     const current = projectStore.current().workspace;
     projectStore.patch({mutedTracks:{...current.mutedTracks,[t]:!current.mutedTracks[t]},volumes:{...current.volumes,[t]:current.volumes[t] <= -24 ? 0 : current.volumes[t]}});
   }
@@ -310,6 +325,8 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       dispatch(cmd) {
         const track = effects.getSnapshot().selectedTrack;
         if (cmd.type === 'template') trigger(cmd.trackId,cmd.templateId);
+        if (cmd.type === 'editPhrase' && !deleteTarget && TRACKS.includes(cmd.trackId) && Number.isSafeInteger(cmd.slotIndex) && cmd.slotIndex >= 0) openEditor(cmd.trackId,null,false,cmd.slotIndex);
+        if (cmd.type === 'launchColumn') launchColumn(cmd.slotIndex);
         if (cmd.type === 'togglePlayback') togglePlayback();
         if (cmd.type === 'stop') { if (draft) audition.pause(); else audition.stop(); effects.reset(); }
         if (cmd.type === 'page') launcherNav.current?.showBank(Math.max(0,Math.min(pageCount-1,effectivePage+cmd.delta)));
@@ -336,8 +353,8 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           parameterLevels: Object.fromEntries(['strength','groove'].map(p => [p,jamParameterLevels(editingTrack,p)])),
           values: {volume:snapshot.volumes[t],cutoff:snapshot.cutoffs[t],reverb:snapshot.reverbs[t],pitch:snapshot.pitches[t]} };
       },
-      getSurface: () => ({ ...effects.getSnapshot(), version: 5, templates, selection: w.selection,
-        page: effectivePage, pageCount, sections: [], status: draft && !editorPlaying ? {...status,mode:'stopped'} : status, beatPhase: playback.getBeatPhase(),
+      getSurface: () => ({ ...effects.getSnapshot(), version: 5, templates, selection: w.selection, auditioning: solo,
+        page: effectivePage, pageCount, sections: [], status: solo && draft && !editorPlaying ? {...status,mode:'stopped'} : status, beatPhase: playback.getBeatPhase(),
         repeat: effects.getSnapshot().repeats[effects.getSnapshot().selectedTrack], manualSave:false, canSave:false, canPlayEditor:Boolean(draft && hasJamNotes(draft)), storageError: Boolean(library.error) }),
     };
     midiControlsRef.current = controls;
@@ -381,7 +398,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
                 onBegin={() => { midiInput.useSoftwareValue(hardwareParameter); beginGesture(); }} onEnd={endGesture} onChange={v => changeParameter(parameter,v)}/>;
             })}</div>
           </div>
-          <div className="studio-grid-toolbar"><span>{editingTrack === 'drums' ? '鼓点音序器' : `${LABELS[editingTrack]}音序器`}<small className="studio-editor-position" aria-label="编辑播放位置">{editorPlaying && editorPosition ? ` · 播放 ${editorPosition.bar+1}/${draft.bars.length}` : editorPlaying ? ' · 准备播放' : hasJamNotes(draft) ? ' · 已暂停' : ' · 空白'}</small></span><div className="studio-bar-pager"><button type="button" aria-label="上一小节" disabled={previewBar === 0} onClick={() => setEditBar(previewBar-1)}><ChevronLeft size={13}/></button><span>{previewBar+1} / {draft.bars.length} 小节</span><button type="button" aria-label="下一小节" disabled={previewBar+1 === draft.bars.length} onClick={() => setEditBar(previewBar+1)}><ChevronRight size={13}/></button></div><div className="studio-undo"><button type="button" aria-label="撤销模板修改" disabled={!history.undo.length} onClick={() => undo()}><Undo2 size={14}/></button><button type="button" aria-label="重做模板修改" disabled={!history.redo.length} onClick={() => undo(true)}><Redo2 size={14}/></button></div></div>
+          <div className="studio-grid-toolbar"><span>{editingTrack === 'drums' ? '鼓点音序器' : `${LABELS[editingTrack]}音序器`}<small className="studio-editor-position" aria-label="编辑播放位置">{editorPlaying && editorPosition ? ` · 播放 ${editorPosition.bar+1}/${draft.bars.length}` : editorPlaying || editorQueued ? ' · 准备播放' : hasJamNotes(draft) ? ' · 已暂停' : ' · 空白'}</small></span><div className="studio-bar-pager"><button type="button" aria-label="上一小节" disabled={previewBar === 0} onClick={() => setEditBar(previewBar-1)}><ChevronLeft size={13}/></button><span>{previewBar+1} / {draft.bars.length} 小节</span><button type="button" aria-label="下一小节" disabled={previewBar+1 === draft.bars.length} onClick={() => setEditBar(previewBar+1)}><ChevronRight size={13}/></button></div><div className="studio-undo"><button type="button" aria-label="撤销模板修改" disabled={!history.undo.length} onClick={() => undo()}><Undo2 size={14}/></button><button type="button" aria-label="重做模板修改" disabled={!history.redo.length} onClick={() => undo(true)}><Redo2 size={14}/></button></div></div>
           {editingTrack === 'drums' ? <div className="studio-drum-grid"><DrumStepGrid renderStep={(row,stepNumber) => {
             const step=stepNumber-1,cell=draft.bars[previewBar][step],hits=cell?.drumHits?.filter(h => h.instrument === row.id) ?? [];
             const on=getDrumsCellInstruments(cell).includes(row.id);

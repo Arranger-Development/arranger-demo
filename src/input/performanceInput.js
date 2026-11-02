@@ -17,6 +17,11 @@ function templateCommand(templates, trackId, index) {
   const template = templates?.[trackId]?.[index];
   return template && !isEmptyJamPhrase(template) ? { type: 'template', trackId, templateId: template.id } : null;
 }
+function jamSlotIndex(surface, index) {
+  const page = surface.page ?? 0;
+  const slot = page * 8 + index;
+  return Number.isSafeInteger(page) && page >= 0 && Number.isSafeInteger(slot) ? slot : null;
+}
 export function mapPerformanceKeyboard(event, templates) {
   if (event.type !== 'keydown' || event.repeat || event.isComposing || event.keyCode === 229
     || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return null;
@@ -72,10 +77,16 @@ export function createPerformanceMidiInput() {
         if (number === 98) command = { type: 'togglePlayback' };
       } else if (surface.version === 5) {
         const pad = getJamPadBinding(number);
-        if (pad?.trackId) command = templateCommand(templates, pad.trackId, pad.index);
-        else if (pad && ['reverb', 'cutoff', 'volume'].includes(pad.type)) {
-          const steps = { reverb: JAM_REVERB_STEPS, cutoff: JAM_FILTER_STEPS, volume: JAM_VOLUME_STEPS };
-          command = { type: pad.type, value: steps[pad.type][pad.index] };
+        if (pad?.trackId) {
+          command = templateCommand(templates, pad.trackId, pad.index);
+          const slotIndex = jamSlotIndex(surface,pad.index);
+          if (!command && slotIndex !== null) command = { type: 'editPhrase', trackId: pad.trackId, slotIndex };
+        }
+        else if (pad?.type === 'launchColumn') {
+          const slotIndex = jamSlotIndex(surface,pad.index);
+          if (slotIndex !== null && PERFORMANCE_TRACKS.some(t => templateCommand(templates,t,pad.index))) {
+            command = { type: 'launchColumn', slotIndex };
+          }
         } else if (pad) {
           command = { type: pad.type, token, pressed: true, ...(pad.type === 'repeat' ? { division: pad.division } : { value: pad.value }) };
         }

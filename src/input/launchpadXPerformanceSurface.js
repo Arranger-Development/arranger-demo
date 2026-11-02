@@ -1,6 +1,6 @@
-import { JAM_TEMPLATE_PADS, JAM_PARAMETER_PADS, JAM_MOMENTARY_PADS } from './jamPadLayout.js';
+import { JAM_TEMPLATE_PADS, JAM_COLUMN_PADS, JAM_MOMENTARY_PADS } from './jamPadLayout.js';
 import { PERFORMANCE_TRACKS, hasSelection } from '../app/performanceModel.js';
-import { jamTemplateState } from '../app/jamPerformanceState.js';
+import { jamColumnState, jamTemplateState } from '../app/jamPerformanceState.js';
 import { JAM_VOLUME_STEPS, JAM_FILTER_STEPS, JAM_TRACK_CC, JAM_PITCH_STEPS, JAM_REVERB_STEPS, nearestJamStep } from './performanceInput.js';
 import { isEmptyJamPhrase } from '../app/jamPhraseContent.js';
 
@@ -8,7 +8,7 @@ const TRACK_COLORS = { drums: [19, 18, 17], chord: [11, 10, 9], bass: [43, 42, 4
 function fillFixedJamPads(surface, notes, active) {
   const { templates = {}, selection = {}, status = {}, beatPhase = 0,
     selectedTrack = 'drums', selectedTracks = [selectedTrack],
-    volumes = {}, mutedTracks = {}, cutoffs = {}, reverbs = {}, choppers = {}, brakes = {}, repeat = null } = surface;
+    volumes = {}, mutedTracks = {}, choppers = {}, brakes = {}, repeat = null } = surface;
   for (const pad of JAM_TEMPLATE_PADS) {
     const colors = TRACK_COLORS[pad.trackId];
     const candidate = templates[pad.trackId]?.[pad.index];
@@ -23,20 +23,16 @@ function fillFixedJamPads(surface, notes, active) {
   }
   const hasTargets = selectedTracks.length > 0;
   const colors = TRACK_COLORS[selectedTrack] ?? TRACK_COLORS.drums;
-  const levels = {
-    reverb: nearestJamStep(JAM_REVERB_STEPS, reverbs[selectedTrack] ?? 0),
-    cutoff: nearestJamStep(JAM_FILTER_STEPS, cutoffs[selectedTrack] ?? 20000),
-    volume: nearestJamStep(JAM_VOLUME_STEPS, volumes[selectedTrack] ?? 0),
-  };
-  for (const pad of JAM_PARAMETER_PADS) {
-    notes.set(pad.note, !hasTargets ? 0 : pad.index === levels[pad.type]
-      ? colors[2] : pad.index < levels[pad.type] ? colors[0] : 0);
+  for (const pad of JAM_COLUMN_PADS) {
+    const populated = PERFORMANCE_TRACKS.some(t => templates[t]?.[pad.index] && !isEmptyJamPhrase(templates[t][pad.index]));
+    const state = surface.auditioning ? 'idle' : jamColumnState(status, templates, pad.index);
+    notes.set(pad.note, !populated ? 0 : state === 'playing' || state === 'queued' && beatPhase >= .5 ? 3 : 2);
   }
   for (const pad of JAM_MOMENTARY_PADS) {
     const enabled = active && !status.loading && hasTargets;
-    if (pad.type === 'repeat') notes.set(pad.note, enabled ? colors[repeat === pad.division ? 2 : 0] : 0);
-    if (pad.type === 'chopper') notes.set(pad.note, enabled ? choppers[selectedTrack] === pad.value ? 3 : 37 : 0);
-    if (pad.type === 'brake') notes.set(pad.note, enabled ? brakes[selectedTrack] ? 3 : 5 : 0);
+    if (pad.type === 'repeat') notes.set(pad.note, hasTargets ? colors[enabled && repeat === pad.division ? 2 : 0] : 0);
+    if (pad.type === 'chopper') notes.set(pad.note, hasTargets ? enabled && choppers[selectedTrack] === pad.value ? 3 : 37 : 0);
+    if (pad.type === 'brake') notes.set(pad.note, hasTargets ? enabled && brakes[selectedTrack] ? 3 : 5 : 0);
   }
 }
 

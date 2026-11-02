@@ -51,10 +51,18 @@ export function createJamTrackPlayback(nextVersion) {
   }
   function remove(t, id, at) {
     if (edits.get(t)?.id===id) edits.delete(t);
-    if (launches[t]?.entry?.id === id) invalidate(t, true);
+    const request = launches[t];
+    if (request?.entry?.id === id) {
+      invalidate(t, true);
+      if (request.scheduled && tracks[t]?.revision === request.revision) {
+        if (request.previous) tracks[t] = request.previous; else delete tracks[t];
+        releases.set(t,at);
+      }
+    }
     if (tracks[t]?.id === id || audible[t]?.id === id) stops[t] = { id, at, revision: nextVersion() };
+    source = null;
   }
-  function updatePhrase(snapshot,t,id,at) {
+  function updatePhrase(snapshot,t,id,at,{queuedOnly=false} = {}) {
     const replaceValue=previous=>({...previous,matrix:snapshot.matrix[t],
       bars:snapshot.phraseBars?.[t]??snapshot.totalBars,silent:!snapshot.phraseIds[t],revision:nextVersion()});
     const request=launches[t];
@@ -65,8 +73,8 @@ export function createJamTrackPlayback(nextVersion) {
       }
       request.entry=replaceValue(request.entry);request.revision=request.entry.revision;request.scheduled=false;
     }
-    if (request?.previous?.id===id) request.previous=replaceValue(request.previous);
-    if (tracks[t]?.id===id) {
+    if (!queuedOnly && request?.previous?.id===id) request.previous=replaceValue(request.previous);
+    if (!queuedOnly && tracks[t]?.id===id) {
       cancelled.add(tracks[t].revision);
       edits.set(t,{id,at,entry:replaceValue(tracks[t])});
     }
