@@ -2,9 +2,9 @@ import { getTrackTypeFromInstanceId } from './trackInstances.js';
 
 export function usesNaturalSampleTail(event) {
   const trackType = event.trackType ?? getTrackTypeFromInstanceId(event.trackId) ?? event.type ?? 'melody';
-  // Melody's natural mode plays the complete sample. Authored note length still
+  // Natural chord and melody voices play the complete sample. Authored length still
   // belongs to the score/MIDI and must not turn that mode into a gated voice.
-  return event.playbackMode === 'natural' && (trackType === 'melody' || !event.gateDuration);
+  return event.playbackMode === 'natural' && (['chord', 'melody'].includes(trackType) || !event.gateDuration);
 }
 
 // Optional expression on existing note/notes pitches, not a second pitch format.

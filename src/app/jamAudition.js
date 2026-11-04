@@ -43,7 +43,7 @@ export function createJamAudition(playback, { readWorkspace, readDraft, onSoloCh
     if (stop) playback.stop();
     stopArp();
   }
-  function open(draft, { mode: requestedMode } = {}) {
+  function open(draft, { mode: requestedMode, autoStart = false } = {}) {
     if (!draft) return;
     const nextMode = requestedMode ?? (editor && mode === 'mix' && phraseId === idOf(draft) ? 'mix' : 'solo');
     if (editor && mode === 'solo' && nextMode === 'mix') playback.resumeJam?.();
@@ -58,7 +58,13 @@ export function createJamAudition(playback, { readWorkspace, readDraft, onSoloCh
     if (!editor) { resumeCombination = playback.isActive(); paused = false; }
     mode = nextMode; phraseId = idOf(draft);
     editor = true; track = draft.trackId; empty = !hasJamNotes(draft);
-    if (mode === 'mix') { onSoloChange(false); return; }
+    if (mode === 'mix') {
+      onSoloChange(false);
+      // The first populated editor uses the same real track runtime as later
+      // layers. Opening another editor in a running mix never adds its track.
+      if (autoStart && !paused && !empty && !playback.isActive()) updateMix(draft, false);
+      return;
+    }
     stopArp(); onSoloChange(true);
     // An empty editor silences an existing mix without starting an empty transport.
     if (!paused && (!empty || playback.isActive())) playDraft(draft, true);
@@ -98,6 +104,16 @@ export function createJamAudition(playback, { readWorkspace, readDraft, onSoloCh
     release,
     pause,
     open,
+    // A phrase press has already issued its playback command. Only bind the
+    // editor here: no overlay, transport request, or implicit audition.
+    follow(draft) {
+      if (!draft) return;
+      track = draft.trackId; phraseId = idOf(draft); mode = 'mix'; editor = true;
+      empty = !hasJamNotes(draft); resumeCombination = false; paused = !playback.isActive();
+      autoJoinBlocked = playback.getDesiredPhraseIds()[track] !== phraseId
+        && playback.getQueuedPhraseIds?.()?.[track] !== phraseId;
+      revision++; onSoloChange(false);
+    },
     update(draft, { restart = false } = {}) {
       if (!editor || track !== draft?.trackId) return;
       const wasEmpty = empty; empty = !hasJamNotes(draft);

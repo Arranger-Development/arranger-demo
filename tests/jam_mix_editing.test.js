@@ -36,6 +36,48 @@ function fixture() {
   };
 }
 
+function follow(f,track) {
+  const phrase=f.w.templates[track][0];
+  f.w.draft={...structuredClone(phrase),editingTemplateId:phrase.id};
+  f.editor.follow(f.w.draft);
+}
+
+for(const track of ['chord','bass','melody'])test(`following ${track} binds its editor immediately without restarting the mix or changing its queued boundary`,async()=>{
+  const f=fixture();f.start('drums');await ready();f.tick(0);f.tick(5);f.existing('drums');
+  f.trigger(track,`${track}-old`);const counts=f.counts(),queued=f.playback.getQueuedPhraseIds();
+  follow(f,track);
+  assert.equal(f.editor.getTrack(),track);assert.equal(f.editor.getPhraseId(),`${track}-old`);
+  assert.equal(f.editor.getMode(),'mix');assert.equal(f.solo,false);assert.equal(f.editor.isPlaying(),false);
+  assert.deepEqual(f.counts(),counts);assert.deepEqual(f.playback.getQueuedPhraseIds(),queued);
+  f.tick(15);assert.equal(f.state.playingPhraseIds[track],null);
+  f.tick(16);assert.equal(f.state.trackPositions[track].startStep,16);assert.equal(f.state.trackPositions.drums.startStep,0);
+  f.edit(track==='bass'?'D2':'D3');f.tick(17);
+  assert.equal(f.state.trackPositions[track].startStep,16);assert.equal(f.plays,1);
+});
+
+test('following a cancelled phrase cannot rejoin it on later edits or closing its editor',async()=>{
+  const f=fixture();f.start('drums');await ready();f.tick(0);f.tick(5);f.existing('drums');
+  f.trigger('chord','chord-old');follow(f,'chord');
+  f.trigger('chord','chord-old');follow(f,'chord');
+  f.edit('D3');f.tick(16);assert.equal(f.state.playingPhraseIds.chord,null);
+  assert.equal(f.state.queuedPhraseIds,null);assert.equal(f.state.trackPositions.drums.startStep,0);
+  f.editor.release();f.tick(17);assert.equal(f.plays,1);assert.equal(f.state.playingPhraseIds.chord,null);
+});
+
+test('following a paused last phrase retains the editor without starting another transport',async()=>{
+  const f=fixture();f.start('drums');await ready();f.tick(0);f.tick(5);follow(f,'drums');
+  f.trigger('drums','drums-old');follow(f,'drums');f.tick(6);
+  const plays=f.plays;assert.equal(f.playback.isActive(),false);assert.equal(f.editor.getTrack(),'drums');
+  f.edit('D3');await ready();assert.equal(f.plays,plays);assert.equal(f.playback.isActive(),false);
+});
+
+test('following while samples load retains the original startup and pending launches',async()=>{
+  const f=fixture();f.start('drums');follow(f,'drums');
+  f.trigger('bass','bass-old');const queued=f.playback.getQueuedPhraseIds();follow(f,'bass');
+  assert.deepEqual(f.playback.getQueuedPhraseIds(),queued);await ready();f.tick(0);f.tick(16);
+  assert.equal(f.plays,1);assert.equal(f.state.playingPhraseIds.bass,'bass-old');assert.equal(f.editor.getTrack(),'bass');
+});
+
 test('opening and repeatedly opening a blank mix editor leaves audible tracks, origins, tails and the transport untouched',async()=>{
   const f=fixture();f.start('drums');await ready();f.tick(0);f.tick(5);f.start('bass');f.tick(16);f.tick(20);
   const before=f.counts(),selection={...f.w.selection};
@@ -195,16 +237,27 @@ test('pausing a sounding gem with its same-ID pattern restart pending stops both
   f.edit('E3');f.tick(48);assert.equal(f.state.playingPhraseIds.chord,null);assert.equal(f.plays,1);
 });
 
-test('editing a sounding existing phrase leaves the full mix playing and knob changes restart only that track at the bar',async()=>{
+test('editing a sounding existing phrase updates at the next step without restarting any track',async()=>{
   const f=fixture();f.start('bass');await ready();f.tick(0);f.tick(5);f.start('drums');f.tick(16);f.tick(20);
   const before=f.counts(),selection={...f.w.selection};f.existing('bass');const opened=f.tick(21);
   assert.equal(f.editor.getMode(),'mix');assert.equal(f.editor.isPlaying(),true);assert.equal(f.solo,false);
   assert.deepEqual(f.counts(),before);assert.deepEqual(f.w.selection,selection);assert.deepEqual(opened.releaseTrackIds,[]);
   assert.equal(f.state.trackPositions.bass.startStep,0);assert.equal(f.state.trackPositions.drums.startStep,16);
-  f.edit('D2',{restart:true});f.tick(31);assert.equal(f.state.trackPositions.bass.startStep,0);
-  const changed=f.tick(32);assert.equal(f.state.trackPositions.bass.startStep,32);assert.equal(f.state.trackPositions.drums.startStep,16);
-  assert.deepEqual(changed.releaseTrackIds,['bass']);assert.equal(f.events(changed,32).find(e=>e.trackId==='bass').note,'D2');
+  f.edit('D2');
+  const changed=f.tick(22);assert.equal(f.state.trackPositions.bass.startStep,0);assert.equal(f.state.trackPositions.drums.startStep,16);
+  assert.deepEqual(changed.releaseTrackIds,['bass']);assert.equal(changed.matrix.bass[0][0].note,'D2');
   f.editor.release();assert.equal(f.playback.isActive(),true);assert.deepEqual(f.tick(33).releaseTrackIds,[]);assert.deepEqual(f.counts(),before);
+});
+
+for(const track of tracks)test(`${track}: repeated knob edits retain phase and do not wake a manually paused mix`,async()=>{
+  const f=fixture();f.start(track);await ready();f.tick(0);f.tick(19);f.existing(track);
+  for(let step=20;step<24;step++) {
+    f.edit(track==='bass'?'D2':'D3');f.tick(step);
+    assert.equal(f.state.trackPositions[track].startStep,0);
+    assert.equal(f.state.trackPositions[track].localStep,step);
+  }
+  f.editor.pause();const plays=f.plays;f.edit('E3');await ready();
+  assert.equal(f.playback.isActive(),false);assert.equal(f.plays,plays);
 });
 
 test('editing an existing inactive phrase does not change the mix until a musical edit queues its own track',async()=>{

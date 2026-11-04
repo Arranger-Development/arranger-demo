@@ -26,18 +26,46 @@ export async function createPerformanceEffects(engine) {
     const verb = context.createConvolver(); verb.buffer = impulse;
     const wet = context.createGain(), dry = context.createGain(); wet.gain.value = 0;
     const filter = context.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 20000; filter.Q.value = 0.7;
-    const gain = context.createGain();
+    const gain = context.createGain(), transportGate = context.createGain();
+    transportGate.gain.value = 1;
     input.connect(repeat).connect(expression).connect(filter);
     filter.connect(dry).connect(gain); filter.connect(verb).connect(wet).connect(gain);
-    gain.connect(engine.getTrackMixOutput?.(id) ?? createTrackMixOutput(context,id,master));
-    return [id, { input, repeat, expression, filter, gain, wet, dry }];
+    gain.connect(transportGate).connect(engine.getTrackMixOutput?.(id) ?? createTrackMixOutput(context,id,master));
+    return [id, { input, repeat, expression, filter, gain, transportGate, verb, wet, dry }];
   }));
   const routed = new WeakSet();
   function route(node, track) {
     if (!buses.has(track) || !node?.connect || routed.has(node)) return;
     node.disconnect(); node.connect(buses.get(track).input); routed.add(node);
   }
+  function gate(bus, value, time) {
+    const param = bus.transportGate.gain;
+    if (param.cancelAndHoldAtTime) param.cancelAndHoldAtTime(time);
+    else { param.cancelScheduledValues(time); param.setValueAtTime(param.value, time); }
+    param.linearRampToValueAtTime(value, time + .005);
+  }
+  function clearCapturedAudio(bus) {
+    bus.repeat.port.postMessage({ reset: true });
+    bus.expression.port.postMessage({ reset: true });
+    // A held reverb tail must not return when a new performance starts quickly.
+    bus.filter.disconnect(bus.verb); bus.verb.disconnect();
+    bus.verb = context.createConvolver(); bus.verb.buffer = impulse;
+    bus.filter.connect(bus.verb).connect(bus.wet);
+  }
   return {
+    silence(time = context.currentTime) {
+      for (const bus of buses.values()) {
+        gate(bus, 0, time);
+        for (const name of ['pitch', 'brake', 'chopper', 'clock']) {
+          const param = bus.expression.parameters.get(name);
+          param.cancelScheduledValues(time); param.setValueAtTime(0, time);
+        }
+        clearCapturedAudio(bus);
+      }
+    },
+    resume(time = context.currentTime) {
+      for (const bus of buses.values()) { clearCapturedAudio(bus); gate(bus, 1, time); }
+    },
     route() {
       engine.drumTrackBanks?.forEach((banks, track) => banks.forEach((bank) => bank.players.forEach((node) => route(node, track))));
       engine.drumPlayers.forEach((n) => route(n, 'drums')); route(engine.fallbackSynth, 'drums');

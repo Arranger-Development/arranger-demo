@@ -146,7 +146,7 @@ test('unreadable new storage is never silently overwritten; failed saves retain 
 test('new Jam pads trigger saved templates and replace legacy loop/record controls', () => {
   const templates={drums:[{id:'saved-drum'}]}, surface={version:5,templates,selection:{drums:'saved-drum'},page:0,pageCount:2,status:{mode:'jam'}};
   const input=createPerformanceMidiInput();
-  assert.deepEqual(input.handle([0x90,81,127],templates,surface),{type:'template',trackId:'drums',templateId:'saved-drum'});
+  assert.deepEqual(input.handle([0x90,71,127],templates,surface),{type:'template',trackId:'drums',templateId:'saved-drum'});
   assert.equal(input.handle([0x90,11,127],templates,surface).type,'repeat');
   assert.equal(input.handle([0xb0,19,127],templates,surface),null);
   const frame=createLaunchpadXPerformanceLedFrame(surface);
@@ -254,7 +254,7 @@ test('a legacy single editor draft is adopted by its track without discarding it
   assert.deepEqual(restored.current().workspace.draftsByTrack.drums.bars,draft().bars);
 });
 
-test('deletion compacts only the later visual slots across 32 columns and persists unchanged musical data',()=>{
+test('deletion preserves all surviving visual slots across 32 columns and persists unchanged musical data',()=>{
   const storage=memory(),store=createJamTemplateProjects(storage,'pop',null,100);
   const saved=[0,40,7,8,16,31,32].map(slot=>store.saveTemplate({...draft(),targetSlot:slot},`Slot ${slot}`));
   const other=store.saveTemplate({trackId:'bass',timbreId:'round-electric-bass',bars:draft().bars,targetSlot:31},'Other row');
@@ -263,7 +263,7 @@ test('deletion compacts only the later visual slots across 32 columns and persis
   store.removeTemplate('drums',saved.find(p=>p.slotIndex===7).id);
   const w=store.current().workspace;
   assert.deepEqual(w.templates.drums.map(p=>[p.name,p.slotIndex]),[
-    ['Slot 0',0],['Slot 40',11],['Slot 8',7],['Slot 16',8],['Slot 31',9],['Slot 32',10],
+    ['Slot 0',0],['Slot 40',40],['Slot 8',8],['Slot 16',16],['Slot 31',31],['Slot 32',32],
   ]);
   assert.deepEqual(w.templates.bass,[other]);
   assert.equal(w.selection.drums,selected.id);
@@ -277,20 +277,20 @@ test('deletion compacts only the later visual slots across 32 columns and persis
   assert.equal(store.removeTemplate('invalid',selected.id),false);
   assert.equal(store.getSnapshot(),before);
   store.removeTemplate('drums',saved[1].id); // Last visible item: nothing else moves.
-  assert.deepEqual(store.current().workspace.templates.drums.map(p=>p.slotIndex),[0,7,8,9,10]);
-  store.removeTemplate('drums',saved[0].id); // First item: all later items fill from zero.
-  assert.deepEqual(store.current().workspace.templates.drums.map(p=>p.slotIndex),[0,1,2,3]);
+  assert.deepEqual(store.current().workspace.templates.drums.map(p=>p.slotIndex),[0,8,16,31,32]);
+  store.removeTemplate('drums',saved[0].id); // First item: later items keep their original locations.
+  assert.deepEqual(store.current().workspace.templates.drums.map(p=>p.slotIndex),[8,16,31,32]);
 });
 
-test('compaction preserves edits, relocates occupied draft targets and rejects stale history locations',()=>{
+test('deletion preserves editor locations and blank draft targets',()=>{
   const store=createJamTemplateProjects(memory(),'pop',null,100);
   const saved=Array.from({length:3},(_,slot)=>store.saveTemplate({...draft(),targetSlot:slot},`Slot ${slot}`));
   const edited={...saved[2],editingTemplateId:saved[2].id,dirty:true,bars:structuredClone(getDialDrumPreset(0,0).bars)};
   store.setDraft(edited);
   store.removeTemplate('drums',saved[0].id);
-  assert.deepEqual(store.current().workspace.draft,{...edited,slotIndex:1});
-  store.setDraft(edited); // Undo history still has the old slot.
-  assert.equal(store.current().workspace.draft.slotIndex,1);
+  assert.deepEqual(store.current().workspace.draft,{...edited,slotIndex:2});
+  store.setDraft(edited); // Undo history still refers to the same slot.
+  assert.equal(store.current().workspace.draft.slotIndex,2);
   store.removeTemplate('drums',saved[2].id);
   const detached=store.current().workspace.draft;
   for(const field of ['id','editingTemplateId','slotIndex','targetSlot']) assert.equal(detached[field],undefined);
@@ -299,18 +299,18 @@ test('compaction preserves edits, relocates occupied draft targets and rejects s
   assert.deepEqual(store.current().workspace.draft,detached);
   const restored=store.saveTemplate(detached,'Preserved');
   assert.notEqual(restored.id,saved[2].id);
-  assert.equal(restored.slotIndex,1);
+  assert.equal(restored.slotIndex,0);
 
   const pending={...draft(),targetSlot:2,dirty:true};
   store.setDraft(pending);
   store.saveTemplate({...draft(),targetSlot:3},'Later');
   store.saveTemplate({...draft(),targetSlot:5},'Further');
   store.removeTemplate('drums',saved[1].id);
-  assert.equal(store.current().workspace.draft.targetSlot,3,'blank draft moves out of the packed suffix');
+  assert.equal(store.current().workspace.draft.targetSlot,2,'blank draft remains in its original free slot');
   assert.ok(store.saveTemplate(store.current().workspace.draft,'New draft'));
 });
 
-test('legacy projects close existing holes once, keeping notes, selected IDs and unsaved edits intact',()=>{
+test('legacy projects retain existing holes, keeping notes, selected IDs and unsaved edits intact',()=>{
   const storage=memory(),store=createJamTemplateProjects(storage,'pop',null,104);
   const firstId=store.current().id;
   const saved=[14,0,8].map(slot=>store.saveTemplate({...draft(),targetSlot:slot},`Drum ${slot}`));
@@ -331,21 +331,21 @@ test('legacy projects close existing holes once, keeping notes, selected IDs and
   const before=storage.getItem(key),restored=createJamTemplateProjects(storage,'pop',null,104);
   assert.equal(storage.getItem(key),before,'reading does not overwrite the source');
   const w=restored.current().workspace;
-  assert.deepEqual(w.templates.drums.map(p=>p.slotIndex),[2,0,1],'keep dense library order; arrange by old visual order');
-  assert.equal(w.templates.bass[0].slotIndex,0);
+  assert.deepEqual(w.templates.drums.map(p=>p.slotIndex),[14,0,8],'preserve both library order and valid visual slots');
+  assert.equal(w.templates.bass[0].slotIndex,20);
   for(const original of [...saved,bass]) {
     const migrated=w.templates[original.trackId].find(p=>p.id===original.id);
     assert.deepEqual({...migrated,slotIndex:original.slotIndex},original);
   }
   assert.equal(w.selection.drums,saved[0].id);assert.equal(w.selection.bass,bass.id);
-  assert.deepEqual(w.draft,{...editing,slotIndex:0});
-  assert.deepEqual(w.draftsByTrack.drums,{...pending,targetSlot:3});
-  assert.equal(restored.getSnapshot().projects[1].workspace.templates.drums[0].slotIndex,0);
+  assert.deepEqual(w.draft,{...editing,slotIndex:20});
+  assert.deepEqual(w.draftsByTrack.drums,{...pending,targetSlot:1});
+  assert.equal(restored.getSnapshot().projects[1].workspace.templates.drums[0].slotIndex,31);
   assert.equal(upgradeJamSlotLayout(w),w,'the migration is idempotent');
   assert.equal(restored.initialize(),true);
-  restored.saveTemplate({...draft(),targetSlot:14},'New explicit slot');
+  restored.saveTemplate({...draft(),targetSlot:15},'New explicit slot');
   const reopened=createJamTemplateProjects(storage,'pop',null,104);
-  assert.deepEqual(reopened.current().workspace.templates.drums.map(p=>p.slotIndex),[2,0,1,14],'new intentional placements survive reload');
+  assert.deepEqual(reopened.current().workspace.templates.drums.map(p=>p.slotIndex),[14,0,8,15],'new intentional placements survive reload');
   assert.equal(reopened.current().workspace.slotLayoutVersion,1);
 });
 

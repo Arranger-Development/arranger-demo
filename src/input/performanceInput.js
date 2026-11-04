@@ -1,4 +1,4 @@
-import { getJamPadBinding } from './jamPadLayout.js';
+import { getJamPadBinding, JAM_TRACK_BUTTONS } from './jamPadLayout.js';
 import { PERFORMANCE_TRACKS } from '../app/performanceModel.js';
 import { parseLaunchpadXMessage } from './launchpadXProtocol.js';
 import { isEmptyJamPhrase } from '../app/jamPhraseContent.js';
@@ -62,8 +62,9 @@ export function createPerformanceMidiInput() {
       if (held.has(token)) return null;
       let command = null;
       if (kind === 'control-change') {
-        if (JAM_TRACK_CC.includes(number)) {
-          const trackId = PERFORMANCE_TRACKS[JAM_TRACK_CC.indexOf(number)];
+        const trackId = surface.version === 5 ? JAM_TRACK_BUTTONS.find(button => button.cc === number)?.trackId
+          : PERFORMANCE_TRACKS[JAM_TRACK_CC.indexOf(number)];
+        if (trackId) {
           if (surface.version === 5) command = { type: 'toggleTrack', trackId };
           else {
             const additive = [...held.values()].some(c => c?.type === 'selectTrack');

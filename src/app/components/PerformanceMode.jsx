@@ -180,8 +180,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       void audio.startAudio();syncPhraseAudio(phrase,restart);
     }
   }
-  function openEditor(t, template = null, force = false, targetSlot = null) {
-    void force;
+  function openEditor(t, template = null, options = {}, targetSlot = null) {
     clearTimeout(midiGesture.current); endGesture();
     const current=projectStore.current().workspace;
     let phrase=template && current.templates[t].find(p=>p.id===template.id);
@@ -198,9 +197,12 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     midiInput.reset(); midiEditorVersion.current += 1;
     if (!editingTrack) captureArt();
     setEditingTrack(t);setMessage('');setEditBar(0);
+    if (options?.followPlayback) {
+      audition.follow({...phrase,editingTemplateId:phrase.id});
+      return;
+    }
     void audio.startAudio();
-    const mode = playback.isActive() && playback.hasJamPlayback() ? 'mix' : undefined;
-    audition.open({...phrase,editingTemplateId:phrase.id},{mode});
+    audition.open({...phrase,editingTemplateId:phrase.id},{mode:'mix',autoStart:true});
   }
   function finishEditor() {
     clearTimeout(midiGesture.current);endGesture();
@@ -227,8 +229,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       beginGesture('midi'); clearTimeout(midiGesture.current);
       midiGesture.current = setTimeout(endGesture, 300);
     }
-    setEditBar(0);
-    replaceDraft(next, {restart:true,gesture:true});
+    replaceDraft(next, {gesture:true});
   }
 
   function beginGesture(kind='knob') {
@@ -245,7 +246,10 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     if (next) replaceDraft(next,{record:false});
   }
   function trigger(t, id) {
-    toggleJamTemplate({projectStore,playback,audition,trackId:t,templateId:id});
+    const follow = Boolean(editingTrack);
+    if (follow) { clearTimeout(midiGesture.current); endGesture(); }
+    const triggered = toggleJamTemplate({projectStore,playback,audition,trackId:t,templateId:id});
+    if (triggered && follow) openEditor(t,{id},{followPlayback:true});
   }
   function launchColumn(columnIndex) {
     launchJamColumn({ projectStore, playback, audition, slotIndex: columnIndex, toggle: true });
@@ -378,7 +382,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       onNew={() => openProject(null)} onOpen={openProject} onRename={projectStore.rename}/>
     <div ref={workbench} className="template-jam-workbench studio-workbench">
       <main className="studio-main" aria-label="乐句工作台">
-        <JamLauncher key={project.id} active={active} templates={w.templates} columnCount={columnCount} bank={effectivePage} onBankChange={setPage} navigationRef={launcherNav}
+        <JamLauncher key={project.id} active={active} playback={playback} templates={w.templates} columnCount={columnCount} bank={effectivePage} onBankChange={setPage} navigationRef={launcherNav}
           editingTrack={editingTrack} editingTemplateId={draft?.editingTemplateId} auditioning={solo} selection={w.selection} status={status} mutedTracks={w.mutedTracks} volumes={w.volumes}
           timbres={Object.fromEntries(TRACKS.map(t => [t,instrumentTimbre(t)]))} timbreLabel={timbreLabel} artSources={ART} artNodes={artNodes}
           onOpenEditor={openEditor} onTimbreChange={changeInstrumentTimbre} onToggleMute={toggleMute} onTrigger={trigger} onLaunchColumn={launchColumn} onRemove={phrase => hasJamNotes(phrase)?setDeleteTarget(phrase):removePhrase(phrase)} onMove={moveSlots}/>
@@ -392,7 +396,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
               const position = midiInput.knobPositions[hardwareParameter], value = draft.params?.[parameter] ?? 50;
               return <RotaryKnob key={parameter} label={label} value={value} displayValue={position?.display ? position.percent : value}
                 valueDescription={position?.display ? `硬件位置 ${position.percent}%；当前乐句${label} ${value}%` : `${label} ${value}%`}
-                format={v => `${v}%`} step={parameter === 'groove' && editingTrack === 'chord' ? 20 : 25}
+                showValue={false} format={v => `${v}%`} step={parameter === 'groove' && editingTrack === 'chord' ? 20 : 25}
                 ticks={jamParameterLevels(editingTrack,parameter).map(v => ({value:v,label:v}))} spectrum showTicks={false}
                 lowLabel={lowLabel} highLabel={highLabel}
                 onBegin={() => { midiInput.useSoftwareValue(hardwareParameter); beginGesture(); }} onEnd={endGesture} onChange={v => changeParameter(parameter,v)}/>;

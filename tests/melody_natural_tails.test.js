@@ -13,6 +13,27 @@ import { usesNaturalSampleTail } from '../src/domain/notePerformances.js';
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const natural = { type: 'melody', note: 'C4', timbreId: 'piano', duration: '16n', playbackMode: 'natural' };
 
+test('authored short chord voices retain natural tails while gated chord and bass notes keep their durations',async()=>{
+  const {engine,tone}=setup();
+  const bar=Array(16).fill(null);
+  for(const step of [0,1,15])bar[step]={type:'notes',notes:['C4'],timbreId:'piano',playbackMode:'natural',
+    notePerformances:{C4:[{durationSteps:1,offsetSteps:0,velocity:.6}]}};
+  const matrix={chord:[bar]},before=structuredClone(matrix);
+  await engine.play({matrixSource:()=>matrix,totalBars:1,bpm:120});
+  for(let step=0;step<=16;step++)tone.Transport.tick(step*.125);
+  const sampler=engine.getMelodyBank('piano','chord','natural').sampler;
+  assert.deepEqual(sampler.hits.map(h=>[h.kind,h.time,h.velocity]),[
+    ['natural',0,.6],['natural',.125,.6],['natural',1.875,.6],['natural',2,.6],
+  ]);
+  assert.deepEqual(sampler.releases,[]);assert.deepEqual(matrix,before);
+  assert.equal(usesNaturalSampleTail({type:'chord',playbackMode:'gated',gateDuration:true}),false);
+  assert.equal(usesNaturalSampleTail({type:'bass',playbackMode:'natural',gateDuration:true}),false);
+  const project={matrix,totalBars:1,bpm:120,trackOrder:['chord']};
+  const gated=structuredClone(project);gated.matrix.chord[0].filter(Boolean).forEach(c=>delete c.playbackMode);
+  assert.deepEqual(createMidiFile(project),createMidiFile(gated),'sample tails never rewrite MIDI note-offs');
+  engine.stopTrackVoices('chord',2.1);assert.ok(sampler.releases.includes(2.1));
+});
+
 test('saved authored and manually edited Jam melodies keep natural tails without rewriting MIDI note lengths', () => {
   const data=new Map(),storage={getItem:key=>data.get(key),setItem:(key,value)=>data.set(key,value)};
   const store=createJamTemplateProjects(storage,'pop',null,100);

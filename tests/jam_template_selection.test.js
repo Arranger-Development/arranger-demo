@@ -21,15 +21,17 @@ test('continuous strip launches the global 32nd column atomically without changi
   assert.deepEqual(f.store.current().workspace.draft,draft);
   assert.equal(launchJamColumn({projectStore:f.store,playback:f.playback,audition:f.audition,slotIndex:32}),false);
 });
-test('column launch follows compacted slots after deletion without moving other tracks',async()=>{
+test('column launch preserves holes after deletion without moving other tracks',async()=>{
   const f=fixture();
   const later=f.store.saveTemplate({...f.drums,targetSlot:16},'Third page');
   f.store.removeTemplate('drums',f.drums.id);
   assert.equal(launchJamColumn({projectStore:f.store,playback:f.playback,audition:f.audition,columnIndex:0}),true,'bass still occupies first column');
   await ready();f.tick(0);
-  assert.equal(f.store.current().workspace.selection.drums,f.second.id);
+  assert.equal(f.store.current().workspace.selection.drums,null);
   assert.equal(launchJamColumn({projectStore:f.store,playback:f.playback,audition:f.audition,columnIndex:1}),true);
   f.tick(16);
+  assert.equal(f.store.current().workspace.selection.drums,f.second.id);
+  launchJamColumn({projectStore:f.store,playback:f.playback,audition:f.audition,slotIndex:16});f.tick(32);
   assert.equal(f.store.current().workspace.selection.drums,later.id);
   assert.equal(f.store.current().workspace.selection.bass,null);
 });
@@ -56,7 +58,7 @@ test('the current deletion reducer works with a store retained from before a cod
   f.store.removeTemplate=()=>{throw new Error('stale pre-update delete method');};
   assert.equal(remove(f,f.drums),true);
   assert.equal(f.store.current().workspace.templates.drums[0].id,f.second.id);
-  assert.equal(f.store.current().workspace.templates.drums[0].slotIndex,0);
+  assert.equal(f.store.current().workspace.templates.drums[0].slotIndex,1);
 });
 test('deleting a selected phrase removes only that audio track without replaying the retained draft',async()=>{
   const f=fixture();
@@ -65,7 +67,7 @@ test('deleting a selected phrase removes only that audio track without replaying
   f.store.setDraft({...f.drums,editingTemplateId:f.drums.id,dirty:true});
   assert.equal(remove(f,f.drums),true);
   assert.equal(f.store.current().workspace.templates.drums[0].id,f.second.id);
-  assert.equal(f.store.current().workspace.templates.drums[0].slotIndex,0);
+  assert.equal(f.store.current().workspace.templates.drums[0].slotIndex,1);
   assert.equal(f.store.current().workspace.selection.drums,null);
   const next=f.tick(4);
   assert.ok(next.matrix.drums.flat().every(cell=>cell===null));

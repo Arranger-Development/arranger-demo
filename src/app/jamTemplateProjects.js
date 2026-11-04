@@ -5,7 +5,7 @@ import { DEEP_AUTUMN_DRUMS, DEEP_AUTUMN_CHORD, DEEP_AUTUMN_BASS, DEEP_AUTUMN_MEL
 import { normalizeBpm } from '../domain/bpm.js';
 import { createClipRecord } from '../domain/clipHelpers.js';
 import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
-import { normalizeJamSlots, firstEmptyJamSlot, removeAndCompactJamSlots, compactJamSlots, moveJamSlots, relocateJamDraft, jamLauncherColumnCount } from './jamTemplateSlots.js';
+import { normalizeJamSlots, firstEmptyJamSlot, removeJamSlot, moveJamSlots, relocateJamDraft, jamLauncherColumnCount } from './jamTemplateSlots.js';
 import { isEmptyJamPhrase } from './jamPhraseContent.js';
 import { jamTrackParameters } from './jamPerformanceState.js';
 
@@ -29,7 +29,7 @@ function reconcileDraftLocation(draft, templates) {
 }
 export function upgradeJamSlotLayout(w) {
   if (w.slotLayoutVersion === 1) return w;
-  const templates = byTrack(t => compactJamSlots(w.templates[t]));
+  const templates = byTrack(t => normalizeJamSlots(w.templates[t]));
   return { ...w, slotLayoutVersion: 1, templates,
     draft: reconcileDraftLocation(w.draft, templates),
     draftsByTrack: Object.fromEntries(Object.entries(w.draftsByTrack ?? {}).map(([t, draft]) => [t, reconcileDraftLocation(draft, templates)])),
@@ -37,7 +37,7 @@ export function upgradeJamSlotLayout(w) {
 }
 export function jamTemplateRemoval(w, t, id) {
   if (!TRACKS.includes(t)) return null;
-  const row = removeAndCompactJamSlots(w.templates[t], id);
+  const row = removeJamSlot(w.templates[t], id);
   if (!row) return null;
   const templates = { ...w.templates, [t]: row };
   const reconcile = draft => w.liveEditingVersion===1 && draft?.editingTemplateId===id ? null

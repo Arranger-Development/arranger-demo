@@ -333,6 +333,10 @@ export default class AudioEngine {
     this.performanceEffects?.reset();
   }
 
+  silencePerformanceEffects(time = this.immediate()) {
+    this.performanceEffects?.silence(time);
+  }
+
   get transport() {
     return this.tone?.Transport;
   }
@@ -1679,7 +1683,11 @@ export default class AudioEngine {
     const notificationGeneration = ++this.positionNotificationGeneration;
 
     this.transportEventId = transport.scheduleRepeat((time) => {
-      if (this.playbackStartedAt === null) this.playbackStartedAt = time;
+      if (notificationGeneration !== this.positionNotificationGeneration) return;
+      if (this.playbackStartedAt === null) {
+        this.playbackStartedAt = time;
+        this.performanceEffects?.resume?.(time);
+      }
       const nextSnapshot = this.playbackSource?.(this.transportAbsoluteStep, time);
       if (nextSnapshot?.done) {
         void this.stop(time);

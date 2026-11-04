@@ -59,7 +59,7 @@ test('authored pitched events retain exact timing and durations when using gated
     chordSamplerFactory:createVolumeAwareChordSamplerFactory(tone.calls),samplerFactory:createVolumeAwareSamplerFactory(tone.calls) });
   const bar = cell => [cell,...Array(15).fill(null)];
   const matrix = {
-    chord: [bar({ type:'notes',notes:['C4'],timbreId:'piano',playbackMode:'natural',
+    chord: [bar({ type:'notes',notes:['C4'],timbreId:'piano',
       notePerformances:{C4:[{offsetSteps:.125,durationSteps:1.75,velocity:.5},{offsetSteps:.625,durationSteps:.5,velocity:.7}]}})],
     bass: [bar({ type:'bass',note:'C1',notePerformances:{C1:[{offsetSteps:.375,durationSteps:2.25,velocity:.6}]}})],
     melody: [bar({type:'melody',note:'G4',timbreId:'piano',notePerformances:{G4:[{offsetSteps:.25,durationSteps:.875,velocity:.8}]}})],
@@ -72,13 +72,13 @@ test('authored pitched events retain exact timing and durations when using gated
   await engine.stop();
 });
 
-test('natural sample banks preserve legacy tails but honor authored gate duration and velocity', () => {
+test('natural chord sample banks preserve tails and velocity even with authored note durations', () => {
   const engine=new AudioEngine({tone:createFakeTone()});
   const calls=[];
   engine.getMelodyBank=()=>({ready:true,sampler:{volume:{value:0},triggerAttack:(...args)=>calls.push(['natural',...args]),triggerAttackRelease:(...args)=>calls.push(['gated',...args])}});
   engine.triggerMelodyBankEvent({trackId:'chord',note:'C4',timbreId:'piano',playbackMode:'natural',durationSteps:1},3,120);
   engine.triggerMelodyBankEvent({trackId:'chord',note:'E4',timbreId:'piano',playbackMode:'natural',durationSteps:1.5,gateDuration:true,velocity:.65},4,120);
-  assert.deepEqual(calls,[['natural','C4',3,1],['gated','E4',.1875,4,.65]]);
+  assert.deepEqual(calls,[['natural','C4',3,1],['natural','E4',4,.65]]);
 });
 
 test('live preview length changes keep absolute phase and progress waits for the audible boundary', async () => {

@@ -59,6 +59,15 @@ test('manual edits and undo preserve phase, full template changes restart even w
   assert.equal(f.state.trackPositions.chord.localStep,0);assert.equal(f.state.trackPositions.chord.bar,0);
 });
 
+for(const track of tracks)test(`${track}: solo macro updates preserve the audible loop origin and local step`,async()=>{
+  const f=fixture();f.editor.open(f.drafts[track]);await ready();f.tick(0);f.tick(23);
+  const changed=structuredClone(f.drafts[track]);changed.bars=changed.bars.slice(0,1);
+  f.editor.update(changed);f.tick(24);
+  assert.equal(f.state.trackPositions[track].startStep,0);
+  assert.equal(f.state.trackPositions[track].localStep,24);
+  assert.equal(f.state.trackPositions[track].step,8);assert.equal(f.plays,1);
+});
+
 test('real imported chord variants are heard from their first bar after a same-ID template switch',async()=>{
   for(const [strength,groove] of [[0,20],[25,0]]) {
     const f=fixture();f.editor.open(f.drafts.chord);await ready();f.tick(0);f.tick(23);
