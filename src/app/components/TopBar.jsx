@@ -170,7 +170,7 @@ function TopBar({
     >
       <div className="brand">
         <div className="name">{onHome ? <button className="brand-home" type="button" aria-label="返回首页" title="返回首页" disabled={homeLocked} onClick={onHome}>Project Arranger</button> : 'Project Arranger'}</div>
-        <div className="project">v0.4.1</div>
+        <div className="project">v0.4.4</div>
       </div>
 
       <button className="btn-new" aria-label="New song" title="New song" type="button" onClick={onNewSong}>

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import './templateJam.css';
 
-export default function RotaryKnob({ label, labelAccessory, ticks, value, displayValue = value, valueDescription, min = 0, max = 100, step = 25, onChange, onBegin, onEnd, disabled = false, format = String, spectrum = false, showTicks = true, lowLabel, highLabel }) {
+export default function RotaryKnob({ label, labelAccessory, ticks, value, displayValue = value, valueDescription, min = 0, max = 100, step = 25, onChange, onBegin, onEnd, disabled = false, format = String, spectrum = false, showTicks = true, showValue = true, lowLabel, highLabel }) {
   const drag = useRef(null), finishRef = useRef(onEnd);
   useEffect(() => { finishRef.current = onEnd; }, [onEnd]);
   const finish = () => { if (drag.current) { drag.current = null; finishRef.current?.(); } };
@@ -24,7 +24,7 @@ export default function RotaryKnob({ label, labelAccessory, ticks, value, displa
         const delta = { ArrowUp: step, ArrowRight: step, ArrowDown: -step, ArrowLeft: -step, PageUp: step * 4, PageDown: -step * 4 }[e.key];
         if (delta !== undefined || ['Home', 'End'].includes(e.key)) { e.preventDefault(); e.stopPropagation(); onBegin?.(); update(e.key === 'Home' ? min : e.key === 'End' ? max : displayValue + delta); onEnd?.(); }
       }}>{spectrum && <span className="rotary-spectrum-stops" aria-hidden="true">{tickMarks.map(tick => <span className="rotary-spectrum-stop" key={tick.value} data-active={value === tick.value} style={{ '--tick-angle': `${-135 + (tick.value - min) / (max - min) * 270}deg` }} />)}</span>}<span className="rotary-face"><span className="rotary-marker" /></span></div>
-    <output className="rotary-value">{format(displayValue)}</output>
+    {showValue && <output className="rotary-value">{format(displayValue)}</output>}
     {showTicks && <div className="rotary-ticks" aria-hidden="true">{tickMarks.map(tick => <span key={tick.value} data-active={value === tick.value}>{tick.label}</span>)}</div>}
     {(lowLabel || highLabel) && <div className="rotary-guide"><span>{lowLabel}</span><span>{highLabel}</span></div>}
   </div>;

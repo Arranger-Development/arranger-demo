@@ -21,7 +21,9 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
   const makeSource = () => ({ matrix: current.snapshot.matrix, totalBars: current.snapshot.totalBars, phraseBars: current.snapshot.phraseBars, stepOffset: startStep });
   function stop() {
     generation++; automation?.stop(); recordingStopAt = null; mode = 'stopped'; loading = finishing = false; current = pending = audible = queuedRequest = null; jam = null; sequence = []; lastAudibleStep = -1;
-    void audio.stop(); audio.stopAllVoices(); audio.resetPerformanceEffects?.(); emit();
+    const time = audio.immediate?.();
+    audio.silencePerformanceEffects?.(time);
+    void audio.stop(time); audio.stopAllVoices(time); audio.resetPerformanceEffects?.(); emit();
   }
   function change(target, absoluteStep) {
     // Sequence entries were created up front; an edited earlier entry may have a

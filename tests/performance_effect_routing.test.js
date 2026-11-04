@@ -5,7 +5,7 @@ import { createPerformanceEffects } from '../src/audio/performanceEffects.js';
 import { createMasterOutput } from '../src/audio/masterOutput.js';
 
 const param = () => ({ value: 0, setTargetAtTime(value) { this.value = value; }, setValueAtTime(value) { this.value = value; }, linearRampToValueAtTime(value,time) { this.ramp={value,time}; }, cancelScheduledValues(time) { this.cancelledAt=time; }, cancelAndHoldAtTime(time) { this.cancelledAt=time; } });
-const node = () => ({ outputs: [], gain: param(), frequency: param(), Q: param(), connect(target) { this.outputs.push(target); return target; }, disconnect() { this.outputs = []; } });
+const node = () => ({ outputs: [], gain: param(), frequency: param(), Q: param(), connect(target) { this.outputs.push(target); return target; }, disconnect(target) { this.outputs = target ? this.outputs.filter(n=>n!==target) : []; } });
 
 test('each audible track routes through its own repeat/filter/gain and only the target changes', async (t) => {
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'AudioWorkletNode');
@@ -31,7 +31,8 @@ test('each audible track routes through its own repeat/filter/gain and only the 
   assert.equal(repeats[1].outputs[0],expressions[1]);
   assert.equal(expressions[1].outputs[0],filters[1]);
   const trackGains = filters.map(filter => filter.outputs[0].outputs[0]);
-  const balances=trackGains.map(gain=>gain.outputs[0]);
+  const gates=trackGains.map(gain=>gain.outputs[0]);
+  const balances=gates.map(gain=>gain.outputs[0]);
   const master = balances[0].outputs[0].outputs[0];
   assert.equal(master, sharedMaster, 'Jam reuses one master after independent track dynamics');
   assert.ok(balances.every(balance=>balance.outputs.length===1&&balance.outputs[0].outputs[0]===master));
@@ -65,4 +66,14 @@ test('each audible track routes through its own repeat/filter/gain and only the 
   assert.deepEqual(repeats.map((r,i)=>r.messages.length-messagesBefore[i]),[0,0,1,0]);
   assert.equal(expressions[2].parameters.get('pitch').value,-7,'track release preserves effect settings');
   effects.reset(); assert.ok(repeats.every(r=>r.messages.at(-1).reset));
+  const mix = trackGains.map(g=>g.gain.value), oldVerbs=filters.map(f=>f.outputs[1]);
+  effects.silence(6);
+  assert.ok(gates.every(g=>g.gain.ramp.value===0&&g.gain.ramp.time===6.005));
+  assert.deepEqual(trackGains.map(g=>g.gain.value),mix,'transport silence leaves user faders intact');
+  assert.ok(expressions.every(e=>['pitch','brake','chopper','clock'].every(p=>e.parameters.get(p).cancelledAt===6&&e.parameters.get(p).value===0)));
+  assert.ok(repeats.every(r=>r.messages.at(-1).reset));
+  assert.ok(oldVerbs.every((verb,i)=>verb.outputs.length===0&&filters[i].outputs[1]!==verb),'old convolution tails cannot return on restart');
+  effects.resume(6.1);
+  assert.ok(gates.every(g=>g.gain.ramp.value===1&&Math.abs(g.gain.ramp.time-6.105)<1e-10));
+  assert.deepEqual(trackGains.map(g=>g.gain.value),mix);
 });

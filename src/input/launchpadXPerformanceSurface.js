@@ -1,4 +1,4 @@
-import { JAM_TEMPLATE_PADS, JAM_COLUMN_PADS, JAM_MOMENTARY_PADS } from './jamPadLayout.js';
+import { JAM_TEMPLATE_PADS, JAM_COLUMN_PADS, JAM_MOMENTARY_PADS, JAM_TRACK_BUTTONS } from './jamPadLayout.js';
 import { PERFORMANCE_TRACKS, hasSelection } from '../app/performanceModel.js';
 import { jamColumnState, jamTemplateState } from '../app/jamPerformanceState.js';
 import { JAM_VOLUME_STEPS, JAM_FILTER_STEPS, JAM_TRACK_CC, JAM_PITCH_STEPS, JAM_REVERB_STEPS, nearestJamStep } from './performanceInput.js';
@@ -18,7 +18,7 @@ function fillFixedJamPads(surface, notes, active) {
       : template && ('playingPhraseIds' in status || 'queuedPhraseIds' in status)
         ? jamTemplateState(status, pad.trackId, template.id) : selected ? 'playing' : 'idle';
     // Palette entries run from dim to bright, preserving the established track hues.
-    notes.set(pad.note, !template ? 0 : state === 'queued'
+    notes.set(pad.note, !template ? colors[0] : state === 'queued'
       ? colors[beatPhase >= .5 ? 2 : 1] : state === 'playing' ? colors[2] : colors[1]);
   }
   const hasTargets = selectedTracks.length > 0;
@@ -45,11 +45,12 @@ export function createLaunchpadXPerformanceLedFrame(surface = {}, now = 0) {
     if (version !== 5) templates[track]?.slice(0, 8).forEach((phrase, index) => {
       if (phrase) notes.set((8 - row) * 10 + index + 1, TRACK_COLORS[track][drafts[editingId]?.selection[track] === phrase.id ? 2 : 0]);
     });
-    controls.set(JAM_TRACK_CC[row], TRACK_COLORS[track][selectedTracks.includes(track) ? 2 : 0]);
+    const cc = version === 5 ? JAM_TRACK_BUTTONS.find(button => button.trackId === track).cc : JAM_TRACK_CC[row];
+    controls.set(cc, TRACK_COLORS[track][selectedTracks.includes(track) ? 2 : 0]);
   });
   if (version === 5) {
     fillFixedJamPads(surface, notes, active);
-    [49, 39, 29].forEach(cc => controls.set(cc, 0));
+    [89, 39, 29].forEach(cc => controls.set(cc, 0));
   } else {
     const color = TRACK_COLORS[selectedTrack] ?? TRACK_COLORS.drums;
     const hasTargets = selectedTracks.length > 0;

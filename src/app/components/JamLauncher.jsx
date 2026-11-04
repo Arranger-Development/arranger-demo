@@ -1,5 +1,5 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Play, Pause, Volume2, VolumeX } from 'lucide-react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Play, Pause, Volume2, VolumeX } from 'lucide-react';
 import JamTemplateCard from './JamTemplateCard.jsx';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS } from '../performanceModel.js';
 import { TIMBRE_OPTIONS } from '../performanceSession.js';
@@ -10,10 +10,9 @@ import useJamReorder from './useJamReorder.js';
 import { isEmptyJamPhrase } from '../jamPhraseContent.js';
 
 export default function JamLauncher({ active, templates, columnCount, bank, onBankChange, navigationRef,
-  editingTrack, editingTemplateId, draftsByTrack = {}, auditioning = false, selection, status, mutedTracks, volumes, timbres, timbreLabel, artSources, artNodes,
+  editingTrack, editingTemplateId, draftsByTrack = {}, auditioning = false, playback, selection, status, mutedTracks, volumes, timbres, timbreLabel, artSources, artNodes,
   onOpenEditor, onTimbreChange, onToggleMute, onTrigger, onLaunchColumn, onRemove, onRemoveDraft, onMove }) {
   const scrollRef = useRef(null);
-  const hintId = useId();
   const [edges, setEdges] = useState({ left: false, right: false });
   const columns = useMemo(() => Object.fromEntries(TRACKS.map(t => [t, jamTemplateRange(templates[t], 0, columnCount)])), [templates, columnCount]);
   const [controller] = useState(() => {
@@ -61,11 +60,10 @@ export default function JamLauncher({ active, templates, columnCount, bank, onBa
   }, [controller, navigationRef]);
   return <section className="studio-launcher" aria-label="乐句浏览" data-left={edges.left} data-right={edges.right}>
     <div className="studio-strip-toolbar">
-      <div><span id={hintId}>拖动排序 · 自动保留 · 空格暂停/继续 · Esc静音</span><span className="studio-bank-range" aria-label="快捷键与控制器对应列">快捷键 / 控制器 {bank * 8 + 1}–{bank * 8 + 8}</span></div>
       <button type="button" aria-label="向左滚动乐句" title="向左滚动八列" disabled={!edges.left} onClick={() => controller.moveBy(-8)}><ChevronLeft size={16}/></button>
       <button type="button" aria-label="向右滚动乐句" title="向右滚动八列" disabled={!edges.right} onClick={() => controller.moveBy(8)}><ChevronRight size={16}/></button>
     </div>
-    <div className="studio-strip-frame"><div ref={scrollRef} className="studio-launcher-scroll" role="region" aria-label="连续乐句列表" aria-describedby={hintId} tabIndex={0}
+    <div className="studio-strip-frame"><div ref={scrollRef} className="studio-launcher-scroll" role="region" aria-label="连续乐句列表" tabIndex={0}
       style={{ '--jam-columns': columnCount, '--jam-gap': `${JAM_STRIP_GAP}px` }} data-dragging={Boolean(drag)}
       {...reorder.handlers}
       onScroll={() => { controller.scroll(); reorder.refresh(); }}
@@ -90,7 +88,7 @@ export default function JamLauncher({ active, templates, columnCount, bank, onBa
             <span className="studio-instrument-art" data-art-track={t} ref={node => { artNodes.current[t] = node; }}><img src={artSources[t]} alt="" draggable={false} decoding="async"/></span>
           </button><div className="studio-instrument-label"><strong>{LABELS[t]}</strong><span className="studio-editing-state">{editingTrack === t ? '编辑中' : ''}</span><label className="studio-instrument-timbre" title="切换音色"><select aria-label={`${LABELS[t]}音色`} value={timbres[t]} onChange={e => onTimbreChange(t,e.target.value)}>{TIMBRE_OPTIONS[t].map(id => <option key={id} value={id}>{timbreLabel(id)}</option>)}</select></label></div><button type="button" className="studio-track-mute" aria-label={`${mutedTracks[t] ? '取消静音' : '静音'}${LABELS[t]}`} aria-pressed={mutedTracks[t]} onClick={() => onToggleMute(t)} title={mutedTracks[t] ? '取消静音' : '静音'}>{mutedTracks[t] ? <VolumeX size={14}/> : <Volume2 size={14}/>}</button></div>
           <div className="studio-template-list" aria-label={`${LABELS[t]}已保存乐句`}>{columns[t].map((p, index) => p
-            ? <JamTemplateCard key={p.id} template={{...p,name:p.name || `${LABELS[t]}乐句`}} isEmpty={isEmptyJamPhrase(p)} index={index} reorderProps={reorder.cellProps(t,index)} selected={selection[t] === p.id}
+            ? <JamTemplateCard key={p.id} template={{...p,name:p.name || `${LABELS[t]}乐句`}} playback={playback} isEmpty={isEmptyJamPhrase(p)} index={index} reorderProps={reorder.cellProps(t,index)} selected={selection[t] === p.id}
               canCancel={!auditioning && status.playingPhraseIds?.[t] === p.id && status.mode !== 'stopped' && !mutedTracks[t] && volumes[t] > -24}
               state={isEmptyJamPhrase(p) || mutedTracks[t] || volumes[t] <= -24 ? 'idle' : jamTemplateState(status,t,p.id)} editing={editingTemplateId === p.id}
               onSelect={() => isEmptyJamPhrase(p)?onOpenEditor(t,p):onTrigger(t,p.id)} onEdit={() => onOpenEditor(t,p)} onRemove={() => onRemove(p)}/>
@@ -98,7 +96,7 @@ export default function JamLauncher({ active, templates, columnCount, bank, onBa
             ? <JamTemplateCard key={`draft-${index}`} isDraft template={{...draftsByTrack[t],name:draftsByTrack[t].name || `${LABELS[t]}草稿`}} index={index}
               editing={editingTrack === t} reorderProps={reorder.cellProps(t,index)}
               onSelect={() => onOpenEditor(t,null,false,index)} onEdit={() => onOpenEditor(t,null,false,index)} onRemove={() => onRemoveDraft(t,draftsByTrack[t])}/>
-            : <button type="button" key={`empty-${index}`} className="studio-template studio-template-empty" data-slot-index={index} {...reorder.cellProps(t,index)} aria-label={`新建${LABELS[t]}乐句，第 ${index + 1} 格`} onClick={() => onOpenEditor(t,null,false,index)}><Plus size={20} aria-hidden="true"/></button>)}</div>
+            : <button type="button" key={`empty-${index}`} className="studio-template studio-template-empty" data-slot-index={index} {...reorder.cellProps(t,index)} aria-label={`新建${LABELS[t]}乐句，第 ${index + 1} 格`} onClick={() => onOpenEditor(t,null,false,index)}/>)}</div>
         </section>)}
       </div>
     </div></div>
@@ -110,4 +108,4 @@ export default function JamLauncher({ active, templates, columnCount, bank, onBa
     <span className="studio-reorder-announcement" role="status" aria-live="polite">{drag ? drag.valid ? `移动到第 ${drag.to+1} ${drag.trackId ? '格' : '列'}` : '请移回原轨道或列区域，松手取消' : ''}</span>
   </section>;
 }
-void [ChevronLeft, ChevronRight, Plus, Play, Pause, Volume2, VolumeX, JamTemplateCard];
+void [ChevronLeft, ChevronRight, Play, Pause, Volume2, VolumeX, JamTemplateCard];

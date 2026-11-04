@@ -63,7 +63,7 @@ test('all 55 authored chord and melody phrases retain source MIDI and feel throu
   }
 });
 
-test('slots accept 9/16/17 templates, compact after deletion and survive project reload', () => {
+test('slots accept 9/16/17 templates, retain holes after deletion and survive project reload', () => {
   const data=new Map(),storage={getItem:k=>data.get(k),setItem:(k,v)=>data.set(k,v)};
   const store=createJamTemplateProjects(storage,'pop',null,100);
   const draft=blankJamDraft('bass','round-electric-bass',0);
@@ -75,17 +75,17 @@ test('slots accept 9/16/17 templates, compact after deletion and survive project
   }
   store.removeTemplate('bass',saved[2].id);
   let row=store.current().workspace.templates.bass;
-  assert.equal(row.length,16); assert.equal(jamTemplatePage(row)[2].id,saved[3].id);
-  assert.equal(jamTemplatePage(row,1)[7].id,saved[16].id);
-  assert.equal(jamTemplatePage(row,2)[0],null);
-  assert.equal(store.saveTemplate({...draft,targetSlot:2},'Occupied'),null);
-  const replacement=store.saveTemplate({...draft,targetSlot:16},'Append');
-  assert.equal(replacement.slotIndex,16);
+  assert.equal(row.length,16); assert.equal(jamTemplatePage(row)[2],null);
+  assert.equal(jamTemplatePage(row,1)[7].id,saved[15].id);
+  assert.equal(jamTemplatePage(row,2)[0].id,saved[16].id);
+  assert.equal(store.saveTemplate({...draft,targetSlot:3},'Occupied'),null);
+  const replacement=store.saveTemplate({...draft,targetSlot:2},'Fill hole');
+  assert.equal(replacement.slotIndex,2);
   const reload=createJamTemplateProjects(storage,'pop',null,100);
   row=reload.current().workspace.templates.bass;
-  assert.equal(jamTemplatePage(row,2)[0].id,replacement.id);
-  assert.equal(jamTemplatePage(row,1)[7].id,saved[16].id);
-  assert.equal(reload.saveTemplate({...saved[16],bars:draft.bars},'Updated',saved[16].id).slotIndex,15);
+  assert.equal(jamTemplatePage(row)[2].id,replacement.id);
+  assert.equal(jamTemplatePage(row,1)[7].id,saved[15].id);
+  assert.equal(reload.saveTemplate({...saved[16],bars:draft.bars},'Updated',saved[16].id).slotIndex,16);
   assert.deepEqual(normalizeJamSlots([{id:'old-a'},{id:'old-b'}]).map(p=>p.slotIndex),[0,1]);
 });
 

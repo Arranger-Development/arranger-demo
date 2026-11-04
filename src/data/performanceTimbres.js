@@ -6,7 +6,7 @@ export const DEEP_AUTUMN_BASS = 'deep-autumn-bass';
 export const DEEP_AUTUMN_MELODY = 'deep-autumn-melody';
 export const PERFORMANCE_SAMPLE_BANKS = Object.freeze({
   [DEEP_AUTUMN_DRUMS]: {
-    id: DEEP_AUTUMN_DRUMS, track: 'drums', label: '深秋鼓组', gainDb: -7,
+    id: DEEP_AUTUMN_DRUMS, track: 'drums', label: '深秋鼓组', gainDb: -5.5,
     sampleFiles: Object.fromEntries(['Kick', 'Snare', 'Hihat'].map((name) => [
       name.toLowerCase(), `samples/DeepAutumn/Drums/${name}.wav`,
     ])),
@@ -14,7 +14,7 @@ export const PERFORMANCE_SAMPLE_BANKS = Object.freeze({
   [DEEP_AUTUMN_CHORD]: {
     // These quiet piano samples need source compensation before the user fader.
     // The shared master output provides mix headroom and peak protection.
-    id: DEEP_AUTUMN_CHORD, track: 'chord', label: '深秋和弦', gainDb: 4,
+    id: DEEP_AUTUMN_CHORD, track: 'chord', label: '深秋和弦', gainDb: 2.5,
     // These piano files use Ableton octave labels; Tone.js roots are one higher.
     sampleFiles: Object.fromEntries([2, 3, 4].flatMap((octave) => (
       ['C#', 'D#', 'E', 'F#', 'G#', 'A', 'B'].map((root) => [
@@ -32,7 +32,7 @@ export const PERFORMANCE_SAMPLE_BANKS = Object.freeze({
     ].map(([note,file]) => [note, `samples/DeepAutumn/Bass/${file}.wav`])),
   },
   [DEEP_AUTUMN_MELODY]: {
-    id: DEEP_AUTUMN_MELODY, track: 'melody', label: '深秋旋律', gainDb: 2,
+    id: DEEP_AUTUMN_MELODY, track: 'melody', label: '深秋旋律', gainDb: 0.5,
     // Match the user's original sample octaves to the visible Ableton labels:
     // UI E4 is stored as E5, and must play E4.wav unchanged. These are playback
     // bindings, not declarations that E4.wav physically has an E5 fundamental.

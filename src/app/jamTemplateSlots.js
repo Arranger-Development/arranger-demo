@@ -46,15 +46,12 @@ export function compactJamSlots(templates) {
   return row.map(p => ({ ...p, slotIndex: positions.get(p.id) }));
 }
 
-// Only the deleted row's suffix moves; earlier intentional gaps stay available.
-export function removeAndCompactJamSlots(templates, id) {
+// Deleting a phrase never moves another saved phrase or an intentional hole.
+export function removeJamSlot(templates, id) {
   const row = normalizeJamSlots(templates);
   const removed = row.find(template => template.id === id);
   if (!removed) return null;
-  const positions = new Map(row.filter(p => p.slotIndex > removed.slotIndex)
-    .sort((a, b) => a.slotIndex - b.slotIndex)
-    .map((p, index) => [p.id, removed.slotIndex + index]));
-  return row.filter(p => p.id !== id).map(p => positions.has(p.id) ? { ...p, slotIndex: positions.get(p.id) } : p);
+  return row.filter(p => p.id !== id);
 }
 
 // A permutation of slots, including holes. The destination is the final index.

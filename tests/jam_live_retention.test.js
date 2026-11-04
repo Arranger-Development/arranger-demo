@@ -111,15 +111,15 @@ test('each phrase retains only the newest 50 undo records',()=>{
   assert.equal(f.read(pid,p.id).name,'n14');assert.equal(f.history.take(pid,f.read(pid,p.id)),null);
 });
 
-test('empty retained blocks stay silent, dark and absent from Creation; pads reopen editing while keyboard stays inert',()=>{
+test('empty retained blocks stay silent, dim and absent from Creation; pads reopen editing while keyboard stays inert',()=>{
   const storage=memory(),store=makeStore(storage),empty=store.commitPhraseEdit(blank(0,'drums'),{create:true}),full=store.commitPhraseEdit({...blank(1,'drums'),bars:[[{instruments:['kick']},...Array(15).fill(null)]]},{create:true});
   const templates={drums:[empty,full]},surface={version:5,manualSave:false,canSave:false,storageError:true,templates,status:{mode:'jam',playingPhraseIds:{drums:empty.id}},selection:{drums:empty.id}};
   assert.equal(mapPerformanceKeyboard({type:'keydown',code:'Digit1'},templates),null);
   assert.equal(mapPerformanceKeyboard({type:'keydown',code:'Digit2'},templates).templateId,full.id);
-  const input=createPerformanceMidiInput();assert.deepEqual(input.handle([0x90,81,127],templates,surface),{type:'editPhrase',trackId:'drums',slotIndex:0});
+  const input=createPerformanceMidiInput();assert.deepEqual(input.handle([0x90,71,127],templates,surface),{type:'editPhrase',trackId:'drums',slotIndex:0});
   assert.equal(input.handle([0xb0,97,127],templates,surface),null);
-  const frame=createLaunchpadXPerformanceLedFrame(surface);assert.equal(frame.find(m=>m[0]===0x90&&m[1]===81)[2],0);
-  assert.notEqual(frame.find(m=>m[0]===0x90&&m[1]===82)[2],0);assert.equal(frame.find(m=>m[0]===0xb0&&m[1]===97)[2],0);
+  const frame=createLaunchpadXPerformanceLedFrame(surface);assert.equal(frame.find(m=>m[0]===0x90&&m[1]===71)[2],19);
+  assert.notEqual(frame.find(m=>m[0]===0x90&&m[1]===72)[2],0);assert.equal(frame.find(m=>m[0]===0xb0&&m[1]===97)[2],0);
   assert.deepEqual(sortUserTemplatesForCreation([empty,full]).map(p=>p.id),[full.id]);
   const w={...store.current().workspace,selection:{drums:empty.id}};assert.equal(jamCombinationSnapshot(w),null);
   assert.equal(launchJamColumn({projectStore:store,playback:{},audition:{},slotIndex:0}),false);

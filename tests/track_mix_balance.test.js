@@ -37,7 +37,7 @@ test('entering Jam reuses creation track dynamics exactly once and fader/mute st
   const bassInput=engine.bassSampler.outputs[0];
   const bassFader=bassInput.outputs[0].outputs[0].outputs[0].outputs[0].outputs[0];
   assert.equal(bassFader.gain.value,0);
-  assert.equal(bassFader.outputs[0],engine.getTrackMixOutput('bass'));
+  assert.equal(bassFader.outputs[0].outputs[0],engine.getTrackMixOutput('bass'));
   assert.notEqual(engine.getTrackMixOutput('bass'),engine.getTrackMixOutput('chord'));
 });
 

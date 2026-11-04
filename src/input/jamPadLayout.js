@@ -1,14 +1,16 @@
 // Physical coordinates shared by input decoding and LED output (Launchpad X).
 const phraseRows = [
-  ['drums', 8], ['chord', 7], ['bass', 6], ['melody', 5],
+  ['drums', 7], ['chord', 6], ['bass', 5], ['melody', 4],
 ];
+export const JAM_TRACK_BUTTONS = Object.freeze(phraseRows.map(([trackId, row]) =>
+  Object.freeze({ trackId, cc: row * 10 + 9 })));
 export const JAM_TEMPLATE_PADS = Object.freeze(phraseRows.flatMap(([trackId, row]) =>
   Array.from({ length: 8 }, (_, index) => Object.freeze({
     note: row * 10 + index + 1,
     trackId, index,
   }))));
 export const JAM_COLUMN_PADS = Object.freeze(Array.from({ length: 8 }, (_, index) =>
-  Object.freeze({ note: 41 + index, type: 'launchColumn', index })));
+  Object.freeze({ note: 81 + index, type: 'launchColumn', index })));
 export const JAM_MOMENTARY_PADS = Object.freeze([
   ...[4, 8, 16].map((division, index) => Object.freeze({ note: 11 + index, type: 'repeat', division })),
   ...[4, 8, 16, 32].map((value, index) => Object.freeze({ note: 14 + index, type: 'chopper', value })),
