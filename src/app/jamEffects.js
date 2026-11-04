@@ -1,6 +1,7 @@
 import { PERFORMANCE_TRACKS } from './performanceModel.js';
 import { createRepeatPadController } from './repeatPadController.js';
 import { EFFECT_DEFAULTS, EFFECT_FIELDS, MOMENTARY_EFFECTS, effectValues } from './jamEffectParameters.js';
+import { HELD_EDIT_EFFECTS } from './jamHeldEdits.js';
 
 const defaults = value => Object.fromEntries(PERFORMANCE_TRACKS.map(t => [t, value]));
 export function createJamEffects(audio) {
@@ -8,6 +9,7 @@ export function createJamEffects(audio) {
     ...Object.fromEntries(Object.entries(EFFECT_DEFAULTS).map(([p,v]) => [EFFECT_FIELDS[p], defaults(v)])) };
   const manual = Object.fromEntries(PERFORMANCE_TRACKS.map(t => [t, { ...EFFECT_DEFAULTS, muted: false }]));
   const owners = new Map(), listeners = new Set(); let onManual = () => {};
+  let holdEditHandler = null;
   const notify = () => listeners.forEach(fn => fn());
   const display = (track, parameter, value) => {
     const field = EFFECT_FIELDS[parameter];
@@ -17,7 +19,16 @@ export function createJamEffects(audio) {
   };
   function apply(track, parameter, value, bpm) {
     onManual(track, parameter, value);
-    audio.setPerformanceEffect(track, effectValues(parameter, value, bpm));
+    const values = effectValues(parameter,value,bpm);
+    let deferred = false;
+    if (HELD_EDIT_EFFECTS.includes(parameter)) {
+      if (value === EFFECT_DEFAULTS[parameter]) deferred = holdEditHandler?.release(track,parameter,values);
+      else {
+        holdEditHandler?.press(track,parameter);
+        audio.cancelPerformanceEffect?.(track,parameter);
+      }
+    }
+    if (!deferred) audio.setPerformanceEffect(track,values);
     display(track, parameter, value);
   }
   const repeat = createRepeatPadController(values => {
@@ -41,6 +52,7 @@ export function createJamEffects(audio) {
   return {
     repeat, subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }, getSnapshot: () => state,
     onManual(fn) { onManual = fn; }, display,
+    setHoldEditHandler(handler) { holdEditHandler = handler; },
     getManual: track => ({ ...manual[track] }),
     isHeld: (track, parameter) => held(parameter) && (parameter === 'repeat' ? state.selectedTracks : owners.get(parameter).tracks).includes(track),
     resetHolds,

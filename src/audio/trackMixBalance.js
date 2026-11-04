@@ -4,8 +4,8 @@ import { getTrackTypeFromInstanceId } from '../domain/trackInstances.js';
 export const TRACK_MIX_DYNAMICS = Object.freeze({
   drums: Object.freeze({ threshold:-14, knee:12, ratio:2.5, attack:.015, release:.12, outputTrimDb:-3 }),
   chord: Object.freeze({ threshold:-14, knee:12, ratio:1.6, attack:.02, release:.18, outputTrimDb:0 }),
-  bass: Object.freeze({ threshold:-18, knee:12, ratio:4, attack:.012, release:.15, outputTrimDb:-8 }),
-  melody: Object.freeze({ threshold:-18, knee:12, ratio:2, attack:.012, release:.18, outputTrimDb:-1 }),
+  bass: Object.freeze({ threshold:-18, knee:12, ratio:4, attack:.012, release:.15, outputTrimDb:-7 }),
+  melody: Object.freeze({ threshold:-18, knee:12, ratio:2, attack:.012, release:.18, outputTrimDb:0 }),
 });
 const outputs=new WeakMap();
 

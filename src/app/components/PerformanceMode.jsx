@@ -10,6 +10,7 @@ import DrumStepGrid from './DrumStepGrid.jsx';
 import JamLauncher from './JamLauncher.jsx';
 import JamChordEditor from './JamChordEditor.jsx';
 import { createJamAudition } from '../jamAudition.js';
+import { createJamHeldEdits } from '../jamHeldEdits.js';
 import { createJamPhraseHistory } from '../jamPhraseHistory.js';
 import { toggleJamTemplate, launchJamColumn, deleteJamTemplate } from '../jamTemplateSelection.js';
 import { jamTrackParameters, jamParameterLevels, jamTrackKnobs } from '../jamPerformanceState.js';
@@ -55,16 +56,19 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const [playback] = useState(() => createSessionPlayback(audio, setStatus));
   const [editingTrack, setEditingTrack] = useState(null);
   const [solo, setSolo] = useState(false), [message, setMessage] = useState('');
+  function retainMixChange({selection,trackId,restoreSound}) {
+    const current=projectStore.current().workspace;
+    projectStore.patch({selection,...(restoreSound ? {
+      mutedTracks:{...current.mutedTracks,[trackId]:false},
+      volumes:{...current.volumes,[trackId]:current.volumes[trackId]<=-24?0:current.volumes[trackId]},
+    } : {})});
+  }
   const [audition] = useState(() => createJamAudition(playback, {
     readWorkspace:() => projectStore.current().workspace, readDraft:() => projectStore.current().workspace.draft, onSoloChange:setSolo,
-    onMixChange({selection,trackId,restoreSound}) {
-      const current=projectStore.current().workspace;
-      projectStore.patch({selection,...(restoreSound ? {
-        mutedTracks:{...current.mutedTracks,[trackId]:false},
-        volumes:{...current.volumes,[trackId]:current.volumes[trackId]<=-24?0:current.volumes[trackId]},
-      } : {})});
-    },
+    onMixChange:retainMixChange,
   }));
+  const [heldEdits] = useState(() => createJamHeldEdits({playback,effects,audio,readProject:projectStore.current,onMixChange:retainMixChange}));
+  useEffect(() => heldEdits.connect(), [heldEdits]);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [page, setPage] = useState(0);
   const [phraseHistory] = useState(() => createJamPhraseHistory((pid,id) => {
@@ -158,16 +162,20 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     if (overrideSolo) { playback.audition(snapshot, projectStore.current().workspace.bpm); return; }
     playback.launch(snapshot, projectStore.current().workspace.bpm, { edit: true, quantize, preservePhase: true });
   }
-  function syncPhraseAudio(phrase, restart = false) {
+  function syncPhraseAudio(phrase, restart = false, knob = false) {
+    if (knob && heldEdits.defer(phrase,{canJoin:audition.canJoin()})) {
+      audition.update({...phrase,editingTemplateId:phrase.id},{updateAudio:false}); return;
+    }
+    heldEdits.cancel(phrase.trackId,phrase.id);
     if (audition.getMode() === 'mix' && audition.getPhraseId() === phrase.id) {
-      audition.update({...phrase,editingTemplateId:phrase.id},{restart}); return;
+      audition.update({...phrase,editingTemplateId:phrase.id},{restart,preserveEffects:knob}); return;
     }
     const snapshot=jamCombinationSnapshot(projectStore.current().workspace,phrase,true);
     if (!hasJamNotes(phrase)) snapshot.phraseIds[phrase.trackId]=null;
-    playback.updatePhrase?.(snapshot,phrase.trackId,phrase.id);
-    audition.update({...phrase,editingTemplateId:phrase.id},{restart});
+    playback.updatePhrase?.(snapshot,phrase.trackId,phrase.id,{preserveEffects:knob});
+    audition.update({...phrase,editingTemplateId:phrase.id},{restart,preserveEffects:knob});
   }
-  function replaceDraft(next, { record = true, updateAudio = true, restart = false, gesture = false } = {}) {
+  function replaceDraft(next, { record = true, updateAudio = true, restart = false, gesture = false, knob = false } = {}) {
     if (record && !gesture) { clearTimeout(midiGesture.current); endGesture(); }
     const current=projectStore.current().workspace;
     const id=next.editingTemplateId??next.id??draft?.editingTemplateId;
@@ -177,7 +185,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     if (!phrase) { setMessage('乐句未能更新，请重新打开该格子。'); return; }
     if (record) phraseHistory.record(project.id,before,phrase);
     if (updateAudio && (restart || before.timbreId!==phrase.timbreId || JSON.stringify(before.bars)!==JSON.stringify(phrase.bars))) {
-      void audio.startAudio();syncPhraseAudio(phrase,restart);
+      void audio.startAudio();syncPhraseAudio(phrase,restart,knob);
     }
   }
   function openEditor(t, template = null, options = {}, targetSlot = null) {
@@ -211,6 +219,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   }
   function removePhrase(phrase) {
     clearTimeout(midiGesture.current);endGesture();
+    heldEdits.cancel(phrase.trackId,phrase.id);
     deleteJamTemplate({projectStore,playback,audition,trackId:phrase.trackId,templateId:phrase.id});
     if (projectStore.current().workspace.templates[phrase.trackId].some(p=>p.id===phrase.id)) return;
     phraseHistory.forget(project.id,phrase.id);
@@ -229,7 +238,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       beginGesture('midi'); clearTimeout(midiGesture.current);
       midiGesture.current = setTimeout(endGesture, 300);
     }
-    replaceDraft(next, {gesture:true});
+    replaceDraft(next, {gesture:true,knob:true});
   }
 
   function beginGesture(kind='knob') {
@@ -246,12 +255,14 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     if (next) replaceDraft(next,{record:false});
   }
   function trigger(t, id) {
+    heldEdits.cancel(t);
     const follow = Boolean(editingTrack);
     if (follow) { clearTimeout(midiGesture.current); endGesture(); }
     const triggered = toggleJamTemplate({projectStore,playback,audition,trackId:t,templateId:id});
     if (triggered && follow) openEditor(t,{id},{followPlayback:true});
   }
   function launchColumn(columnIndex) {
+    heldEdits.clear(true);
     launchJamColumn({ projectStore, playback, audition, slotIndex: columnIndex, toggle: true });
   }
   function moveSlots(move, expected) {
@@ -265,6 +276,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     return true;
   }
   function toggleMute(t) {
+    heldEdits.cancel(t);
     if (audition.getMode() === 'mix') audition.holdMix(t);
     else if (audition.getTrack() === t) audition.pause();
     const current = projectStore.current().workspace;
@@ -277,6 +289,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     else if (TRACKS.some(t => w.selection[t])) launch('step',null,false);
   }
   function changeInstrumentTimbre(t, timbreId) {
+    heldEdits.cancel(t);
     projectStore.setTimbre(t,timbreId);
     if (draft && audition.getTrack()) audition.update(projectStore.current().workspace.draft);
     else if (playback.isActive()) launch('step',null,false);

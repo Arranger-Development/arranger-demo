@@ -292,10 +292,10 @@ export default class AudioEngine {
     return this.performanceEffectsPromise;
   }
 
-  setPerformanceEffect(track, values) {
+  setPerformanceEffect(track, values, time) {
     this.performanceEffectValues ??= {};
     this.performanceEffectValues[track] = { ...this.performanceEffectValues[track], ...values };
-    this.performanceEffects?.set(track, values);
+    this.performanceEffects?.set(track, values, time);
   }
 
   setJamArpeggiator(value) { this.jamArpeggiator = value; }
@@ -1698,7 +1698,10 @@ export default class AudioEngine {
         return;
       }
       if (nextSnapshot?.releaseVoices) this.stopAllVoices(time);
-      nextSnapshot?.releaseTrackIds?.forEach(trackId => this.stopTrackVoices(trackId, time));
+      nextSnapshot?.releaseTrackIds?.forEach(trackId => {
+        if (nextSnapshot.preserveEffectTrackIds?.includes(trackId)) this.stopTrackVoices(trackId,time,{preserveEffects:true});
+        else this.stopTrackVoices(trackId,time);
+      });
       if (nextSnapshot && (nextSnapshot.matrix !== snapshot?.matrix || nextSnapshot.totalBars !== snapshot?.totalBars
         || nextSnapshot.trackStepOffsets !== snapshot?.trackStepOffsets || nextSnapshot.phraseBars !== snapshot?.phraseBars)) {
         const totalBars = Number.isInteger(nextSnapshot.totalBars) && nextSnapshot.totalBars > 0
@@ -1963,10 +1966,10 @@ export default class AudioEngine {
   }
 
   // Keep cached instruments ready, and leave every other track's tails alone.
-  stopTrackVoices(trackId, time = this.now()) {
+  stopTrackVoices(trackId, time = this.now(), { preserveEffects = false } = {}) {
     const type = getTrackTypeFromInstanceId(trackId);
     if (!type) return;
-    this.performanceEffects?.releaseTrack?.(trackId, time);
+    if (!preserveEffects) this.performanceEffects?.releaseTrack?.(trackId, time);
     this.melodyTrackRequestIds.set(trackId, (this.melodyTrackRequestIds.get(trackId) ?? 0) + 1);
     if (type !== 'melody') this.releaseMelodyBanks(time, trackId);
     const nodes = this.getInstanceAudioNodes(trackId, type, { create: false });

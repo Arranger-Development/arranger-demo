@@ -1,6 +1,27 @@
 import { jamCombinationSnapshot } from './jamTemplateProjects.js';
 import { hasJamNotes } from './jamDraftActions.js';
 
+// Also used by deferred knob edits after their editor has switched or collapsed.
+export function applyJamMixEdit(playback, workspace, draft, { restart = false, canJoin = false, preserveEffects = false } = {}) {
+  const track = draft.trackId, id = draft.editingTemplateId ?? draft.id;
+  const desired = playback.getDesiredPhraseIds()[track];
+  const queued = playback.getQueuedPhraseIds?.()?.[track];
+  const audible = playback.getProgress()?.snapshot.phraseIds[track];
+  if (!hasJamNotes(draft)) {
+    if (desired !== id && queued !== id && audible !== id) return null;
+    playback.removeTrack(track,id); return { restoreSound:false };
+  }
+  const snapshot = jamCombinationSnapshot(workspace,draft,true);
+  if (queued === id) playback.updatePhrase(snapshot,track,id,{queuedOnly:true,preserveEffects});
+  else if (desired === id) {
+    if (restart) playback.toggleTrack(snapshot,track,workspace.bpm,{restart:true});
+    else playback.updatePhrase(snapshot,track,id,{preserveEffects});
+  } else if (canJoin) {
+    playback.toggleTrack(snapshot,track,workspace.bpm,{restart:true}); return { restoreSound:true };
+  } else if (audible === id && !restart) playback.updatePhrase(snapshot,track,id,{preserveEffects});
+  return null;
+}
+
 // Solo editing owns an overlay; mix editing changes only its own saved phrase.
 export function createJamAudition(playback, { readWorkspace, readDraft, onSoloChange = () => {}, onMixChange = () => {}, stopArp = () => {} }) {
   let track = null, resumeCombination = false, editor = false, paused = false, empty = false, revision = 0;
@@ -9,27 +30,11 @@ export function createJamAudition(playback, { readWorkspace, readDraft, onSoloCh
   function mixChanged(restoreSound = false) {
     onMixChange({ selection: playback.getDesiredPhraseIds(), trackId: track, restoreSound });
   }
-  function updateMix(draft, restart) {
+  function updateMix(draft, restart, preserveEffects) {
     const w = readWorkspace(), id = idOf(draft);
     if (!id || id !== phraseId) return;
-    const desired = playback.getDesiredPhraseIds()[track];
-    const queued = playback.getQueuedPhraseIds?.()?.[track];
-    const audible = playback.getProgress()?.snapshot.phraseIds[track];
-    if (empty) {
-      if (desired === id || queued === id || audible === id) {
-        playback.removeTrack(track,id); mixChanged();
-      }
-      return;
-    }
-    const snapshot = jamCombinationSnapshot(w,draft,true);
-    if (queued === id) {
-      playback.updatePhrase(snapshot,track,id,{queuedOnly:true});
-    } else if (desired === id) {
-      if (restart) playback.toggleTrack(snapshot,track,w.bpm,{restart:true});
-      else playback.updatePhrase(snapshot,track,id);
-    } else if (!paused && !autoJoinBlocked) {
-      playback.toggleTrack(snapshot,track,w.bpm,{restart:true}); mixChanged(true);
-    } else if (audible === id && !restart) playback.updatePhrase(snapshot,track,id);
+    const changed = applyJamMixEdit(playback,w,draft,{restart,canJoin:!paused&&!autoJoinBlocked,preserveEffects});
+    if (changed) mixChanged(changed.restoreSound);
   }
   function playDraft(draft, restart) {
     const w = readWorkspace(), snapshot = jamCombinationSnapshot(w,draft,true);
@@ -94,6 +99,7 @@ export function createJamAudition(playback, { readWorkspace, readDraft, onSoloCh
     getTrack: () => track,
     getMode: () => track ? mode : null,
     getPhraseId: () => phraseId,
+    canJoin: () => !paused && !autoJoinBlocked,
     getRevision: () => revision,
     isPlaying: () => mode === 'mix' ? Boolean(track && !empty && playback.isActive()
       && playback.getProgress()?.snapshot.phraseIds[track] === phraseId
@@ -114,10 +120,11 @@ export function createJamAudition(playback, { readWorkspace, readDraft, onSoloCh
         && playback.getQueuedPhraseIds?.()?.[track] !== phraseId;
       revision++; onSoloChange(false);
     },
-    update(draft, { restart = false } = {}) {
+    update(draft, { restart = false, preserveEffects = false, updateAudio = true } = {}) {
       if (!editor || track !== draft?.trackId) return;
       const wasEmpty = empty; empty = !hasJamNotes(draft);
-      if (mode === 'mix') { updateMix(draft,restart); return; }
+      if (!updateAudio) return;
+      if (mode === 'mix') { updateMix(draft,restart,preserveEffects); return; }
       if (!paused && (!empty || playback.isActive())) playDraft(draft, restart || wasEmpty);
     },
     toggleEditor(draft) {

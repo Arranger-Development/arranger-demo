@@ -34,6 +34,23 @@ test('per-track release cancels only the target cached voices and prepared banks
   assert.deepEqual(calls,[['kick',6],['snare',6]]);
 });
 
+test('a knob edit releases old notes without discarding held effect buffers, while an explicit stop still clears them', () => {
+  const engine=new AudioEngine({tone:createFakeTone()}),released=[],cleared=[];
+  engine.bassSampler={releaseAll:time=>released.push(time)};
+  engine.performanceEffects={releaseTrack:(...args)=>cleared.push(args)};
+  engine.stopTrackVoices('bass',4,{preserveEffects:true});
+  assert.deepEqual(released,[4]);assert.deepEqual(cleared,[]);
+  engine.stopTrackVoices('bass',5);assert.deepEqual(cleared,[['bass',5]]);
+});
+
+test('scheduled effect release retains the audio-clock time and the latest cached effect state', () => {
+  const engine=new AudioEngine({tone:createFakeTone()}),calls=[];
+  engine.performanceEffects={set:(...args)=>calls.push(args)};
+  engine.setPerformanceEffect('bass',{brake:1});engine.setPerformanceEffect('bass',{brake:0},4.125);
+  assert.equal(engine.performanceEffectValues.bass.brake,0);
+  assert.deepEqual(calls.at(-1),['bass',{brake:0},4.125]);
+});
+
 test('the live scheduler uses independent offsets and releases only requested tracks at their boundary', async () => {
   const tone = createFakeTone(), engine = new AudioEngine({ tone, playerFactory:createPlayerFactory(tone.calls) });
   const matrix = { bass:[Array.from({length:16},()=>({type:'bass',note:'C2'}))],
@@ -48,9 +65,13 @@ test('the live scheduler uses independent offsets and releases only requested tr
   engine.transportAbsoluteStep=16;tone.Transport.scheduledCallback(10);
   assert.deepEqual(released,[['bass',10]]);
   assert.deepEqual(events,[['bass','C2'],['chord',['E4']]]);
+  source={...source,preserveEffectTrackIds:['bass']};
+  engine.transportAbsoluteStep=17;tone.Transport.scheduledCallback(10.125);
+  assert.deepEqual(released.at(-1),['bass',10.125,{preserveEffects:true}]);
+  const eventCount=events.length;
   source={...source,releaseTrackIds:[]};
   engine.transportAbsoluteStep=32;tone.Transport.scheduledCallback(12.4);
-  assert.equal(released.length,1);assert.equal(events.length,3,'chord wraps independently into its empty first bar');
+  assert.equal(released.length,2);assert.equal(events.length,eventCount+1,'chord wraps independently into its empty first bar');
 });
 
 test('authored pitched events retain exact timing and durations when using gated voices', async () => {
