@@ -9,6 +9,7 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
   let recordingStopAt = null, previousRepeat = null;
   let requestVersion = 0, queuedRequest = null, lastAudibleStep = -1;
   let jam = null, finishing = false;
+  const stepActions = new Set(), stopListeners = new Set();
   const isActive = () => mode !== 'stopped';
   const emit = (extra = {}) => notify({ mode: audible?.mode ?? mode, loading, requestedId: current?.id ?? null,
     playingId: audible?.id ?? null, pendingId: pending?.id ?? null, cycle: audible?.cycle ?? cycle,
@@ -21,6 +22,7 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
   const makeSource = () => ({ matrix: current.snapshot.matrix, totalBars: current.snapshot.totalBars, phraseBars: current.snapshot.phraseBars, stepOffset: startStep });
   function stop() {
     generation++; automation?.stop(); recordingStopAt = null; mode = 'stopped'; loading = finishing = false; current = pending = audible = queuedRequest = null; jam = null; sequence = []; lastAudibleStep = -1;
+    stepActions.clear(); stopListeners.forEach(fn => fn());
     const time = audio.immediate?.();
     audio.silencePerformanceEffects?.(time);
     void audio.stop(time); audio.stopAllVoices(time); audio.resetPerformanceEffects?.(); emit();
@@ -41,10 +43,15 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
     return { done: true, onAudible: () => {
       if (request !== generation) return;
       mode = 'stopped'; loading = finishing = false; audible = current = pending = queuedRequest = null; jam = null; sequence = [];
+      stepActions.clear(); stopListeners.forEach(fn => fn());
       automation?.stop(); audio.resetPerformanceEffects?.(); emit();
     } };
   }
   function source(absoluteStep, time) {
+    if (!current) return { done: true };
+    for (const action of [...stepActions]) if (absoluteStep >= action.at) {
+      stepActions.delete(action); action.run(time);
+    }
     if (!current) return { done: true };
     lastStep = absoluteStep;
     if (jam) {
@@ -115,6 +122,12 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
     } catch (error) { if (request === generation) { stop(); emit({ error: error.message }); } }
   }
   return {
+    getSessionId: () => generation,
+    onStop(fn) { stopListeners.add(fn); return () => stopListeners.delete(fn); },
+    atNextStep(run) {
+      const action = { at:lastStep+1, run };
+      stepActions.add(action); return () => stepActions.delete(action);
+    },
     stop, isActive, isReady: () => isActive() && !loading,
     getDesiredPhraseIds: () => jam?.desiredIds() ?? { drums: null, chord: null, bass: null, melody: null },
     getQueuedPhraseIds: () => jam?.state().queuedPhraseIds ?? null,

@@ -4,6 +4,13 @@ import AudioEngine from '../src/audio/AudioEngine.js';
 import {renderProjectToWav} from '../src/export/audioFile.js';
 import {TRACK_MIX_DYNAMICS} from '../src/audio/trackMixBalance.js';
 
+test('bass and melody receive the requested one-decibel output lift after track compression',()=>{
+  assert.equal(TRACK_MIX_DYNAMICS.bass.outputTrimDb,-7);
+  assert.equal(TRACK_MIX_DYNAMICS.melody.outputTrimDb,0);
+  assert.equal(TRACK_MIX_DYNAMICS.drums.outputTrimDb,-3);
+  assert.equal(TRACK_MIX_DYNAMICS.chord.outputTrimDb,0);
+});
+
 const param=()=>({value:0,setTargetAtTime(v){this.value=v;},setValueAtTime(v){this.value=v;},cancelScheduledValues(){},linearRampToValueAtTime(){}});
 const node=()=>({outputs:[],connect(n){this.outputs.push(n);return n;},disconnect(){this.outputs=[];},toDestination(){throw new Error('unprotected voice');}});
 function mockGlobal(t,name,value) {

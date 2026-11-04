@@ -62,7 +62,7 @@ export function createJamTrackPlayback(nextVersion) {
     if (tracks[t]?.id === id || audible[t]?.id === id) stops[t] = { id, at, revision: nextVersion() };
     source = null;
   }
-  function updatePhrase(snapshot,t,id,at,{queuedOnly=false} = {}) {
+  function updatePhrase(snapshot,t,id,at,{queuedOnly=false,preserveEffects=false} = {}) {
     const replaceValue=previous=>({...previous,matrix:snapshot.matrix[t],
       bars:snapshot.phraseBars?.[t]??snapshot.totalBars,silent:!snapshot.phraseIds[t],revision:nextVersion()});
     const request=launches[t];
@@ -76,7 +76,7 @@ export function createJamTrackPlayback(nextVersion) {
     if (!queuedOnly && request?.previous?.id===id) request.previous=replaceValue(request.previous);
     if (!queuedOnly && tracks[t]?.id===id) {
       cancelled.add(tracks[t].revision);
-      edits.set(t,{id,at,entry:replaceValue(tracks[t])});
+      edits.set(t,{id,at,entry:replaceValue(tracks[t]),preserveEffects});
     }
     source=null;
   }
@@ -107,7 +107,7 @@ export function createJamTrackPlayback(nextVersion) {
     progress: absolute => ({ snapshot: snapshotFor(audible), trackPositions: positions(audible, absolute) }),
     audition(snapshot, at, { restart = false } = {}) { overlayVersion++; overlayRequest = { snapshot, at, restart }; },
     read(absolute) {
-      const releaseTrackIds = new Set();
+      const releaseTrackIds = new Set(), preserveEffectTrackIds = new Set();
       for (const [t, at] of releases) if (absolute >= at) { releaseTrackIds.add(t); releases.delete(t); }
       for (const t of TRACKS) {
         const edit=edits.get(t);
@@ -115,15 +115,18 @@ export function createJamTrackPlayback(nextVersion) {
           if (tracks[t]?.id===edit.id) {
             tracks[t]={...edit.entry,startStep:tracks[t].startStep};
             if (!overlay) releaseTrackIds.add(t);
+            if (edit.preserveEffects) preserveEffectTrackIds.add(t);
           }
           edits.delete(t);source=null;
         }
         if (stops[t] && absolute >= stops[t].at) {
+          preserveEffectTrackIds.delete(t);
           if (tracks[t]?.id === stops[t].id) { delete tracks[t]; if (!overlay) releaseTrackIds.add(t); }
           delete stops[t]; source = null;
         }
         const request = launches[t];
         if (request && absolute >= request.at && !request.scheduled) {
+          preserveEffectTrackIds.delete(t);
           if (tracks[t] && !overlay) releaseTrackIds.add(t);
           if (!('previous' in request)) request.previous = tracks[t];
           if (request.entry) tracks[t] = request.entry; else delete tracks[t];
@@ -131,6 +134,7 @@ export function createJamTrackPlayback(nextVersion) {
         }
       }
       if (overlayRequest && absolute >= overlayRequest.at) {
+        preserveEffectTrackIds.clear();
         TRACKS.forEach(t => { if (overlay?.[t] || tracks[t]) releaseTrackIds.add(t); });
         overlay = overlayRequest.snapshot ? Object.fromEntries(TRACKS.map(t => {
           const value = entry(overlayRequest.snapshot, t, absolute, false);
@@ -144,7 +148,7 @@ export function createJamTrackPlayback(nextVersion) {
         .filter(([, request]) => request.scheduled).map(([t, request]) => [t, request.revision]));
       const viewVersion = overlayVersion;
       source ??= snapshotFor(entries);
-      return { ...source, stepOffset: 0, releaseTrackIds: [...releaseTrackIds],
+      return { ...source, stepOffset: 0, releaseTrackIds: [...releaseTrackIds], preserveEffectTrackIds:[...preserveEffectTrackIds],
         confirm() {
           if (absolute < lastAudible || viewVersion !== overlayVersion) return false;
           lastAudible = absolute;
