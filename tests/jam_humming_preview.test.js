@@ -5,7 +5,7 @@ import { createJamTemplateProjects, jamCombinationSnapshot } from '../src/app/ja
 import { applyJamTrackParameter, blankJamDraft } from '../src/app/jamDraftActions.js';
 import { createMatrixPlaybackAdapter } from '../src/audio/matrixPlaybackAdapter.js';
 import { jamMelodyRenderState, setJamPitchedNote } from '../src/app/jamNoteEditing.js';
-import { rememberHumEdits } from '../src/app/jamHumRhythm.js';
+import { editJamSequencerStep, humPlaybackBars } from '../src/app/jamHumExpression.js';
 import { toggleDrumsCellInstrument } from '../src/domain/drumsCells.js';
 import { eventDuration, usesNaturalSampleTail } from '../src/domain/notePerformances.js';
 
@@ -166,12 +166,11 @@ test('accompaniment knobs change playback onsets, respect manual edits and resto
     if (track.trackId === 'drums') {
       const foundation = phrase => events(phrase).filter(hit => hit.instrument !== 'hihat').map(hit => [hit.instrument, hit.step]);
       assert.deepEqual(foundation(low), foundation(high));
-      const bars = structuredClone(track.bars);
-      if (!bars[0][1]?.instruments.includes('hihat')) bars[0][1] = toggleDrumsCellInstrument(bars[0][1], 'hihat');
-      const withHat = rememberHumEdits(track, { ...track, bars });
-      const removed = structuredClone(bars);
-      removed[0][1] = toggleDrumsCellInstrument(removed[0][1], 'hihat');
-      const authored = rememberHumEdits(withHat, { ...withHat, bars: removed });
+      const authored = editJamSequencerStep(high, 0, 1, bar => {
+        const edited = [...bar];
+        edited[1] = toggleDrumsCellInstrument(bar[1], 'hihat');
+        return edited;
+      });
       const dense = events(applyJamTrackParameter(authored, parameter, 100));
       assert.ok(!dense.some(hit => hit.step === 1 && hit.instrument === 'hihat'));
       assert.ok(dense.some(hit => hit.step === 3 && hit.instrument === 'hihat'));
@@ -182,5 +181,38 @@ test('accompaniment knobs change playback onsets, respect manual edits and resto
       const pitches = phrase => new Set(events(phrase).filter(hit => hit.step < 8).map(hit => hit.note));
       assert.deepEqual(pitches(low), pitches(high));
     }
+  }
+});
+
+
+test('removing a rhythm-only hit records the edit even when the stored bar is unchanged', () => {
+  const bars = [Array(16).fill(null)];
+  const phrase = { sourcePresetId: 'hum-generated', trackId: 'drums', params: { strength: 50, groove: 100 }, bars };
+  assert.deepEqual(humPlaybackBars(phrase)[0][1].instruments, ['hihat']);
+  const edited = editJamSequencerStep(phrase, 0, 1, bar => bar.map((cell, step) => step === 1 ? toggleDrumsCellInstrument(cell, 'hihat') : cell));
+  assert.deepEqual(edited.bars, bars);
+  assert.deepEqual(edited.humEditedSteps, [1]);
+  assert.equal(humPlaybackBars(edited)[0][1], null);
+  assert.deepEqual(humPlaybackBars(edited)[0][3].instruments, ['hihat']);
+});
+
+test('editing a visible bass or chord variant keeps that half bar and its edited duration', () => {
+  const store = makeStore();
+  const projectId = store.current().id;
+  const bars = melody([60, 64, 67, 60]);
+  const [lead] = store.insertHumPhrases([{ trackId: 'melody', bars }], { projectId });
+  const backing = store.insertHumPhrases(backingPhrases(bars), { projectId, melodyId: lead.id });
+  for (const track of backing.filter(phrase => phrase.trackId !== 'drums')) {
+    const high = applyJamTrackParameter(track, 'strength', 100);
+    const step = track.trackId === 'bass' ? 3 : 2;
+    const visible = humPlaybackBars(high)[0][step];
+    const note = visible.note ?? visible.notes[0];
+    const edited = editJamSequencerStep(high, 0, step, bar => setJamPitchedNote(bar, step, note, 2, false, track.trackId));
+    const low = applyJamTrackParameter(edited, 'strength', 0);
+    const lowBar = humPlaybackBars(low)[0];
+    assert.equal(lowBar[step].notePerformances[note][0].durationSteps, 2);
+    assert.ok(lowBar[track.trackId === 'bass' ? 6 : 4]);
+    assert.notDeepEqual(lowBar.slice(8), humPlaybackBars(high)[0].slice(8));
+    assert.deepEqual(edited.bars[0].slice(8), track.bars[0].slice(8));
   }
 });

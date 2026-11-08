@@ -8,6 +8,31 @@ const pitchClasses = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#'
 const pitchOrder = note => Number(note.at(-1)) * 12 + pitchClasses.indexOf(note.slice(0, -1));
 const velocity = (value = 1, gain) => Math.max(0.2, Math.min(1, value * gain));
 
+export function isHumBacking(phrase) {
+  return phrase?.sourcePresetId === HUM_SOURCE && phrase.trackId !== 'melody';
+}
+
+export function editJamSequencerStep(phrase, barIndex, step, editBar) {
+  const baseBar = phrase.bars[barIndex];
+  const bars = [...phrase.bars];
+  if (!isHumBacking(phrase)) {
+    bars[barIndex] = editBar(baseBar);
+    return { ...phrase, bars };
+  }
+
+  const { strength, groove } = jamTrackParameters(phrase.params, phrase.trackId);
+  const drums = phrase.trackId === 'drums';
+  const visibleRhythm = humRhythmBars(phrase, drums ? groove : strength)[barIndex];
+  // Keep the rhythm around the edited pitch intact, without saving knob-dependent gain or length.
+  const edited = editBar(visibleRhythm);
+  if (edited === visibleRhythm) return phrase;
+  const start = drums ? step : step - step % 8;
+  const end = start + (drums ? 1 : 8);
+  bars[barIndex] = baseBar.map((cell, index) => index >= start && index < end ? edited[index] : cell);
+  const humEditedSteps = [...new Set([...(phrase.humEditedSteps ?? []), barIndex * 16 + step])];
+  return { ...phrase, bars, humEditedSteps };
+}
+
 export function humPlaybackBars(phrase) {
   const { trackId } = phrase;
   if (phrase.sourcePresetId !== HUM_SOURCE) return phrase.bars;
@@ -15,6 +40,7 @@ export function humPlaybackBars(phrase) {
   const left = (groove - (trackId === 'chord' ? 60 : 50)) / 50;
   const right = (strength - 50) / 50;
   const bars = humRhythmBars(phrase, trackId === 'drums' ? groove : strength);
+  const fixedSteps = new Set(phrase.humEditedSteps);
   return bars.map((bar, barIndex) => bar.map((cell, step) => {
     if (!cell) return cell;
     if (trackId === 'drums') {
@@ -28,7 +54,7 @@ export function humPlaybackBars(phrase) {
         : position % 8 === 0 ? 0.24 : position % 4 === 0 ? 0.08 : -0.28;
       return 1 + right * (trackId === 'bass' ? -accent : accent) + (trackId === 'melody' ? left * 0.4 : 0);
     };
-    const length = trackId === 'bass' ? 0.77 + 0.23 * left : 1;
+    const length = trackId === 'bass' && !fixedSteps.has(barIndex * 16 + step) ? 0.77 + 0.23 * left : 1;
     const notes = Object.entries(cell.notePerformances ?? {});
     const voices = trackId === 'chord' ? (phrase.bars[barIndex][step - step % 8]?.notes ?? notes.map(([note]) => note)).toSorted((a, b) => pitchOrder(a) - pitchOrder(b)) : [];
     return {

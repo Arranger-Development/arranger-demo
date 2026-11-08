@@ -109,7 +109,8 @@
 .jam-studio .studio-note-tools input { width:48px; padding:4px; background:var(--studio-soft); color:var(--ink); border:1px solid var(--studio-line); border-radius:3px; }
 .jam-studio .studio-note-tools button { display:grid; place-items:center; width:28px; height:28px; background:var(--studio-soft); color:var(--ink); border:1px solid var(--studio-line); border-radius:3px; }
 .jam-studio .studio-note-tools :disabled { opacity:.4; }
-.jam-studio .studio-drum-grid .drum-sequencer-grid { min-width:480px; }
+.jam-studio .studio-drum-grid .drum-sequencer-grid { min-width:520px; }
+.jam-studio .studio-drum-grid .drum-step { box-sizing:border-box; width:min(100%,var(--drum-step-size)); height:auto; min-height:0; aspect-ratio:1; }
 .jam-studio .studio-effects { display:block; position:static; align-self:stretch; width:100%; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:12px; border:1px solid var(--studio-line); border-top:3px solid var(--pw-track); border-radius:7px; background:var(--tj-panel); box-shadow:none; }
 .jam-studio .studio-effects h2 { font-size:19px; margin-bottom:12px; }
 .jam-studio .studio-effects-heading { display:flex; align-items:baseline; justify-content:space-between; gap:6px; }
@@ -124,7 +125,7 @@
 .jam-studio[data-editing=true] .studio-chord-editor { grid-template-rows:auto minmax(184px,1fr); align-items:stretch; }
 .jam-studio[data-editing=true] .studio-chord-roll { container-type:size; min-height:184px; }
 .jam-studio[data-editing=true] .studio-chord-roll .piano-roll { --piano-roll-viewport-height:max(144px,calc(100cqh - 40px)); }
-.jam-studio[data-editing=true] .studio-drum-grid { container-type:size; min-height:136px; display:grid; align-items:center; --drum-step-size:clamp(24px,calc((100cqh - 58px) / 3),64px); }
+.jam-studio[data-editing=true] .studio-drum-grid { container-type:size; min-height:136px; display:grid; grid-template-columns:minmax(0,1fr); align-items:center; --drum-step-size:clamp(18px,min(calc((100cqh - 58px) / 3),calc((100cqw - 220px) / 16)),64px); }
 .jam-studio[data-editing=true] .studio-gallery { gap:4px; }
 .jam-studio[data-editing=true] .studio-launcher { --jam-editor-gem:56px; }
 .jam-studio[data-editing=true] .studio-template { width:min(var(--jam-pad,48px),var(--jam-editor-gem)); height:min(var(--jam-pad,48px),var(--jam-editor-gem)); min-height:0; justify-self:center; }

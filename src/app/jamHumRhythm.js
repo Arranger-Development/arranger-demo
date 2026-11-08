@@ -1,13 +1,5 @@
 import { createDrumsCell, getDrumsCellInstruments, getDrumsCellVelocity, getDrumsCellTimingOffset } from '../domain/drumsCells.js';
 
-export function rememberHumEdits(before, next) {
-  const edited = new Set(before.humEditedSteps);
-  next.bars.forEach((bar, index) => bar.forEach((cell, step) => {
-    if (JSON.stringify(before.bars[index]?.[step]) !== JSON.stringify(cell)) edited.add(index * 16 + step);
-  }));
-  return edited.size ? { ...next, humEditedSteps: [...edited] } : next;
-}
-
 function drumRhythm(bar, level, edited) {
   return bar.map((cell, step) => {
     if (edited(step)) return cell;

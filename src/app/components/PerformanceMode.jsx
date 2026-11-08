@@ -1,6 +1,6 @@
 import TemplateDialog from './TemplateDialog.jsx';
 void TemplateDialog;
-import { createElement, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createElement, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Home, Undo2, Redo2, ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ThemeSwitcher } from './ThemeSwitcher.jsx';
 import JamProjectControls from './JamProjectControls.jsx';
@@ -10,8 +10,7 @@ import DrumStepGrid from './DrumStepGrid.jsx';
 import JamLauncher from './JamLauncher.jsx';
 import JamChordEditor from './JamChordEditor.jsx';
 import { createJamAudition } from '../jamAudition.js';
-import { HUM_SOURCE } from '../jamHumExpression.js';
-import { rememberHumEdits } from '../jamHumRhythm.js';
+import { editJamSequencerStep, HUM_SOURCE, humPlaybackBars, isHumBacking } from '../jamHumExpression.js';
 import { createJamHeldEdits } from '../jamHeldEdits.js';
 import { createJamPhraseHistory } from '../jamPhraseHistory.js';
 import { toggleJamTemplate, launchJamColumn, deleteJamTemplate } from '../jamTemplateSelection.js';
@@ -184,14 +183,13 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     const id=next.editingTemplateId??next.id??draft?.editingTemplateId;
     const before=current.templates[next.trackId]?.find(p=>p.id===id);
     if (!before || !projectStore.commitPhraseEdit) return;
-    const candidate = record && !knob && next.trackId !== 'melody' && before.sourcePresetId === HUM_SOURCE && next.sourcePresetId === HUM_SOURCE
-      ? rememberHumEdits(before, next) : next;
-    const phrase=projectStore.commitPhraseEdit({...candidate,editingTemplateId:id},{projectId:project.id});
+    const phrase=projectStore.commitPhraseEdit({...next,editingTemplateId:id},{projectId:project.id});
     if (!phrase) { setMessage('乐句未能更新，请重新打开该格子。'); return; }
     if (record) phraseHistory.record(project.id,before,phrase);
     const barsChanged = JSON.stringify(before.bars) !== JSON.stringify(phrase.bars);
     const humExpressionChanged = (before.sourcePresetId === HUM_SOURCE || phrase.sourcePresetId === HUM_SOURCE)
-      && (before.sourcePresetId !== phrase.sourcePresetId || before.params?.strength !== phrase.params.strength || before.params?.groove !== phrase.params.groove);
+      && (before.sourcePresetId !== phrase.sourcePresetId || before.params?.strength !== phrase.params.strength || before.params?.groove !== phrase.params.groove
+        || JSON.stringify(before.humEditedSteps) !== JSON.stringify(phrase.humEditedSteps));
     if (updateAudio && (restart || before.timbreId !== phrase.timbreId || barsChanged || humExpressionChanged)) {
       void audio.startAudio();
       syncPhraseAudio(phrase, restart, knob || (humExpressionChanged && !barsChanged));
@@ -399,6 +397,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       if (controlsRef?.current === controls) controlsRef.current = null;
     };
   });
+  const editorBars = useMemo(() => isHumBacking(draft) ? humPlaybackBars(draft) : draft?.bars, [draft]);
   const previewBar = Math.min(editBar,(draft?.bars.length ?? 1)-1);
   const renderLauncher = (humButton, humFeedback) => <JamLauncher key={project.id} humButton={humButton} humFeedback={humFeedback} active={active} playback={playback} templates={w.templates} columnCount={columnCount} bank={effectivePage} onBankChange={setPage} navigationRef={launcherNav}
           editingTrack={editingTrack} editingTemplateId={draft?.editingTemplateId} auditioning={solo} selection={w.selection} status={status} mutedTracks={w.mutedTracks} volumes={w.volumes}
@@ -440,15 +439,19 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           </div>
           <div className="studio-grid-toolbar"><span>{editingTrack === 'drums' ? '鼓点音序器' : `${LABELS[editingTrack]}音序器`}<small className="studio-editor-position" aria-label="编辑播放位置">{editorPlaying && editorPosition ? ` · 播放 ${editorPosition.bar+1}/${draft.bars.length}` : editorPlaying || editorQueued ? ' · 准备播放' : hasJamNotes(draft) ? ' · 已暂停' : ' · 空白'}</small></span><div className="studio-bar-pager"><button type="button" aria-label="上一小节" disabled={previewBar === 0} onClick={() => setEditBar(previewBar-1)}><ChevronLeft size={13}/></button><span>{previewBar+1} / {draft.bars.length} 小节</span><button type="button" aria-label="下一小节" disabled={previewBar+1 === draft.bars.length} onClick={() => setEditBar(previewBar+1)}><ChevronRight size={13}/></button></div><div className="studio-undo"><button type="button" aria-label="撤销模板修改" disabled={!history.undo.length} onClick={() => undo()}><Undo2 size={14}/></button><button type="button" aria-label="重做模板修改" disabled={!history.redo.length} onClick={() => undo(true)}><Redo2 size={14}/></button></div></div>
           {editingTrack === 'drums' ? <div className="studio-drum-grid"><DrumStepGrid renderStep={(row,stepNumber) => {
-            const step=stepNumber-1,cell=draft.bars[previewBar][step],hits=cell?.drumHits?.filter(h => h.instrument === row.id) ?? [];
+            const step=stepNumber-1,cell=editorBars[previewBar][step],hits=cell?.drumHits?.filter(h => h.instrument === row.id) ?? [];
             const on=getDrumsCellInstruments(cell).includes(row.id);
             const label={kick:'底鼓',snare:'军鼓',hihat:'踩镲'}[row.id];
             return <button type="button" key={`${row.id}:${step}`} className={`drum-step ${on ? 'active' : ''} ${stepNumber%4 === 0 ? 'beat-end' : ''}`}
               data-instrument={row.id} data-step={step} data-playing={editorPlaying && editorPosition?.bar === previewBar && editorPosition?.step === step} aria-label={`${label}第${step+1}格`} aria-pressed={on}
-              onClick={() => { const bars=copy(draft.bars); bars[previewBar][step]=toggleDrumsCellInstrument(cell,row.id); replaceDraft({...draft,bars}); }}>
+              onClick={() => replaceDraft(editJamSequencerStep(draft, previewBar, step, bar => {
+                const next = [...bar];
+                next[step] = toggleDrumsCellInstrument(bar[step], row.id);
+                return next;
+              }))}>
               {hits.length > 1 && <span className="studio-hit-count" aria-label={`${hits.length}次击打`}>{hits.length}</span>}
             </button>;
-          }}/></div> : <JamChordEditor key={draft.editingTemplateId ?? draft.targetSlot ?? 'draft'} draft={draft} bar={previewBar} step={editorPlaying && editorPosition?.bar === previewBar ? editorPosition?.step : null} onChange={replaceDraft}/>}
+          }}/></div> : <JamChordEditor key={draft.editingTemplateId ?? draft.targetSlot ?? 'draft'} draft={draft} editorBars={editorBars} bar={previewBar} step={editorPlaying && editorPosition?.bar === previewBar ? editorPosition?.step : null} onChange={replaceDraft}/>}
         </section>}
       </main>
       <aside id="jam-studio-effects" className="jam-effects studio-effects" data-track={fx.selectedTrack}><header className="studio-effects-heading"><h2>现场效果</h2><button type="button" className="studio-text-button" title="恢复四轨的平衡音量，再用推子微调" onClick={() => { if(projectStore.patch({volumes:Object.fromEntries(TRACKS.map(t=>[t,0]))})) setMessage('四轨音量已平衡。'); }}>平衡四轨</button></header><div className="effect-targets" role="group" aria-label="效果目标轨道">{TRACKS.map(t => <button type="button" key={t} aria-pressed={fx.selectedTracks.includes(t)} onClick={() => effects.toggleTrack(t)}>{LABELS[t]}</button>)}</div>

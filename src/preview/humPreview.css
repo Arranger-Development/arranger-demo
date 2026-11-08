@@ -47,6 +47,67 @@
 
 .jam-hum-timing { color: var(--tj-muted); font-variant-numeric: tabular-nums; }
 
-.jam-studio .studio-template-tools[data-visible-edit=true] { visibility: visible; }
-.jam-studio .studio-template-tools[data-visible-edit=true] .studio-template-remove { display: none; }
-.jam-studio .studio-template:is(:hover,:has(:focus-visible)) .studio-template-tools[data-visible-edit=true] .studio-template-remove { display: inline-flex; }
+.jam-studio[data-hum-preview] .studio-template[data-show-edit] {
+  width: 100%;
+  background: var(--studio-soft);
+  border: 1px solid var(--studio-line);
+}
+.jam-studio[data-hum-preview] .studio-template[data-show-edit]::before {
+  inset: 50% auto auto 1px;
+  width: 18px;
+  height: 18px;
+  transform: translateY(-50%);
+}
+.jam-studio[data-hum-preview] .studio-template[data-show-edit] .studio-template-play {
+  flex: 1;
+  width: auto;
+  padding: 1px 2px 1px 20px;
+}
+.jam-studio[data-hum-preview] .studio-template[data-show-edit] .studio-template-index { left: 2px; }
+.jam-studio[data-hum-preview] .studio-template[data-show-edit] .studio-template-name {
+  display: block;
+  padding: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.jam-studio[data-hum-preview] .studio-template[data-show-edit] .studio-template-tools {
+  position: static;
+  flex: none;
+  visibility: visible;
+  padding: 0;
+  border-left: 1px solid var(--studio-line);
+  border-radius: 0;
+  background: transparent;
+}
+.jam-studio[data-hum-preview] .studio-template[data-show-edit] .studio-template-remove {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 19px;
+  transform: translateY(-50%);
+  background: var(--tj-panel);
+  opacity: 0;
+  pointer-events: none;
+}
+.jam-studio[data-hum-preview] .studio-template[data-show-edit]:is(:hover,:has(:focus-visible)) .studio-template-remove {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .jam-studio[data-hum-preview] .studio-template[data-show-edit] .studio-template-remove {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (max-width: 839px) {
+  .jam-studio[data-hum-preview] .studio-workbench {
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .jam-studio[data-hum-preview] .studio-main { flex: none; overflow: visible; }
+  .jam-studio[data-hum-preview] .studio-effects { flex: none; width: 100%; }
+}

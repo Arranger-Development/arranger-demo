@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { PianoRoll } from './PianoRoll.jsx';
 import { jamEditorNotes, jamMelodyRenderState, jamPitchedNotes, jamPitchedRenderState, setJamPitchedNote } from '../jamNoteEditing.js';
-import { HUM_SOURCE } from '../jamHumExpression.js';
+import { editJamSequencerStep, HUM_SOURCE } from '../jamHumExpression.js';
 import { formatNoteLabel } from '../noteDisplay.js';
 
-export default function JamChordEditor({ draft, bar, step, onChange }) {
+export default function JamChordEditor({ draft, editorBars = draft.bars, bar, step, onChange }) {
   const [selection, setSelection] = useState(null);
   const track = draft.trackId;
   const label = { chord: '和弦', bass: '贝斯', melody: '旋律' }[track];
@@ -13,16 +13,15 @@ export default function JamChordEditor({ draft, bar, step, onChange }) {
   const sustained = track === 'melody' && draft.sourcePresetId === HUM_SOURCE;
   const maxLength = (index, step) => (sustained ? (draft.bars.length - index) * 16 : 16) - step;
   const notesAt = (cell, step, index = bar) => jamPitchedNotes(cell, step, track, maxLength(index, step));
-  const renderState = (step, note) => sustained ? jamMelodyRenderState(draft.bars, bar, step, note) : jamPitchedRenderState(cells, step, note, track);
-  const cells = draft.bars[bar];
+  const renderState = (step, note) => sustained ? jamMelodyRenderState(editorBars, bar, step, note) : jamPitchedRenderState(cells, step, note, track);
+  const cells = editorBars[bar];
   const hit = selection && (sustained || selection.bar === bar)
-    ? notesAt(draft.bars[selection.bar]?.[selection.step], selection.step, selection.bar).find(hit => hit.note === selection.note) : null;
+    ? notesAt(editorBars[selection.bar]?.[selection.step], selection.step, selection.bar).find(hit => hit.note === selection.note) : null;
   const selected = hit ? selection : null;
   function edit(length, remove = false) {
     if (!selected) return;
-    const bars = [...draft.bars];
-    bars[selected.bar] = setJamPitchedNote(bars[selected.bar], selected.step, selected.note, length, remove, track, maxLength(selected.bar, selected.step));
-    onChange({ ...draft, bars });
+    onChange(editJamSequencerStep(draft, selected.bar, selected.step, cells =>
+      setJamPitchedNote(cells, selected.step, selected.note, length, remove, track, maxLength(selected.bar, selected.step))));
     if (remove) setSelection(null);
   }
   const pitches = new Set(cells.flatMap((cell, index) => notesAt(cell, index).map(hit => hit.note)));
@@ -47,8 +46,8 @@ export default function JamChordEditor({ draft, bar, step, onChange }) {
       onCellToggle={(step, note) => {
         const state = renderState(step, note);
         if (state.active) { setSelection({ bar: state.startBar ?? bar, step: state.startStep, note }); return; }
-        const bars = [...draft.bars]; bars[bar] = setJamPitchedNote(cells, step, note, 1, false, track);
-        onChange({ ...draft, bars }); setSelection({ bar, step, note });
+        onChange(editJamSequencerStep(draft, bar, step, cells => setJamPitchedNote(cells, step, note, 1, false, track)));
+        setSelection({ bar, step, note });
       }}/></div>
   </div>;
 }

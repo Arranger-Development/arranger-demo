@@ -45,7 +45,7 @@ export default function JamLauncher({ active, templates, columnCount, bank, onBa
       const style = getComputedStyle(el), identity = parseFloat(style.getPropertyValue('--identity')) || 120;
       const previousPitch = (parseFloat(style.getPropertyValue('--jam-pad')) || 48) + (parseFloat(style.getPropertyValue('--jam-gap')) || JAM_STRIP_GAP);
       const previousLeft = el.scrollLeft;
-      const layout = jamStripLayout(el.clientWidth, identity);
+      const layout = jamStripLayout(el.clientWidth, identity, humPreview ? 72 : 48);
       el.style.setProperty('--jam-pad', `${layout.pad}px`);
       el.style.setProperty('--jam-gap', `${layout.gap}px`);
       controller.resize(previousPitch, previousLeft);
@@ -54,7 +54,7 @@ export default function JamLauncher({ active, templates, columnCount, bank, onBa
     const observer = new ResizeObserver(resize);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [controller, columnCount]);
+  }, [controller, columnCount, humPreview]);
   useLayoutEffect(() => {
     const api = { showBank: controller.showBank, revealSlot: controller.revealSlot };
     navigationRef.current = api;
