@@ -1,9 +1,8 @@
 import { getDialDrumPreset } from '../data/dialDrumPresets.js';
 import { createDrumsCell } from '../domain/drumsCells.js';
 import { createMelodyCellFromNotes } from '../domain/melodyCells.js';
-import { DEEP_AUTUMN_MELODY } from '../data/performanceTimbres.js';
-import { extractMelodyEvents } from '../audio/matrixPlaybackAdapter.js';
-import { expandNotePerformances, noteDurationSteps } from '../domain/notePerformances.js';
+import { authoredChordAnchors, planHumHarmony } from './humHarmony.js';
+import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
 
 const pitches = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = midi => `${pitches[midi % 12]}${Math.floor(midi / 12) - 1}`;
@@ -122,105 +121,24 @@ export function makeHumMelody(notes, bpm) {
   return { bars: toBars(steps), shift };
 }
 
-const scaleModes = [[0, 2, 4, 5, 7, 9, 11], [0, 2, 3, 5, 7, 8, 10]];
-const keys = scaleModes.flatMap(scale => pitches.map((_, tonic) => {
-  const tones = scale.map(interval => (interval + tonic) % 12);
-  return { tonic, tones, chords: tones.map((root, index) => ({ root, tones: [root, tones[(index + 2) % 7], tones[(index + 4) % 7]] })) };
-}));
-
-function melodyEvents(bars, timbreId) {
-  const octaveOffset = timbreId === DEEP_AUTUMN_MELODY ? -12 : 0;
+const gcd = (a, b) => b ? gcd(b, a % b) : a;
+export function arrangeHumMelody(bars, timbreId, anchors = {}) {
+  const bassBarCount = anchors.bassBars?.length;
+  const commonCycle = bassBarCount ? (bars.length * bassBarCount) / gcd(bars.length, bassBarCount) : bars.length;
+  // When the full common cycle is too long for a Jam phrase, stay in phase with the fixed bass.
+  const chordBarCount = commonCycle <= MAX_PROJECT_BARS ? commonCycle : bassBarCount;
+  const { events, windows } = planHumHarmony(bars, timbreId, { ...anchors, chordBarCount });
   const length = bars.length * stepsPerBar;
-  return bars.flatMap((bar, index) => bar.flatMap((cell, step) => (
-    expandNotePerformances(extractMelodyEvents(cell, index, step), cell).flatMap(event => {
-      const pitch = pitches.indexOf(event.note.slice(0, -1));
-      const midi = (Number(event.note.at(-1)) + 1) * 12 + pitch + octaveOffset;
-      const start = Math.max(0, index * stepsPerBar + step + (event.timingOffset ?? 0));
-      const duration = Math.min(noteDurationSteps(event), length - start);
-      return pitch < 0 || duration <= 0 ? [] : [{ pitch, midi, start, duration }];
-    })
-  ))).sort((a, b) => a.start - b.start);
-}
-
-function melodyWindows(events, halfBars) {
-  return Array.from({ length: halfBars }, (_, index) => {
-    const start = index * 8;
-    return events.flatMap(event => {
-      const length = Math.min(event.start + event.duration, start + 8) - Math.max(start, event.start);
-      if (length <= 0) return [];
-      const step = Math.round(event.start);
-      const strong = step % 4 === 0 || length >= 2;
-      const accent = step % 8 === 0 ? 1.4 : step % 4 === 0 ? 1.2 : 1;
-      return [{ pitch: event.pitch, midi: event.midi, weight: length * accent * (strong ? 1 : 0.35), strong }];
-    });
-  });
-}
-
-function scoreMelodyNote(chord, key, event) {
-  if (chord.tones.includes(event.pitch)) return event.weight;
-  const clash = chord.tones.some(tone => [1, 11].includes((event.pitch - tone + 12) % 12));
-  const outside = key.tones.includes(event.pitch) ? 0 : 0.25;
-  return -event.weight * (0.30 + outside + (clash && event.strong ? 0.95 : 0));
-}
-
-function fitHarmony(events, windows) {
-  const lastPitch = events.at(-1).pitch;
-  let best = { score: -Infinity, path: [] };
-  for (const key of keys) {
-    const keyScore = events.reduce((sum, event) => sum + event.duration * (key.tones.includes(event.pitch) ? 0.12 : -0.35), 0);
-    let paths = key.chords.map((chord, index) => ({ score: index === 0 ? 0.9 : 0, path: [] }));
-    for (const window of windows) {
-      paths = key.chords.map((chord, index) => {
-        const fit = window.reduce((sum, event) => sum + scoreMelodyNote(chord, key, event), 0);
-        return paths.reduce((winner, previous, from) => {
-          if (!window.length && from !== index) return winner;
-          const common = chord.tones.filter(pitch => key.chords[from].tones.includes(pitch)).length;
-          const score = previous.score + fit + (from === index ? 0 : -1.6 + common * 0.24);
-          return score > winner.score ? { score, path: [...previous.path, chord] } : winner;
-        }, { score: -Infinity, path: [] });
-      });
-    }
-    for (const path of paths) {
-      const score = path.score + keyScore + (key.tonic === lastPitch ? 0.7 : 0) + (path.path.at(-1)?.root === key.tonic ? 0.35 : 0);
-      if (score > best.score) best = { score, path: path.path };
-    }
-  }
-  return best.path;
-}
-
-function closestVoicing(chord, previous, window) {
-  const starting = chord.tones.map(pitch => 48 + pitch);
-  const rootPosition = starting.map((pitch, i) => i && pitch <= starting[0] ? pitch + 12 : pitch);
-  const inversions = rootPosition.map((_, i) => [...rootPosition.slice(i), ...rootPosition.slice(0, i).map(pitch => pitch + 12)]);
-  const options = inversions.flatMap(notes => [-12, 0, 12].map(offset => notes.map(note => note + offset)))
-    .filter(notes => notes[0] >= 43 && notes.at(-1) <= 72);
-  const reference = previous ?? [52, 55, 59];
-  function cost(notes) {
-    const motion = notes.reduce((sum, note, index) => sum + Math.abs(note - reference[index]), 0);
-    const crowding = window.reduce((sum, melody) => sum + melody.weight * notes.reduce((total, note) => {
-      const interval = Math.abs(note - melody.midi);
-      return total + (interval === 1 ? 4 : interval === 2 ? 1.4 : interval === 0 ? 0.6 : 0);
-    }, 0), 0);
-    const aboveLead = window.reduce((sum, melody) => sum + melody.weight * Math.max(0, notes.at(-1) - melody.midi), 0);
-    return motion * 0.65 + crowding + aboveLead * 0.20;
-  }
-  return options.reduce((best, notes) => cost(notes) < cost(best) ? notes : best);
-}
-
-export function arrangeHumMelody(bars, timbreId) {
-  const events = melodyEvents(bars, timbreId);
-  if (!events.length) throw new Error('旋律没有可配轨的音符');
-  const length = bars.length * stepsPerBar;
-  const windows = melodyWindows(events, length / 8);
-  const harmony = fitHarmony(events, windows);
-  const chord = emptySteps(length), drums = emptySteps(length), bass = emptySteps(length);
-  let previousVoicing;
-  for (const [index, harmonyChord] of harmony.entries()) {
-    const voicing = closestVoicing(harmonyChord, previousVoicing, windows[index]);
-    const notes = voicing.map(noteName);
-    previousVoicing = voicing;
-    chord[index * 8] = { type: 'notes', notes, label: notes.join('/'), durationSteps: 7.5,
-      notePerformances: Object.fromEntries(notes.map(note => [note, [{ offsetSteps: 0, durationSteps: 7.5, velocity: 0.57 }]])) };
+  const bassLength = anchors.chordBars?.length ? anchors.chordBars.length * stepsPerBar : length;
+  const chord = emptySteps(chordBarCount * stepsPerBar), drums = emptySteps(length), bass = emptySteps(bassLength);
+  for (const [index, window] of windows.entries()) {
+    if (!window.active) continue;
+    const notes = window.voicing.map(noteName);
+    const durationSteps = 6.8;
+    const unchanged = window.root === windows[index - 1]?.root && windows[index - 1]?.active;
+    const velocity = unchanged && index % 2 ? 0.38 : 0.48;
+    chord[index * 8] = { type: 'notes', notes, label: notes.join('/'), durationSteps,
+      notePerformances: Object.fromEntries(notes.map(note => [note, [{ offsetSteps: 0, durationSteps, velocity }]])) };
   }
   const drumPreset = getDialDrumPreset(50, 50).bars;
   const onsetCounts = Array(bars.length).fill(0);
@@ -238,14 +156,18 @@ export function arrangeHumMelody(bars, timbreId) {
     }
     drums[step] = createDrumsCell(hits.map(hit => hit.instrument), { drumHits: hits });
   }
-  const bassSteps = [];
-  for (let step = 0; step < length; step++) {
-    if (step % 8 === 0 || (step % 4 === 2 && drums[step]?.instruments.includes('kick'))) bassSteps.push(step);
+  const authored = authoredChordAnchors(anchors.chordBars, bassLength);
+  const bassSteps = authored ? [...authored.keys()] : [];
+  if (!authored) for (let step = 0; step < length; step++) {
+    if (windows[Math.floor(step / 8)].active && (step % 8 === 0
+      || (step % 4 === 2 && drums[step]?.instruments.includes('kick')))) bassSteps.push(step);
   }
   for (const [index, step] of bassSteps.entries()) {
-    const durationSteps = Math.min(bassSteps[index + 1] ?? length, (Math.floor(step / 8) + 1) * 8) - step - 0.2;
-    const note = noteName(36 + harmony[Math.floor(step / 8)].root), velocity = step % 8 === 0 ? 0.75 : 0.55;
-    bass[step] = { type: 'bass', note, durationSteps, velocity, notePerformances: { [note]: [{ offsetSteps: 0, durationSteps, velocity }] } };
+    const boundary = (Math.floor(step / 8) + 1) * 8;
+    const durationSteps = Math.min(bassSteps[index + 1] ?? bassLength, boundary, step + 7.8) - step - 0.2;
+    const root = authored?.get(step) ?? windows[Math.floor(step / 8)].root;
+    const note = noteName(36 + root), velocity = authored || step % 8 === 0 ? 0.68 : 0.48;
+    bass[step] = { type: 'bass', note, durationSteps, velocity, ...(authored ? { harmonyAnchor: true } : {}), notePerformances: { [note]: [{ offsetSteps: 0, durationSteps, velocity }] } };
   }
   return { chord: toBars(chord), bass: toBars(bass), drums: toBars(drums) };
 }

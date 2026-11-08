@@ -277,10 +277,14 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   }
   function fillColumnBacking(slot, refreshHarmony = false) {
     const { id, workspace } = projectStore.current();
-    const { melody } = jamColumnPhrases(workspace.templates, slot);
+    const { melody, chord, bass } = jamColumnPhrases(workspace.templates, slot);
     if (!hasJamNotes(melody)) return;
+    const fixedBars = phrase => hasJamNotes(phrase) && (!refreshHarmony || !canRefreshHumHarmony(phrase))
+      ? humPlaybackBars(phrase) : undefined;
     try {
-      const arrangement = arrangeMelody(melody.bars, workspace.timbres?.melody ?? melody.timbreId);
+      const arrangement = arrangeMelody(melody.bars, workspace.timbres?.melody ?? melody.timbreId, {
+        chordBars: fixedBars(chord), bassBars: fixedBars(bass),
+      });
       const tracks = refreshHarmony ? ['chord', 'bass'] : ['chord', 'bass', 'drums'];
       const phrases = tracks.map(trackId => ({ trackId, bars: arrangement[trackId] }));
       const inserted = projectStore.insertHumPhrases(phrases, { projectId: id, melodyId: melody.id, fillEmpty: true, refreshHarmony });

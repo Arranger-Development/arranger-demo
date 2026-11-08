@@ -31,6 +31,8 @@ function pitchedRhythm(bar, track, level, edited) {
       step + Math.max(cell.durationSteps ?? 0, ...Object.values(cell.notePerformances ?? {}).flat().map(hit => hit.offsetSteps + hit.durationSteps)) > 8);
     if (!root || touched || crossesFromFirstHalf) continue;
     if (track === 'bass') {
+      // A fixed chord phrase can change root inside this half-bar.
+      if (bar.slice(start + 1, start + 8).some(cell => cell?.harmonyAnchor)) continue;
       const accents = level === 0 ? [] : level === 25 ? [6].filter(offset => bar[start + offset]) : level === 75 ? [6] : [3, 6];
       for (let i = 1; i < 8; i++) next[start + i] = null;
       [0, ...accents].forEach((offset, index) => {

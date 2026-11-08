@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { arrangeHumMelody, cleanHumNotes, estimateHumBpm, makeHumMelody } from '../src/preview/humArrangement.js';
+import { planHumHarmony } from '../src/preview/humHarmony.js';
 import { createJamTemplateProjects, jamCombinationSnapshot } from '../src/app/jamTemplateProjects.js';
 import { applyJamTrackParameter, blankJamDraft } from '../src/app/jamDraftActions.js';
 import { createMatrixPlaybackAdapter } from '../src/audio/matrixPlaybackAdapter.js';
@@ -278,4 +279,62 @@ test('refreshing harmony updates the generated bass in place and preserves a han
   assert.deepEqual(updated.map(phrase => phrase.id), [bass.id]);
   assert.equal(updated[0].bars[0][0].note, 'D2');
   assert.deepEqual(store.current().workspace.templates.chord[0], editedChord);
+});
+
+
+const quarterNotes = line => {
+  const notes = line.split(' ');
+  return Array.from({ length: Math.ceil(notes.length / 4) }, (_, bar) => Array.from({ length: 16 }, (_, step) => {
+    const note = step % 4 === 0 ? notes[bar * 4 + step / 4] : null;
+    return note && note !== '_' ? { type: 'melody', note, duration: '4n' } : null;
+  }));
+};
+const rooted = arrangement => arrangement.bass.map(bar => [bar[0]?.note, bar[8]?.note]);
+
+test('the whole phrase guides the key and the cadence rather than reinterpreting each pair of notes', () => {
+  const lead = quarterNotes('E4 D4 C4 D4 E4 E4 E4 _ D4 D4 D4 _ E4 G4 G4 _');
+  const { key } = planHumHarmony(lead, 'deep-autumn-melody');
+  assert.deepEqual(key, { tonic: 0, mode: 'major' });
+  const backing = arrangeHumMelody(lead, 'deep-autumn-melody');
+  assert.deepEqual(rooted(backing), [['C2', 'C2'], ['C2', 'C2'], ['G2', 'G2'], ['C2', 'C2']]);
+  assert.deepEqual(backing.chord[0][0].notes, ['C3', 'E3', 'G3']);
+  assert.deepEqual(backing.chord[0][8].notes, backing.chord[0][0].notes);
+  assert.ok(backing.chord[0][8].notePerformances.C3[0].velocity < backing.chord[0][0].notePerformances.C3[0].velocity);
+  const scale = quarterNotes('C4 D4 E4 F4 G4 A4 B4 C5');
+  assert.equal(rooted(arrangeHumMelody(scale)).at(-1)[1], 'C2');
+});
+
+test('minor mode supports a raised leading tone and lets a long rest stay clear', () => {
+  const lead = quarterNotes('A4 C5 E5 A4 F4 A4 C5 F4 D4 F4 A4 D4 E4 G#4 B4 A4 _ _ _ _');
+  const { key } = planHumHarmony(lead);
+  assert.deepEqual(key, { tonic: 9, mode: 'minor' });
+  const backing = arrangeHumMelody(lead);
+  assert.deepEqual(rooted(backing).slice(0, 4), [['A2', 'A2'], ['F2', 'F2'], ['D2', 'D2'], ['E2', 'A2']]);
+  assert.ok(backing.chord[3][0].notes.some(note => note.startsWith('G#')));
+  assert.ok(backing.chord[4].every(cell => cell === null) && backing.bass[4].every(cell => cell === null));
+});
+
+test('a written chord controls the generated bass at the actual change, even with the rhythm knob turned', () => {
+  const written = Array(16).fill(null);
+  written[0] = { type: 'notes', notes: ['A3', 'C4', 'F4'], durationSteps: 6 };
+  written[6] = { type: 'notes', notes: ['A3', 'D4', 'F#4'], durationSteps: 10 };
+  const chordsBefore = structuredClone(written);
+  const { bass } = arrangeHumMelody(quarterNotes('C4 E4 G4 C4'), 'hum-sustain', { chordBars: [written] });
+  assert.deepEqual(bass[0].flatMap((cell, step) => cell ? [[step, cell.note]] : []), [[0, 'F2'], [6, 'D2'], [8, 'D2']]);
+  const playing = humPlaybackBars({ trackId: 'bass', sourcePresetId: 'hum-generated', bars: bass, params: { strength: 100, groove: 50 } });
+  assert.equal(playing[0][6].note, 'D2');
+  assert.ok(playing[0][0].durationSteps < 6);
+  assert.deepEqual(written, chordsBefore);
+});
+
+test('new chords honor a manual bass even with chromatic roots and different loop lengths', () => {
+  const bassBars = [Array(16).fill(null), Array(16).fill(null)];
+  bassBars[0][0] = { type: 'bass', note: 'F#2', durationSteps: 10 };
+  bassBars[1][0] = { type: 'bass', note: 'D#2', durationSteps: 8 };
+  const { chord, drums } = arrangeHumMelody(quarterNotes('C4 E4 G4 C4'), 'hum-sustain', { bassBars });
+  assert.equal(drums.length, 1);
+  assert.equal(chord.length, 2);
+  assert.ok(chord[0][0].notes.some(note => note.startsWith('F#')));
+  assert.ok(chord[0][8].notes.some(note => note.startsWith('F#')));
+  assert.ok(chord[1][0].notes.some(note => note.startsWith('D#')));
 });
