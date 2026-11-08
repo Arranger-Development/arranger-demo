@@ -85,7 +85,7 @@ export default function HumControls({ projectStore, projectId, pauseJam, revealS
     const backing = Object.entries(arrangeHumMelody(melody.bars, projectStore.current().workspace.timbres?.melody ?? melody.timbreId)).map(([trackId, bars]) => ({ trackId, bars }));
     if (!projectStore.insertHumPhrases(backing, { projectId, melodyId: melody.id })) throw new Error('伴奏位置已被占用');
     setTake({ ...currentTake, backingReady: true });
-    setStatus({ phase: 'idle', text: `第 ${melody.slotIndex + 1} 列四轨已就绪` });
+    setStatus(initial);
   }
 
   async function finishRecording(blob) {
@@ -198,8 +198,10 @@ export default function HumControls({ projectStore, projectId, pauseJam, revealS
     onClick={() => recording ? stopRecording() : void startRecording()}>
     {createElement(recording ? Square : Mic, { size: 12 })}{recording ? '停止' : '哼唱'}
   </button>;
+  const octaveNotice = take?.shift ? `Jam 旋律${take.shift > 0 ? '升高' : '降低'} ${Math.abs(take.shift / 12)} 个八度` : '';
+  const feedbackText = [status.text, octaveNotice].filter(Boolean).join(' · ');
   const feedback = (status.text || take) && <div className="jam-hum-feedback" role="group" aria-label="哼唱结果">
-    <span role="status">{status.text}{take?.shift ? ` · Jam 旋律${take.shift > 0 ? '升高' : '降低'} ${Math.abs(take.shift / 12)} 个八度` : ''}</span>
+    {feedbackText && <span role="status">{feedbackText}</span>}
     {take?.url && <button type="button" disabled={recording} onClick={() => {
       stopAudition(); pauseJam();
       const audio = new Audio(take.url);
