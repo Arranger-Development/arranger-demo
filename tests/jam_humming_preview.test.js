@@ -249,6 +249,32 @@ test('accompaniment knobs change playback onsets, respect manual edits and resto
 });
 
 
+test('generated chord voicing changes octave and density without changing rhythm or hand-edited voices', () => {
+  const store = makeStore();
+  const bars = [Array(16).fill(null)];
+  const notes = ['D3', 'F3', 'A3'];
+  for (const step of [0, 8]) bars[0][step] = { type: 'notes', notes, durationSteps: 3.5,
+    notePerformances: Object.fromEntries(notes.map(note => [note, [{ offsetSteps: 0, durationSteps: 3.5, velocity: 0.48 }]])) };
+  const chord = { trackId: 'chord', sourcePresetId: 'hum-generated', bars, params: { strength: 50, groove: 60 } };
+  const voicing = (phrase, level) => applyJamTrackParameter(phrase, 'groove', level);
+  const events = phrase => {
+    const adapter = createMatrixPlaybackAdapter(jamCombinationSnapshot(store.current().workspace, phrase, true));
+    return Array.from({ length: 16 }, (_, step) => adapter.getEventsForStep(0, step)).flat();
+  };
+  const notesAt = (phrase, step) => events(phrase).filter(hit => hit.step === step).flatMap(hit => hit.notes).sort();
+  const low = voicing(chord, 0), layered = voicing(chord, 100);
+  assert.deepEqual(notesAt(low, 0), ['A2', 'D2', 'F2']);
+  assert.deepEqual(notesAt(layered, 0), ['A3', 'A4', 'D2', 'D3', 'F3']);
+  assert.deepEqual(events(voicing(layered, 60)), events(chord));
+
+  const broken = applyJamTrackParameter(chord, 'strength', 100);
+  const timing = phrase => [...new Set(events(phrase).map(hit => [hit.step, hit.timingOffset, hit.durationSteps].join(':')))];
+  assert.deepEqual(timing(voicing(broken, 100)), timing(broken));
+  const edited = editJamSequencerStep(layered, 0, 0, bar => setJamPitchedNote(bar, 0, 'D2', 1, true));
+  assert.deepEqual(notesAt(voicing(edited, 0), 0), ['A3', 'A4', 'D3', 'F3']);
+  assert.deepEqual(notesAt(voicing(edited, 0), 8), notesAt(low, 8));
+});
+
 test('removing a rhythm-only hit records the edit even when the stored bar is unchanged', () => {
   const bars = [Array(16).fill(null)];
   const phrase = { sourcePresetId: 'hum-generated', trackId: 'drums', params: { strength: 50, groove: 100 }, bars };

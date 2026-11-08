@@ -72,6 +72,7 @@ function PianoRoll({
   highlightedNoteIds = EMPTY_ACTIVE_NOTE_IDS,
   highlightedStepIds = EMPTY_HIGHLIGHTED_STEP_IDS,
   initialTopNote,
+  revealPitchOnChange,
   getCellRenderState,
   isCellActive,
   notes,
@@ -90,6 +91,7 @@ function PianoRoll({
   const initialTopRow = noteIndexById.get(initialTopNote)
     ?? Math.min(PIANO_ROLL_VISIBLE_ROWS, Math.max(0, notes.length - PIANO_ROLL_VISIBLE_ROWS));
   const previousActiveNoteIdsRef = useRef(new Set());
+  const previousPitchReveal = useRef(revealPitchOnChange);
   const durationDrag = useRef(null);
   const resizeConsumedClick = useRef(false);
   const [resizeTarget, setResizeTarget] = useState(null);
@@ -122,6 +124,14 @@ function PianoRoll({
     pianoRoll.addEventListener('wheel', handlePitchWheel, { passive: false });
     return () => pianoRoll.removeEventListener('wheel', handlePitchWheel);
   }, [handlePitchWheel, pianoRollRef]);
+
+  useLayoutEffect(() => {
+    const changed = previousPitchReveal.current !== revealPitchOnChange;
+    previousPitchReveal.current = revealPitchOnChange;
+    if (changed && revealPitchOnChange !== undefined && !durationDrag.current) {
+      revealPitchRow(noteIndexById.get(initialTopNote));
+    }
+  }, [initialTopNote, noteIndexById, revealPitchOnChange, revealPitchRow]);
 
   useLayoutEffect(() => {
     const nextActiveNoteIds = activeNoteIds instanceof Set

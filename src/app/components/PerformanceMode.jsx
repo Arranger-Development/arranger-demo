@@ -494,11 +494,12 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       <div className="studio-editor-controls">
         {editingTrack !== 'drums' && <div className="studio-phrase-settings"><label>音型<select aria-label={`${LABELS[editingTrack]}乐句起点`} value={draft.sourcePresetId} onChange={e => { const next = e.target.value === 'blank' ? blankJamDraft(editingTrack,draft.timbreId,draft.targetSlot) : sourceDraft(editingTrack,e.target.value,draft.timbreId); midiInput.useSoftwareValue(); replaceDraft({...next,name:draft.name,editingTemplateId:draft.editingTemplateId,targetSlot:draft.targetSlot},{restart:true}); setEditBar(0); }}>{draft.sourcePresetId === HUM_SOURCE && <option value={HUM_SOURCE}>{editingTrack === 'melody' ? '哼唱生成' : '旋律配轨'}</option>}<option value="blank">空白乐句</option><optgroup label="旋钮模板 · Ableton">{DIAL_PITCHED_PRESETS.filter(p => p.trackId === editingTrack).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup><optgroup label="原有模板">{catalog[editingTrack].map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup></select></label></div>}
         <div className="studio-editor-knob-panel">
-          <div className="studio-editor-knobs">{jamTrackKnobs(editingTrack, draft.sourcePresetId === HUM_SOURCE).map(({parameter,hardwareParameter,label,lowLabel,highLabel}) => {
+          <div className="studio-editor-knobs">{jamTrackKnobs(editingTrack, draft.sourcePresetId === HUM_SOURCE).map(({parameter,hardwareParameter,label,lowLabel,highLabel,valueLabels}) => {
             const position = midiInput.knobPositions[hardwareParameter], value = draft.params?.[parameter] ?? 50;
+            const currentValue = valueLabels?.[value] ?? `${value}%`;
             return <RotaryKnob key={parameter} label={label} value={value} displayValue={position?.display ? position.percent : value}
-              valueDescription={position?.display ? `硬件位置 ${position.percent}%；当前乐句${label} ${value}%` : `${label} ${value}%`}
-              showValue={false} format={v => `${v}%`} step={parameter === 'groove' && editingTrack === 'chord' ? 20 : 25}
+              valueDescription={position?.display ? `硬件位置 ${position.percent}%；当前乐句${label} ${currentValue}` : `${label} ${currentValue}`}
+              showValue={Boolean(valueLabels)} format={() => currentValue} step={parameter === 'groove' && editingTrack === 'chord' ? 20 : 25}
               ticks={jamParameterLevels(editingTrack,parameter).map(v => ({value:v,label:v}))} spectrum showTicks={false}
               lowLabel={lowLabel} highLabel={highLabel}
               onBegin={() => { midiInput.useSoftwareValue(hardwareParameter); beginGesture(); }} onEnd={endGesture} onChange={v => changeParameter(parameter,v)}/>;

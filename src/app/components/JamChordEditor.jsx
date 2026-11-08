@@ -23,6 +23,7 @@ export default function JamChordEditor({ draft, editorBars = draft.bars, bar, st
   return <div className="studio-chord-editor">
     <div className="studio-piano-preview studio-chord-roll"><PianoRoll ariaLabel={`${label}音序器`} trackId={track} notes={notes}
       initialTopNote={firstNote} showStepNumbers activeNoteIds={playingNotes}
+      revealPitchOnChange={track === 'chord' && draft.sourcePresetId === HUM_SOURCE ? draft.params?.groove : undefined}
       getCellRenderState={renderState} isCellActive={() => false}
       onCellToggle={(step, note, event) => {
         const state = renderState(step, note);
