@@ -74,6 +74,22 @@ test('first empty column keeps existing selections and accompaniment publishes a
   assert.equal(store.insertHumPhrases(backingPhrases(bars), { projectId: 'stale', melodyId: phrase.id }), null);
 });
 
+test('a recording fills the open empty melody slot and never overwrites an existing phrase', () => {
+  const store = makeStore();
+  const projectId = store.current().id;
+  const bars = melody([60, 64, 67, 60]);
+  const empty = store.commitPhraseEdit(blankJamDraft('melody'), { create: true, slotIndex: 2 });
+  const record = emptyMelodyId => store.insertHumPhrases([{ trackId: 'melody', name: '哼唱 1', bars }], { projectId, emptyMelodyId })[0];
+  const recording = record(empty.id);
+  assert.equal(recording.id, empty.id);
+  assert.equal(recording.name, '哼唱 1');
+  assert.equal(recording.slotIndex, 2);
+  const backing = store.insertHumPhrases(backingPhrases(bars), { projectId, melodyId: recording.id });
+  assert.deepEqual(backing.map(item => item.slotIndex), [2, 2, 2]);
+  assert.equal(record(empty.id).slotIndex, 0);
+  assert.deepEqual(store.current().workspace.templates.melody.find(phrase => phrase.id === recording.id), recording);
+});
+
 test('Jam snapshots play all four tracks, and rotating generated expression preserves edited pitches and onset', () => {
   const store = makeStore();
   const projectId = store.current().id;

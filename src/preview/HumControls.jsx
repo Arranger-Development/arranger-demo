@@ -13,7 +13,7 @@ function recordingError(error) {
   return '录音未完成，请再哼一次。';
 }
 
-export default function HumControls({ projectStore, projectId, pauseJam, revealSlot, jamPlaying, children }) {
+export default function HumControls({ projectStore, projectId, pauseJam, showRecording, emptyMelodyId, jamPlaying, children }) {
   const [status, setStatus] = useState(initial);
   const [take, setTake] = useState(null);
   const capture = useRef(null), worker = useRef(null), analysis = useRef(null);
@@ -88,7 +88,7 @@ export default function HumControls({ projectStore, projectId, pauseJam, revealS
     setStatus(initial);
   }
 
-  async function finishRecording(blob) {
+  async function finishRecording(blob, emptyMelodyId) {
     if (!active.current || projectStore.current().id !== projectId) return;
     if (recordingUrl.current) URL.revokeObjectURL(recordingUrl.current);
     recordingUrl.current = URL.createObjectURL(blob);
@@ -120,14 +120,14 @@ export default function HumControls({ projectStore, projectId, pauseJam, revealS
     }
     let number = 1;
     while (workspace.templates.melody.some(phrase => phrase.name === `哼唱 ${number}`)) number++;
-    const [phrase] = projectStore.insertHumPhrases([{ trackId: 'melody', name: `哼唱 ${number}`, bars: melody.bars }], { projectId, bpm: estimate }) ?? [];
+    const [phrase] = projectStore.insertHumPhrases([{ trackId: 'melody', name: `哼唱 ${number}`, bars: melody.bars }], { projectId, emptyMelodyId, bpm: estimate }) ?? [];
     if (!phrase) {
       setStatus({ phase: 'idle', text: '旋律未能加入当前项目，请重试。' });
       return;
     }
     const currentTake = { ...original, notes, melodyId: phrase.id, shift: melody.shift };
     setTake(currentTake);
-    revealSlot(phrase.slotIndex);
+    showRecording(phrase);
     setStatus({ phase: 'arranging', text: '旋律已就绪，正在自动配三轨…' });
     await nextTask();
     if (!active.current || projectStore.current().id !== projectId) return;
@@ -149,7 +149,7 @@ export default function HumControls({ projectStore, projectId, pauseJam, revealS
 
   async function startRecording() {
     if (capture.current || status.phase !== 'idle') return;
-    const current = {};
+    const current = { emptyMelodyId };
     capture.current = current;
     stopAudition();
     setStatus({ phase: 'requesting', text: '正在打开麦克风…' });
@@ -169,7 +169,7 @@ export default function HumControls({ projectStore, projectId, pauseJam, revealS
         clearTimeout(current.timer);
         current.stream.getTracks().forEach(track => track.stop());
         capture.current = null;
-        if (chunks.length) void finishRecording(new Blob(chunks, { type: recorder.mimeType }));
+        if (chunks.length) void finishRecording(new Blob(chunks, { type: recorder.mimeType }), current.emptyMelodyId);
         else setStatus({ phase: 'idle', text: '没有录到声音，请重试。' });
       };
       recorder.onerror = () => {

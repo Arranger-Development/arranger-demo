@@ -219,7 +219,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       return;
     }
     void audio.startAudio();
-    audition.open({...phrase,editingTemplateId:phrase.id},{mode:'mix',autoStart:!options?.editColumn,editColumn:options?.editColumn});
+    audition.open({...phrase,editingTemplateId:phrase.id},{mode:'mix',autoStart:options?.autoStart ?? !options?.editColumn,editColumn:options?.editColumn});
   }
   function finishEditor() {
     clearTimeout(midiGesture.current);endGesture();
@@ -429,6 +429,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const previewBar = Math.min(editBar,(draft?.bars.length ?? 1)-1);
   const harmonySlot = humControl && arrangeMelody && draft?.trackId === 'melody' ? draft.slotIndex : null;
   const columnPhrases = harmonySlot == null ? null : jamColumnPhrases(w.templates, harmonySlot);
+  const hasBacking = columnPhrases && ['chord', 'bass', 'drums'].some(track => hasJamNotes(columnPhrases[track]));
   const canArrange = columnPhrases && hasJamNotes(columnPhrases.melody) && ['chord', 'bass', 'drums'].some(track => {
     const phrase = columnPhrases[track];
     return !phrase?.humEditedSteps?.length && (!hasJamNotes(phrase) || canRefreshHumHarmony(phrase));
@@ -445,7 +446,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           <label className="studio-template-name-field">名称<input aria-label="乐句名称" value={draft.name ?? ''} placeholder={`${LABELS[editingTrack]}新乐句`} maxLength={80} onFocus={() => beginGesture('name')} onBlur={endGesture} onChange={e => { beginGesture('name');replaceDraft({...draft,name:e.target.value},{updateAudio:false,gesture:true}); }}/></label>
           {columnPhrases && <button type="button" className="studio-refresh-harmony"
             title="按当前旋律更新自动伴奏，保留手编乐句" disabled={!canArrange}
-            onClick={() => fillColumnBacking(harmonySlot)}>重配和声</button>}
+            onClick={() => fillColumnBacking(harmonySlot)}>{hasBacking ? '重配和声' : '配伴奏'}</button>}
         </div>
         <div className="studio-editor-heading-actions">
           <button type="button" className="studio-text-button" onClick={finishEditor}><ArrowLeft size={13}/> 收起编辑</button>
@@ -499,7 +500,12 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         {humControl ? createElement(humControl, {
           key: project.id, projectId: project.id, projectStore, jamPlaying: running,
           pauseJam: () => { if (audition.getTrack()) audition.pause(); else playback.stop(); },
-          revealSlot: slot => { pendingReveal.current = slot; launcherNav.current?.revealSlot(slot); },
+          emptyMelodyId: draft?.trackId === 'melody' && !hasJamNotes(draft) ? draft.editingTemplateId : undefined,
+          showRecording: phrase => {
+            pendingReveal.current = phrase.slotIndex;
+            launcherNav.current?.revealSlot(phrase.slotIndex);
+            openEditor('melody', phrase, { autoStart: false });
+          },
         }, renderMain) : renderMain()}
       </main>
       <aside id="jam-studio-effects" className="jam-effects studio-effects" data-track={fx.selectedTrack}><header className="studio-effects-heading"><h2>现场效果</h2><button type="button" className="studio-text-button" title="恢复四轨的平衡音量，再用推子微调" onClick={() => { if(projectStore.patch({volumes:Object.fromEntries(TRACKS.map(t=>[t,0]))})) setMessage('四轨音量已平衡。'); }}>平衡四轨</button></header><div className="effect-targets" role="group" aria-label="效果目标轨道">{TRACKS.map(t => <button type="button" key={t} aria-pressed={fx.selectedTracks.includes(t)} onClick={() => effects.toggleTrack(t)}>{LABELS[t]}</button>)}</div>
