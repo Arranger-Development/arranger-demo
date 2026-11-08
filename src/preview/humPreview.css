@@ -70,8 +70,6 @@
   font-size: 12px;
 }
 
-.jam-hum-timing { color: var(--tj-muted); font-variant-numeric: tabular-nums; }
-
 .jam-studio[data-hum-preview][data-editing=false] .studio-template[data-show-edit] {
   width: 100%;
   background: var(--studio-soft);

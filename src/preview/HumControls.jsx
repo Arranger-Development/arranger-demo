@@ -6,8 +6,6 @@ import './humPreview.css';
 
 const initial = { phase: 'idle', text: '' };
 const nextTask = () => new Promise(resolve => setTimeout(resolve, 0));
-const clock = () => performance.now();
-const elapsed = (start, end) => `${((end - start) / 1000).toFixed(2)} 秒`;
 
 function recordingError(error) {
   if (error.name === 'NotAllowedError' || error.name === 'SecurityError') return '麦克风权限未开启。允许后再点「哼唱」。';
@@ -86,15 +84,15 @@ export default function HumControls({ projectStore, projectId, pauseJam, revealS
     if (!melody) throw new Error('旋律格已移除');
     const backing = Object.entries(arrangeHumMelody(melody.bars, projectStore.current().workspace.timbres?.melody ?? melody.timbreId)).map(([trackId, bars]) => ({ trackId, bars }));
     if (!projectStore.insertHumPhrases(backing, { projectId, melodyId: melody.id })) throw new Error('伴奏位置已被占用');
-    setTake({ ...currentTake, readyAt: clock() });
+    setTake({ ...currentTake, backingReady: true });
     setStatus({ phase: 'idle', text: `第 ${melody.slotIndex + 1} 列四轨已就绪` });
   }
 
-  async function finishRecording(blob, stoppedAt) {
+  async function finishRecording(blob) {
     if (!active.current || projectStore.current().id !== projectId) return;
     if (recordingUrl.current) URL.revokeObjectURL(recordingUrl.current);
     recordingUrl.current = URL.createObjectURL(blob);
-    const original = { url: recordingUrl.current, stoppedAt };
+    const original = { url: recordingUrl.current };
     setTake(original);
     setStatus({ phase: 'transcribing', text: '正在识别旋律…' });
     let notes;
@@ -127,7 +125,7 @@ export default function HumControls({ projectStore, projectId, pauseJam, revealS
       setStatus({ phase: 'idle', text: '旋律未能加入当前项目，请重试。' });
       return;
     }
-    const currentTake = { ...original, notes, melodyId: phrase.id, melodyAt: clock(), shift: melody.shift };
+    const currentTake = { ...original, notes, melodyId: phrase.id, shift: melody.shift };
     setTake(currentTake);
     revealSlot(phrase.slotIndex);
     setStatus({ phase: 'arranging', text: '旋律已就绪，正在自动配三轨…' });
@@ -144,7 +142,6 @@ export default function HumControls({ projectStore, projectId, pauseJam, revealS
   function stopRecording(current = capture.current) {
     if (!current?.recorder || current.recorder.state === 'inactive') return;
     clearTimeout(current.timer);
-    current.stoppedAt = clock();
     setStatus({ phase: 'transcribing', text: '正在处理录音…' });
     current.recorder.stop();
     current.stream.getTracks().forEach(track => track.stop());
@@ -172,7 +169,7 @@ export default function HumControls({ projectStore, projectId, pauseJam, revealS
         clearTimeout(current.timer);
         current.stream.getTracks().forEach(track => track.stop());
         capture.current = null;
-        if (chunks.length) void finishRecording(new Blob(chunks, { type: recorder.mimeType }), current.stoppedAt ?? clock());
+        if (chunks.length) void finishRecording(new Blob(chunks, { type: recorder.mimeType }));
         else setStatus({ phase: 'idle', text: '没有录到声音，请重试。' });
       };
       recorder.onerror = () => {
@@ -212,9 +209,7 @@ export default function HumControls({ projectStore, projectId, pauseJam, revealS
     {take?.notes?.length > 0 && <button type="button" disabled={recording} onClick={() => {
       stopAudition(); pauseJam(); audition.current = playHumNotes(take.notes);
     }}>听识别旋律</button>}
-    {take?.melodyId && !take.readyAt && !busy && !recording && <button type="button" onClick={() => retryBacking(take)}>重试配轨</button>}
-    {take?.melodyAt && <span className="jam-hum-timing">停录 → 旋律 {elapsed(take.stoppedAt, take.melodyAt)}
-      {take.readyAt && ` · 停录 → 四轨 ${elapsed(take.stoppedAt, take.readyAt)}`}</span>}
+    {take?.melodyId && !take.backingReady && !busy && !recording && <button type="button" onClick={() => retryBacking(take)}>重试配轨</button>}
   </div>;
   return children(button, feedback);
 }
