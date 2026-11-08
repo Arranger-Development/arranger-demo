@@ -344,6 +344,36 @@ test('refreshing harmony updates the generated bass in place and preserves a han
   assert.deepEqual(store.current().workspace.templates.chord[0], editedChord);
 });
 
+test('backing follows hand-written sixteenth notes in the same slot and clears only unedited parts', () => {
+  const store = makeStore(), projectId = store.current().id, slotIndex = 4;
+  let lead = store.commitPhraseEdit(blankJamDraft('melody'), { create: true, slotIndex });
+  const blankChord = store.commitPhraseEdit(blankJamDraft('chord'), { create: true, slotIndex });
+  const update = (notes, steps = [0, 1, 2]) => {
+    let bar = Array(16).fill(null);
+    notes.forEach((note, i) => { bar = setJamPitchedNote(bar, steps[i], note, 1, false, 'melody'); });
+    lead = store.commitPhraseEdit({ ...lead, bars: [bar] });
+    return store.insertHumPhrases(notes.length ? backingPhrases(lead.bars) : [], {
+      projectId, melodyId: lead.id, fillEmpty: true, refreshHarmony: true, followMelody: true,
+    });
+  };
+  assert.deepEqual(update([]), []);
+  const [dm, dBass, drums] = update(['D4', 'F4', 'A4']);
+  assert.equal(dm.id, blankChord.id);
+  assert.deepEqual(dm.bars[0][0].notes, ['D3', 'F3', 'A3']);
+  assert.equal(dBass.bars[0][0].note, 'D2');
+  assert.ok([dm, dBass, drums].every(phrase => phrase.slotIndex === slotIndex));
+  const [c, cBass] = update(['C4', 'E4', 'G4'], [0, 4, 8]);
+  assert.equal(c.id, dm.id);
+  assert.deepEqual(c.bars[0][0].notes, ['C3', 'E3', 'G3']);
+  assert.equal(cBass.id, dBass.id);
+  assert.equal(cBass.bars[0][0].note, 'C2');
+  const editedChord = store.commitPhraseEdit(editJamSequencerStep(c, 0, 3, bar => setJamPitchedNote(bar, 3, 'G4', 1)));
+  const cleared = update([]);
+  assert.deepEqual(cleared.map(phrase => phrase.id).sort(), [dBass.id, drums.id].sort());
+  assert.ok(cleared.every(phrase => phrase.bars.every(bar => bar.every(cell => cell === null))));
+  assert.deepEqual(store.current().workspace.templates.chord[0], editedChord);
+});
+
 
 const quarterNotes = line => {
   const notes = line.split(' ');

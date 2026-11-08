@@ -17,6 +17,11 @@ export function canRefreshHumHarmony(phrase) {
     && !phrase.humEditedSteps?.length;
 }
 
+export function canFollowJamMelody(phrase, melodyId) {
+  return isHumBacking(phrase) && !phrase.humEditedSteps?.length
+    && (!phrase.humBackingMelodyId || phrase.humBackingMelodyId === melodyId);
+}
+
 export function editJamSequencerStep(phrase, barIndex, step, editBar) {
   const baseBar = phrase.bars[barIndex];
   const bars = [...phrase.bars];

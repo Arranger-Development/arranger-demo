@@ -10,7 +10,7 @@ import DrumStepGrid from './DrumStepGrid.jsx';
 import JamLauncher from './JamLauncher.jsx';
 import JamChordEditor from './JamChordEditor.jsx';
 import { createJamAudition } from '../jamAudition.js';
-import { canRefreshHumHarmony, editJamSequencerStep, HUM_SOURCE, humPlaybackBars, isHumBacking } from '../jamHumExpression.js';
+import { canFollowJamMelody, canRefreshHumHarmony, editJamSequencerStep, HUM_SOURCE, humPlaybackBars, isHumBacking } from '../jamHumExpression.js';
 import { createJamHeldEdits } from '../jamHeldEdits.js';
 import { createJamPhraseHistory } from '../jamPhraseHistory.js';
 import { toggleJamTemplate, launchJamColumn, deleteJamTemplate, jamColumnPhrases } from '../jamTemplateSelection.js';
@@ -38,6 +38,7 @@ import './jamPerformanceRows.css';
 void [Home, Undo2, Redo2, ArrowLeft, ChevronLeft, ChevronRight, RotaryKnob, JamProjectControls, JamPerformanceDeck, DrumStepGrid, JamLauncher, JamChordEditor];
 const copy = value => structuredClone(value);
 const performanceNow = () => globalThis.performance.now();
+const BACKING_TRACKS = ['chord', 'bass', 'drums'];
 const ART = Object.fromEntries(TRACKS.map(t => [t, `${import.meta.env.BASE_URL}assets/jam-instruments/${t}-v1.png`]));
 const timbreLabel = id => PERFORMANCE_SAMPLE_BANKS[id]?.label ?? ({ 'soft-electronic-kit':'柔和电子鼓', 'warm-electric-piano':'温暖电钢琴', 'round-electric-bass':'圆润电贝司', 'airy-synth-lead':'空气感合成器' })[id] ?? id;
 const emptySelection = () => Object.fromEntries(TRACKS.map(t => [t, null]));
@@ -93,6 +94,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const artNodes = useRef({}), artPositions = useRef(null), animations = useRef([]);
   const workbench = useRef(null);
   const midiGesture = useRef(null);
+  const backingTimers = useRef(new Map());
   const hasQueued = Boolean(status.queuedPhraseIds);
   // One shared phase drives all queued outlines; no per-pad React updates or timers.
   useEffect(() => {
@@ -109,6 +111,10 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     return () => cancelAnimationFrame(frame);
   }, [active, playback, hasQueued, status.loading, w.bpm]);
   useEffect(() => () => clearTimeout(midiGesture.current), []);
+  useEffect(() => {
+    const timers = backingTimers.current;
+    return () => { timers.forEach(timer => clearTimeout(timer)); timers.clear(); };
+  }, [project.id, active]);
   useEffect(() => { if (workbench.current) workbench.current.scrollTop = 0; }, [editingTrack, project.id]);
   function captureArt() {
     artPositions.current = Object.fromEntries(TRACKS.map(t => [t,artNodes.current[t]?.getBoundingClientRect()]));
@@ -194,6 +200,17 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       void audio.startAudio();
       syncPhraseAudio(phrase, restart, knob || (humExpressionChanged && !barsChanged));
     }
+    if (humControl && arrangeMelody && !knob && barsChanged && phrase.trackId === 'melody' && phrase.sourcePresetId !== HUM_SOURCE) {
+      cancelBackingTimer(phrase.id);
+      const projectId = project.id;
+      backingTimers.current.set(phrase.id, setTimeout(() => {
+        backingTimers.current.delete(phrase.id);
+        const latest = projectStore.current();
+        if (latest.id !== projectId) return;
+        const melody = latest.workspace.templates.melody.find(item => item.id === phrase.id);
+        if (melody && melody.sourcePresetId !== HUM_SOURCE) fillColumnBacking(melody.slotIndex, { followMelody: true });
+      }, 180));
+    }
   }
   function openEditor(t, template = null, options = {}, targetSlot = null) {
     clearTimeout(midiGesture.current); endGesture();
@@ -275,27 +292,49 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     const launched = launchJamColumn({ projectStore, playback, audition, slotIndex: columnIndex, toggle: true });
     if (launched && playback.isActive()) audition.resumeColumn(columnIndex);
   }
-  function fillColumnBacking(slot) {
+  function cancelBackingTimer(melodyId) {
+    clearTimeout(backingTimers.current.get(melodyId));
+    backingTimers.current.delete(melodyId);
+  }
+  function fillColumnBacking(slot, { followMelody = false } = {}) {
     const { id, workspace } = projectStore.current();
-    const { melody, chord, bass } = jamColumnPhrases(workspace.templates, slot);
-    if (!hasJamNotes(melody)) return;
-    const fixedBars = phrase => hasJamNotes(phrase) && !canRefreshHumHarmony(phrase)
-      ? humPlaybackBars(phrase) : undefined;
+    const column = jamColumnPhrases(workspace.templates, slot), { melody, chord, bass } = column;
+    if (!melody || (!followMelody && !hasJamNotes(melody))) return;
+    cancelBackingTimer(melody.id);
+    const canRefresh = followMelody ? phrase => canFollowJamMelody(phrase, melody.id) : canRefreshHumHarmony;
+    const fixedBars = phrase => hasJamNotes(phrase) && !canRefresh(phrase) ? humPlaybackBars(phrase) : undefined;
     try {
-      const arrangement = arrangeMelody(melody.bars, workspace.timbres?.melody ?? melody.timbreId, {
+      const arrangement = hasJamNotes(melody) ? arrangeMelody(melody.bars, workspace.timbres?.melody ?? melody.timbreId, {
         chordBars: fixedBars(chord), bassBars: fixedBars(bass),
-      });
-      const tracks = ['chord', 'bass', 'drums'];
-      const phrases = tracks.map(trackId => ({ trackId, bars: arrangement[trackId] }));
-      const inserted = projectStore.insertHumPhrases(phrases, { projectId: id, melodyId: melody.id, fillEmpty: true, refreshHarmony: true });
-      if (playback.isActive()) {
+      }) : null;
+      const phrases = arrangement ? BACKING_TRACKS.map(trackId => ({ trackId, bars: arrangement[trackId] })) : [];
+      const inserted = projectStore.insertHumPhrases(phrases, { projectId: id, melodyId: melody.id,
+        fillEmpty: true, refreshHarmony: true, followMelody });
+      if (inserted?.length && playback.isActive()) {
         const updatedWorkspace = projectStore.current().workspace;
-        for (const phrase of inserted ?? []) {
+        const desired = playback.getDesiredPhraseIds();
+        const followsPlayingMelody = followMelody && desired.melody === melody.id
+          && TRACKS.every(track => !desired[track] || column[track]?.id === desired[track]);
+        let selectionChanged = false;
+        for (const phrase of inserted) {
+          const track = phrase.trackId;
+          if (!hasJamNotes(phrase)) {
+            if (desired[track] === phrase.id) selectionChanged = true;
+            playback.removeTrack(track, phrase.id);
+            continue;
+          }
           const snapshot = jamCombinationSnapshot(updatedWorkspace, phrase, true);
-          playback.updatePhrase(snapshot, phrase.trackId, phrase.id, { preserveEffects: true });
+          if (followsPlayingMelody && !desired[track] && !hasJamNotes(column[track])
+            && !updatedWorkspace.mutedTracks[track] && updatedWorkspace.volumes[track] > -24) {
+            playback.toggleTrack(snapshot, track, updatedWorkspace.bpm, {
+              restart: true, alignWith: { trackId: 'melody', phraseId: melody.id },
+            });
+            selectionChanged = true;
+          } else playback.updatePhrase(snapshot, track, phrase.id, { preserveEffects: true });
         }
+        if (selectionChanged) projectStore.patch({ selection: playback.getDesiredPhraseIds() });
       }
-      setMessage(inserted?.length ? '' : '当前列没有可配轨的位置');
+      if (inserted?.length || !followMelody) setMessage(inserted?.length ? '' : '当前列没有可配轨的位置');
     } catch {
       setMessage('无法根据当前旋律配轨，请检查旋律音符后再试。');
     }
@@ -429,8 +468,8 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const previewBar = Math.min(editBar,(draft?.bars.length ?? 1)-1);
   const harmonySlot = humControl && arrangeMelody && draft?.trackId === 'melody' ? draft.slotIndex : null;
   const columnPhrases = harmonySlot == null ? null : jamColumnPhrases(w.templates, harmonySlot);
-  const hasBacking = columnPhrases && ['chord', 'bass', 'drums'].some(track => hasJamNotes(columnPhrases[track]));
-  const canArrange = columnPhrases && hasJamNotes(columnPhrases.melody) && ['chord', 'bass', 'drums'].some(track => {
+  const hasBacking = columnPhrases && BACKING_TRACKS.some(track => hasJamNotes(columnPhrases[track]));
+  const canArrange = columnPhrases && hasJamNotes(columnPhrases.melody) && BACKING_TRACKS.some(track => {
     const phrase = columnPhrases[track];
     return !phrase?.humEditedSteps?.length && (!hasJamNotes(phrase) || canRefreshHumHarmony(phrase));
   });
