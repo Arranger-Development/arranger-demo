@@ -338,3 +338,31 @@ test('new chords honor a manual bass even with chromatic roots and different loo
   assert.ok(chord[0][8].notes.some(note => note.startsWith('F#')));
   assert.ok(chord[1][0].notes.some(note => note.startsWith('D#')));
 });
+
+test('strong melody evidence colors a dominant before resolution and bass connects across roots', () => {
+  const lead = quarterNotes('C4 E4 G4 E4 F4 A4 C5 A4 G4 B4 F4 B4 C5 G4 E4 C4');
+  const { chord, bass } = arrangeHumMelody(lead);
+  const classes = cell => cell.notes.map(note => note.slice(0, -1)).sort();
+  assert.deepEqual(classes(chord[2][0]), ['B', 'D', 'G']);
+  assert.deepEqual(classes(chord[2][8]), ['B', 'F', 'G']);
+  assert.deepEqual(classes(chord[3][0]), ['C', 'E', 'G']);
+  assert.equal(bass[0][14].note, 'E2');
+  assert.equal(bass[1][0].note, 'F2');
+  const high = humPlaybackBars({ trackId: 'bass', sourcePresetId: 'hum-generated', bars: bass, params: { strength: 100, groove: 50 } });
+  assert.equal(high[0][14].note, 'E2');
+});
+
+test('chord attacks follow delayed melody entries and rhythm knobs preserve the pickup position', () => {
+  const lead = [Array(16).fill(null)];
+  lead[0][4] = { type: 'melody', note: 'C4', durationSteps: 2 };
+  lead[0][15] = { type: 'melody', note: 'E4', durationSteps: 1 };
+  const { chord } = arrangeHumMelody(lead);
+  const phrase = { trackId: 'chord', sourcePresetId: 'hum-generated', bars: chord, params: { strength: 50, groove: 60 } };
+  const onsets = bar => bar.flatMap((cell, step) => cell ? [step] : []);
+  assert.deepEqual(onsets(chord[0]), [4, 15]);
+  assert.ok(chord[0][4].durationSteps < 3);
+  const high = humPlaybackBars(applyJamTrackParameter(phrase, 'strength', 100))[0];
+  assert.deepEqual(onsets(high), [4, 5, 6, 15]);
+  assert.deepEqual(high[15].notes, chord[0][15].notes);
+  assert.ok(15 + high[15].durationSteps <= 16);
+});

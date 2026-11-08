@@ -121,6 +121,17 @@ export function makeHumMelody(notes, bpm) {
   return { bars: toBars(steps), shift };
 }
 
+function bassConnection(current, next, lead, step) {
+  if (!current.active || !next.active || current.root === next.root || current.offset + current.duration < 4) return null;
+  const from = 36 + current.root, to = 36 + next.root;
+  if (Math.abs(from - to) <= 2) return null;
+  const sounding = lead.filter(note => note.start < step + 1.8 && note.start + note.duration > step);
+  const options = current.tones.filter(pitch => pitch !== current.root
+    && sounding.every(note => ![1, 11].includes((note.pitch - pitch + 12) % 12)));
+  // Use a tone from the departing chord only if it reaches the next root by step.
+  return [to - 1, to + 1, to - 2, to + 2].find(note => options.includes(note % 12) && Math.abs(note - from) <= 5) ?? null;
+}
+
 const gcd = (a, b) => b ? gcd(b, a % b) : a;
 export function arrangeHumMelody(bars, timbreId, anchors = {}) {
   const bassBarCount = anchors.bassBars?.length;
@@ -134,10 +145,10 @@ export function arrangeHumMelody(bars, timbreId, anchors = {}) {
   for (const [index, window] of windows.entries()) {
     if (!window.active) continue;
     const notes = window.voicing.map(noteName);
-    const durationSteps = 6.8;
+    const durationSteps = window.duration;
     const unchanged = window.root === windows[index - 1]?.root && windows[index - 1]?.active;
     const velocity = unchanged && index % 2 ? 0.38 : 0.48;
-    chord[index * 8] = { type: 'notes', notes, label: notes.join('/'), durationSteps,
+    chord[index * 8 + window.offset] = { type: 'notes', notes, label: notes.join('/'), durationSteps,
       notePerformances: Object.fromEntries(notes.map(note => [note, [{ offsetSteps: 0, durationSteps, velocity }]])) };
   }
   const drumPreset = getDialDrumPreset(50, 50).bars;
@@ -158,16 +169,24 @@ export function arrangeHumMelody(bars, timbreId, anchors = {}) {
   }
   const authored = authoredChordAnchors(anchors.chordBars, bassLength);
   const bassSteps = authored ? [...authored.keys()] : [];
+  const links = new Map();
   if (!authored) for (let step = 0; step < length; step++) {
-    if (windows[Math.floor(step / 8)].active && (step % 8 === 0
-      || (step % 4 === 2 && drums[step]?.instruments.includes('kick')))) bassSteps.push(step);
+    const index = Math.floor(step / 8), current = windows[index];
+    if (!current.active) continue;
+    if (step % 8 === 6) {
+      const next = windows[(index + 1) % (length / 8)];
+      const link = bassConnection(current, next, events, step);
+      if (link != null) links.set(step, link);
+    }
+    if (step % 8 === 0 || links.has(step) || (step % 4 === 2 && drums[step]?.instruments.includes('kick'))) bassSteps.push(step);
   }
   for (const [index, step] of bassSteps.entries()) {
     const boundary = (Math.floor(step / 8) + 1) * 8;
     const durationSteps = Math.min(bassSteps[index + 1] ?? bassLength, boundary, step + 7.8) - step - 0.2;
     const root = authored?.get(step) ?? windows[Math.floor(step / 8)].root;
-    const note = noteName(36 + root), velocity = authored || step % 8 === 0 ? 0.68 : 0.48;
-    bass[step] = { type: 'bass', note, durationSteps, velocity, ...(authored ? { harmonyAnchor: true } : {}), notePerformances: { [note]: [{ offsetSteps: 0, durationSteps, velocity }] } };
+    const note = noteName(links.get(step) ?? 36 + root), velocity = authored || step % 8 === 0 ? 0.68 : 0.48;
+    bass[step] = { type: 'bass', note, durationSteps, velocity,
+      ...(authored ? { harmonyAnchor: true } : {}), ...(links.has(step) ? { harmonyLink: true } : {}), notePerformances: { [note]: [{ offsetSteps: 0, durationSteps, velocity }] } };
   }
   return { chord: toBars(chord), bass: toBars(bass), drums: toBars(drums) };
 }

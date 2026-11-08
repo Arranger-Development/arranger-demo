@@ -76,7 +76,7 @@ function melodyWindows(events, halfBars) {
       const onDownbeat = Math.abs(event.start - start) <= 0.35;
       const accent = onDownbeat ? (index % 2 ? 1.35 : 1.65) : isBeat(event) ? 1.15 : 1;
       const weight = length * accent * (event.passing ? 0.25 : strong ? 1 : 0.4);
-      windows[index].push({ midi: event.midi, pitch: event.pitch, weight });
+      windows[index].push({ ...event, weight, from: Math.max(start, event.start), to: Math.min(end, start + 8) });
     }
   }
   return windows;
@@ -125,12 +125,14 @@ function bestLoopPath(rows, transition, seam) {
   return best;
 }
 
-const sameHarmony = (a, b) => a?.root === b?.root && a?.tones[1] === b?.tones[1];
+const sameHarmony = (a, b) => a?.root === b.root && a.tones.every((tone, index) => tone === b.tones[index]);
 
 function chordMovement(from, to, cost) {
   if (sameHarmony(from, to)) return 0;
-  return -(cost - (from.degree === 4 && to.degree === 0 ? 0.8 : 0)
-    + (from.raisedDominant && to.degree !== 0 ? 0.75 : 0));
+  const preparesDominant = [1, 3].includes(from.degree) && to.degree === 4;
+  const resolvesTonic = from.degree === 4 && to.degree === 0;
+  const connection = resolvesTonic ? 0.8 : preparesDominant ? 0.4 : 0;
+  return connection - cost - (from.raisedDominant && to.degree !== 0 ? 0.75 : 0);
 }
 
 function fitHarmony(events, windows, bassHints) {
@@ -178,9 +180,43 @@ function fitHarmony(events, windows, bassHints) {
   return best;
 }
 
+const semitoneApart = (a, b) => [1, 11].includes((a - b + 12) % 12);
+
+function colorHarmony(path, windows, key, bassHints) {
+  return path.map((chord, index) => {
+    const { root, degree, tones } = chord;
+    if (degree < 0 || bassHints[index] != null) return chord;
+    const window = windows[index];
+    const minor = (tones[1] - root + 12) % 12 === 3;
+    const resolves = degree === 4 && path[index + 1]?.degree === 0 && windows[index + 1].length;
+    const extensions = [resolves || minor ? 10 : 11, 2];
+    for (const interval of extensions) {
+      const color = (root + interval) % 12;
+      if (!key.tones.includes(color) || tones.includes(color)) continue;
+      // Keep the root and third, and let a strong melody note justify the color.
+      if (!window.some(note => !note.passing && note.weight >= 3.5 && note.pitch === color)) continue;
+      if (window.some(note => !note.passing && note.weight >= 1.5 && semitoneApart(note.pitch, color))) continue;
+      if (window.some(note => !note.passing && note.weight >= 3.5 && note.pitch === tones[2])) continue;
+      return { ...chord, tones: [root, tones[1], color] };
+    }
+    return chord;
+  });
+}
+
+function chordTiming(window, index) {
+  const base = index * 8;
+  if (!window.length) return { offset: 0, duration: 6.8 };
+  const first = Math.floor(window[0].from - base);
+  let end = window[0].to;
+  for (const note of window) {
+    if (note.from - end >= 2.5) break;
+    end = Math.max(end, note.to);
+  }
+  return { offset: first, duration: Math.min(6.8, 7.8 - first, end - base - first + 0.4) };
+}
+
 function voicingOptions(chord) {
-  const starting = chord.tones.map(pitch => 48 + pitch);
-  const rootPosition = starting.map((pitch, i) => i && pitch <= starting[0] ? pitch + 12 : pitch);
+  const rootPosition = chord.tones.map(pitch => 48 + chord.root + (pitch - chord.root + 12) % 12).sort((a, b) => a - b);
   const inversions = rootPosition.map((_, i) => [...rootPosition.slice(i), ...rootPosition.slice(0, i).map(pitch => pitch + 12)]);
   return inversions.flatMap(([low, mid, high]) => [[low, mid, high], [low, high, mid + 12]])
     .flatMap(notes => [-12, 0, 12].map(offset => notes.map(note => note + offset)))
@@ -313,12 +349,13 @@ export function planHumHarmony(bars, timbreId, { bassBars, chordBarCount = bars.
   const windows = melodyWindows(lead, count);
   const bassHints = bassWindowHints(bassBars, count);
   const { path, key } = fitHarmony(lead, windows, bassHints);
-  const voicings = fitVoicings(path, windows);
+  const colored = colorHarmony(path, windows, key, bassHints);
+  const voicings = fitVoicings(colored, windows);
   return {
     key: { tonic: key.tonic, mode: key.mode === 0 ? 'major' : 'minor' },
     events,
-    windows: path.map((chord, index) => ({
-      ...chord, voicing: voicings[index],
+    windows: colored.map((chord, index) => ({
+      ...chord, voicing: voicings[index], ...chordTiming(windows[index], index),
       // In a long rest leave room. Bass supplied by the player can also cue an entrance.
       active: Boolean(windows[index].length || bassHints[index] != null),
     })),

@@ -61,7 +61,7 @@ export function humPlaybackBars(phrase) {
     };
     const length = trackId === 'bass' && !fixedSteps.has(barIndex * 16 + step) ? 0.77 + 0.23 * left : 1;
     const notes = Object.entries(cell.notePerformances ?? {});
-    const voices = trackId === 'chord' ? (phrase.bars[barIndex][step - step % 8]?.notes ?? notes.map(([note]) => note)).toSorted((a, b) => pitchOrder(a) - pitchOrder(b)) : [];
+    const voices = trackId === 'chord' ? (phrase.bars[barIndex].slice(step - step % 8, step - step % 8 + 8).find(item => item?.notes?.length)?.notes ?? notes.map(([note]) => note)).toSorted((a, b) => pitchOrder(a) - pitchOrder(b)) : [];
     return {
       ...cell,
       velocity: velocity(cell.velocity, gainAt(cell.timingOffset ?? 0)),

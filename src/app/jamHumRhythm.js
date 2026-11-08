@@ -24,7 +24,9 @@ function pitchedCell(cell, duration, notes = cell.notes ?? [cell.note], gain = 1
 function pitchedRhythm(bar, track, level, edited) {
   const next = [...bar];
   for (const start of [0, 8]) {
-    const root = bar[start];
+    const first = track === 'chord' ? bar.slice(start, start + 8).findIndex(cell => cell?.notes?.length) : 0;
+    const onset = start + first;
+    const root = first < 0 ? null : bar[onset];
     // Keep hand-authored material in its harmonic window intact, including removed steps.
     const touched = Array.from({ length: 8 }, (_, offset) => edited(start + offset)).some(Boolean);
     const crossesFromFirstHalf = start === 8 && bar.slice(0, 8).some((cell, step) => edited(step) && cell &&
@@ -38,20 +40,27 @@ function pitchedRhythm(bar, track, level, edited) {
       [0, ...accents].forEach((offset, index) => {
         const end = accents[index] ?? 8;
         const length = index ? Math.min(1.6, end - offset - 0.15) : Math.min(level === 25 ? 5 : 7.8, end - 0.2);
-        next[start + offset] = pitchedCell(root, length, [root.note], index ? 0.78 : 1);
+        const cell = bar[start + offset]?.harmonyLink ? bar[start + offset] : root;
+        next[start + offset] = pitchedCell(cell, length, [cell.note], index && cell === root ? 0.78 : 1);
       });
     } else if (root.notes?.length) {
-      if (level === 0 || level === 25) next[start] = pitchedCell(root, level === 0 ? 7.8 : 3.1);
+      const room = start + 8 - onset;
+      const place = (step, duration, notes = root.notes, gain = 1) => {
+        next[step] = pitchedCell(root, Math.min(duration, start + 8 - step - 0.2), notes, gain);
+      };
+      if (level === 0 || level === 25) place(onset, level === 0 ? 7.8 : 3.1);
       if (level === 75) {
-        next[start] = pitchedCell(root, 3.2);
-        if (!bar[start + 6]) next[start + 6] = pitchedCell(root, 1.6, root.notes, 0.78);
+        place(onset, 3.2);
+        if (room >= 4 && !bar[start + 6]) place(start + 6, 1.6, root.notes, 0.78);
       }
-      if (level === 100 && !bar.slice(start + 1, start + 8).some(Boolean)) {
-        const offsets = [0, 2, 4];
+      if (level === 100 && !bar.slice(onset + 1, start + 8).some(Boolean)) {
+        const spacing = room >= 6 ? 2 : 1;
+        let previousStep;
         root.notes.forEach((note, index) => {
-          const offset = offsets[index] ?? 4;
-          const existing = index > 2 ? next[start + offset].notes : [];
-          next[start + offset] = pitchedCell(root, 2.6, [...existing, note]);
+          const step = onset + Math.min(room - 1, index * spacing);
+          const existing = step === previousStep ? next[step].notes : [];
+          place(step, 2.6, [...existing, note]);
+          previousStep = step;
         });
       }
     }
