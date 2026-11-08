@@ -8,7 +8,7 @@ import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
 import { normalizeJamSlots, firstEmptyJamSlot, removeJamSlot, moveJamSlots, relocateJamDraft, jamLauncherColumnCount } from './jamTemplateSlots.js';
 import { hasJamPhraseNotes, isEmptyJamPhrase } from './jamPhraseContent.js';
 import { jamTrackParameters } from './jamPerformanceState.js';
-import { HUM_SOURCE, humPlaybackBars } from './jamHumExpression.js';
+import { canRefreshHumHarmony, HUM_SOURCE, humPlaybackBars } from './jamHumExpression.js';
 
 const copy = value => structuredClone(value);
 const uid = () => globalThis.crypto.randomUUID();
@@ -208,7 +208,7 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
       commit({...state,projects:state.projects.map(item=>item.id===p.id?{...p,workspace:next.workspace}:item)});
       return next.phrase;
     },
-    insertHumPhrases(phrases, { projectId, melodyId, bpm, fillEmpty = false } = {}) {
+    insertHumPhrases(phrases, { projectId, melodyId, bpm, fillEmpty = false, refreshHarmony = false } = {}) {
       const project = current();
       if (project.id !== projectId) return null;
       const w = project.workspace;
@@ -229,9 +229,10 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
         const existing = w.templates[phrase.trackId].find(item => item.slotIndex === slotIndex);
         if (occupiedByTrack[phrase.trackId].has(slotIndex)) {
           if (!fillEmpty) return null;
-          if (!existing || hasJamPhraseNotes(existing)) continue;
+          if (!existing || (refreshHarmony && existing.humEditedSteps?.length)) continue;
+          if (hasJamPhraseNotes(existing) && !(refreshHarmony && canRefreshHumHarmony(existing))) continue;
         }
-        const draft = { ...phrase, ...(existing ? { id: existing.id, name: existing.name } : {}),
+        const draft = { ...phrase, ...(existing ? { id: existing.id, name: existing.name, timbreId: existing.timbreId, params: existing.params } : {}),
           ...(phrase.trackId === 'melody' ? { timbreId: HUM_SUSTAIN } : {}), sourcePresetId: HUM_SOURCE };
         const entry = phraseEdit(next, draft, { create: !existing, slotIndex });
         if (!entry) return null;

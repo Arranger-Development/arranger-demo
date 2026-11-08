@@ -12,6 +12,11 @@ export function isHumBacking(phrase) {
   return phrase?.sourcePresetId === HUM_SOURCE && phrase.trackId !== 'melody';
 }
 
+export function canRefreshHumHarmony(phrase) {
+  return phrase?.sourcePresetId === HUM_SOURCE && ['chord', 'bass'].includes(phrase.trackId)
+    && !phrase.humEditedSteps?.length;
+}
+
 export function editJamSequencerStep(phrase, barIndex, step, editBar) {
   const baseBar = phrase.bars[barIndex];
   const bars = [...phrase.bars];

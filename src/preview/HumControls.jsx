@@ -84,7 +84,7 @@ export default function HumControls({ projectStore, projectId, pauseJam, revealS
   function addBacking(currentTake) {
     const melody = projectStore.current().workspace.templates.melody.find(phrase => phrase.id === currentTake.melodyId);
     if (!melody) throw new Error('旋律格已移除');
-    const backing = Object.entries(arrangeHumMelody(melody.bars)).map(([trackId, bars]) => ({ trackId, bars }));
+    const backing = Object.entries(arrangeHumMelody(melody.bars, projectStore.current().workspace.timbres?.melody ?? melody.timbreId)).map(([trackId, bars]) => ({ trackId, bars }));
     if (!projectStore.insertHumPhrases(backing, { projectId, melodyId: melody.id })) throw new Error('伴奏位置已被占用');
     setTake({ ...currentTake, readyAt: clock() });
     setStatus({ phase: 'idle', text: `第 ${melody.slotIndex + 1} 列四轨已就绪` });

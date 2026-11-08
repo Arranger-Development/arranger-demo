@@ -244,3 +244,38 @@ test('fills accompaniment for a hand-written melody using its actual pitches wit
   assert.deepEqual(store.current().workspace.draft.bars, melody.bars);
   assert.deepEqual(fill(melody), []);
 });
+
+
+test('harmony avoids crowding an accented melody note and uses the selected timbre register', () => {
+  const scored = notes => {
+    const bar = Array(16).fill(null);
+    notes.forEach((note, index) => { bar[index * 4] = { type: 'melody', note, duration: '4n' }; });
+    return [bar];
+  };
+  const { chord } = arrangeHumMelody(scored(['C4', 'B3', 'C4', 'G4']), 'hum-sustain');
+  assert.ok(!chord[0][0].notes.includes('C4'), 'a held C4 in the accompaniment crowds the B3 lead');
+  const bars = scored(['C4', 'E4', 'D4', 'B3']);
+  const synth = arrangeHumMelody(bars, 'hum-sustain'), sample = arrangeHumMelody(bars, 'deep-autumn-melody');
+  const pitchClasses = notes => notes.map(note => note.slice(0, -1)).sort();
+  assert.deepEqual(pitchClasses(synth.chord[0][0].notes), pitchClasses(sample.chord[0][0].notes));
+  assert.notDeepEqual(synth.chord[0][0].notes, sample.chord[0][0].notes);
+  assert.equal(sample.bass[0][8].note, 'G2');
+  assert.ok(arrangeHumMelody(scored(['F4', 'E4', 'C4', 'E4'])).chord[0][0].notes.some(note => note.startsWith('F')));
+});
+
+test('refreshing harmony updates the generated bass in place and preserves a hand-edited chord', () => {
+  const store = makeStore();
+  const projectId = store.current().id;
+  const [lead] = store.insertHumPhrases([{ trackId: 'melody', bars: melody([60, 64, 67, 60]) }], { projectId });
+  const original = store.insertHumPhrases(backingPhrases(lead.bars), { projectId, melodyId: lead.id });
+  const chord = original.find(phrase => phrase.trackId === 'chord');
+  const bass = original.find(phrase => phrase.trackId === 'bass');
+  const editedChord = store.commitPhraseEdit(editJamSequencerStep(chord, 0, 3, bar => setJamPitchedNote(bar, 3, 'D4', 1)));
+  const updatedLead = store.commitPhraseEdit({ ...lead, bars: melody([62, 66, 69, 62]) });
+  const updated = store.insertHumPhrases(backingPhrases(updatedLead.bars), {
+    projectId, melodyId: lead.id, fillEmpty: true, refreshHarmony: true,
+  });
+  assert.deepEqual(updated.map(phrase => phrase.id), [bass.id]);
+  assert.equal(updated[0].bars[0][0].note, 'D2');
+  assert.deepEqual(store.current().workspace.templates.chord[0], editedChord);
+});

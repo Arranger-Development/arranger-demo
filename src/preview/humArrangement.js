@@ -1,6 +1,7 @@
 import { getDialDrumPreset } from '../data/dialDrumPresets.js';
 import { createDrumsCell } from '../domain/drumsCells.js';
 import { createMelodyCellFromNotes } from '../domain/melodyCells.js';
+import { DEEP_AUTUMN_MELODY } from '../data/performanceTimbres.js';
 import { extractMelodyEvents } from '../audio/matrixPlaybackAdapter.js';
 import { expandNotePerformances, noteDurationSteps } from '../domain/notePerformances.js';
 
@@ -127,28 +128,42 @@ const keys = scaleModes.flatMap(scale => pitches.map((_, tonic) => {
   return { tonic, tones, chords: tones.map((root, index) => ({ root, tones: [root, tones[(index + 2) % 7], tones[(index + 4) % 7]] })) };
 }));
 
-function melodyEvents(bars) {
+function melodyEvents(bars, timbreId) {
+  const octaveOffset = timbreId === DEEP_AUTUMN_MELODY ? -12 : 0;
   const length = bars.length * stepsPerBar;
   return bars.flatMap((bar, index) => bar.flatMap((cell, step) => (
     expandNotePerformances(extractMelodyEvents(cell, index, step), cell).flatMap(event => {
       const pitch = pitches.indexOf(event.note.slice(0, -1));
+      const midi = (Number(event.note.at(-1)) + 1) * 12 + pitch + octaveOffset;
       const start = Math.max(0, index * stepsPerBar + step + (event.timingOffset ?? 0));
       const duration = Math.min(noteDurationSteps(event), length - start);
-      return pitch < 0 || duration <= 0 ? [] : [{ pitch, start, duration }];
+      return pitch < 0 || duration <= 0 ? [] : [{ pitch, midi, start, duration }];
     })
   ))).sort((a, b) => a.start - b.start);
 }
 
-function fitHarmony(events, halfBars) {
-  const windows = Array.from({ length: halfBars }, (_, index) => {
+function melodyWindows(events, halfBars) {
+  return Array.from({ length: halfBars }, (_, index) => {
     const start = index * 8;
     return events.flatMap(event => {
       const length = Math.min(event.start + event.duration, start + 8) - Math.max(start, event.start);
       if (length <= 0) return [];
-      const beat = Math.round(event.start);
-      return [{ pitch: event.pitch, weight: length * (beat % 8 === 0 ? 1.4 : beat % 4 === 0 ? 1.2 : 1) }];
+      const step = Math.round(event.start);
+      const strong = step % 4 === 0 || length >= 2;
+      const accent = step % 8 === 0 ? 1.4 : step % 4 === 0 ? 1.2 : 1;
+      return [{ pitch: event.pitch, midi: event.midi, weight: length * accent * (strong ? 1 : 0.35), strong }];
     });
   });
+}
+
+function scoreMelodyNote(chord, key, event) {
+  if (chord.tones.includes(event.pitch)) return event.weight;
+  const clash = chord.tones.some(tone => [1, 11].includes((event.pitch - tone + 12) % 12));
+  const outside = key.tones.includes(event.pitch) ? 0 : 0.25;
+  return -event.weight * (0.30 + outside + (clash && event.strong ? 0.95 : 0));
+}
+
+function fitHarmony(events, windows) {
   const lastPitch = events.at(-1).pitch;
   let best = { score: -Infinity, path: [] };
   for (const key of keys) {
@@ -156,7 +171,7 @@ function fitHarmony(events, halfBars) {
     let paths = key.chords.map((chord, index) => ({ score: index === 0 ? 0.9 : 0, path: [] }));
     for (const window of windows) {
       paths = key.chords.map((chord, index) => {
-        const fit = window.reduce((sum, event) => sum + event.weight * (chord.tones.includes(event.pitch) ? 1 : key.tones.includes(event.pitch) ? -0.3 : -0.55), 0);
+        const fit = window.reduce((sum, event) => sum + scoreMelodyNote(chord, key, event), 0);
         return paths.reduce((winner, previous, from) => {
           if (!window.length && from !== index) return winner;
           const common = chord.tones.filter(pitch => key.chords[from].tones.includes(pitch)).length;
@@ -173,26 +188,35 @@ function fitHarmony(events, halfBars) {
   return best.path;
 }
 
-function closestVoicing(chord, previous) {
+function closestVoicing(chord, previous, window) {
   const starting = chord.tones.map(pitch => 48 + pitch);
   const rootPosition = starting.map((pitch, i) => i && pitch <= starting[0] ? pitch + 12 : pitch);
   const inversions = rootPosition.map((_, i) => [...rootPosition.slice(i), ...rootPosition.slice(0, i).map(pitch => pitch + 12)]);
   const options = inversions.flatMap(notes => [-12, 0, 12].map(offset => notes.map(note => note + offset)))
-    .filter(notes => notes[0] >= 48 && notes.at(-1) <= 72);
+    .filter(notes => notes[0] >= 43 && notes.at(-1) <= 72);
   const reference = previous ?? [52, 55, 59];
-  const distance = notes => notes.reduce((sum, note, index) => sum + Math.abs(note - reference[index]), 0);
-  return options.reduce((best, notes) => distance(notes) < distance(best) ? notes : best);
+  function cost(notes) {
+    const motion = notes.reduce((sum, note, index) => sum + Math.abs(note - reference[index]), 0);
+    const crowding = window.reduce((sum, melody) => sum + melody.weight * notes.reduce((total, note) => {
+      const interval = Math.abs(note - melody.midi);
+      return total + (interval === 1 ? 4 : interval === 2 ? 1.4 : interval === 0 ? 0.6 : 0);
+    }, 0), 0);
+    const aboveLead = window.reduce((sum, melody) => sum + melody.weight * Math.max(0, notes.at(-1) - melody.midi), 0);
+    return motion * 0.65 + crowding + aboveLead * 0.20;
+  }
+  return options.reduce((best, notes) => cost(notes) < cost(best) ? notes : best);
 }
 
-export function arrangeHumMelody(bars) {
-  const events = melodyEvents(bars);
+export function arrangeHumMelody(bars, timbreId) {
+  const events = melodyEvents(bars, timbreId);
   if (!events.length) throw new Error('旋律没有可配轨的音符');
   const length = bars.length * stepsPerBar;
-  const harmony = fitHarmony(events, length / 8);
+  const windows = melodyWindows(events, length / 8);
+  const harmony = fitHarmony(events, windows);
   const chord = emptySteps(length), drums = emptySteps(length), bass = emptySteps(length);
   let previousVoicing;
   for (const [index, harmonyChord] of harmony.entries()) {
-    const voicing = closestVoicing(harmonyChord, previousVoicing);
+    const voicing = closestVoicing(harmonyChord, previousVoicing, windows[index]);
     const notes = voicing.map(noteName);
     previousVoicing = voicing;
     chord[index * 8] = { type: 'notes', notes, label: notes.join('/'), durationSteps: 7.5,

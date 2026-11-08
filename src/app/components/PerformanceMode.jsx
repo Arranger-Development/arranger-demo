@@ -10,7 +10,7 @@ import DrumStepGrid from './DrumStepGrid.jsx';
 import JamLauncher from './JamLauncher.jsx';
 import JamChordEditor from './JamChordEditor.jsx';
 import { createJamAudition } from '../jamAudition.js';
-import { editJamSequencerStep, HUM_SOURCE, humPlaybackBars, isHumBacking } from '../jamHumExpression.js';
+import { canRefreshHumHarmony, editJamSequencerStep, HUM_SOURCE, humPlaybackBars, isHumBacking } from '../jamHumExpression.js';
 import { createJamHeldEdits } from '../jamHeldEdits.js';
 import { createJamPhraseHistory } from '../jamPhraseHistory.js';
 import { toggleJamTemplate, launchJamColumn, deleteJamTemplate, jamColumnPhrases } from '../jamTemplateSelection.js';
@@ -275,14 +275,24 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     const launched = launchJamColumn({ projectStore, playback, audition, slotIndex: columnIndex, toggle: true });
     if (launched && playback.isActive()) audition.resumeColumn(columnIndex);
   }
-  function fillColumnBacking(slot) {
+  function fillColumnBacking(slot, refreshHarmony = false) {
     const { id, workspace } = projectStore.current();
     const { melody } = jamColumnPhrases(workspace.templates, slot);
     if (!hasJamNotes(melody)) return;
     try {
-      const phrases = Object.entries(arrangeMelody(melody.bars)).map(([trackId, bars]) => ({ trackId, bars }));
-      const inserted = projectStore.insertHumPhrases(phrases, { projectId: id, melodyId: melody.id, fillEmpty: true });
-      setMessage(inserted?.length ? `已按旋律补齐${inserted.map(phrase => LABELS[phrase.trackId]).join('、')}` : '当前列没有可填充的空轨');
+      const arrangement = arrangeMelody(melody.bars, workspace.timbres?.melody ?? melody.timbreId);
+      const tracks = refreshHarmony ? ['chord', 'bass'] : ['chord', 'bass', 'drums'];
+      const phrases = tracks.map(trackId => ({ trackId, bars: arrangement[trackId] }));
+      const inserted = projectStore.insertHumPhrases(phrases, { projectId: id, melodyId: melody.id, fillEmpty: true, refreshHarmony });
+      if (refreshHarmony && playback.isActive()) {
+        const updatedWorkspace = projectStore.current().workspace;
+        for (const phrase of inserted ?? []) {
+          const snapshot = jamCombinationSnapshot(updatedWorkspace, phrase, true);
+          playback.updatePhrase(snapshot, phrase.trackId, phrase.id, { preserveEffects: true });
+        }
+      }
+      const action = refreshHarmony ? '重配' : '补齐';
+      setMessage(inserted?.length ? `已按旋律${action}${inserted.map(phrase => LABELS[phrase.trackId]).join('、')}` : '当前列没有可配轨的位置');
     } catch {
       setMessage('无法根据当前旋律配轨，请检查旋律音符后再试。');
     }
@@ -459,6 +469,9 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
             {arrangeMelody && editingTrack === 'melody' && <button type="button" title="根据旋律填充同列空轨"
               disabled={!hasJamNotes(columnPhrases.melody) || TRACKS.every(track => hasJamNotes(columnPhrases[track]))}
               onClick={() => fillColumnBacking(editColumn)}>按旋律配轨</button>}
+            {arrangeMelody && editingTrack === 'melody' && hasJamNotes(columnPhrases.melody)
+              && [columnPhrases.chord, columnPhrases.bass].some(canRefreshHumHarmony) && <button type="button"
+                title="更新自动生成的和弦和贝斯，保留手编乐句" onClick={() => fillColumnBacking(editColumn, true)}>重配和声</button>}
             <button type="button" className="studio-column-audition" disabled={!canAuditionColumn} onClick={() => launchColumn(editColumn)}>
               {columnState === 'idle' ? '试听整列' : columnState === 'queued' ? '取消等待' : '暂停整列'}
             </button>
