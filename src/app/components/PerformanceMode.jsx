@@ -10,6 +10,7 @@ import DrumStepGrid from './DrumStepGrid.jsx';
 import JamLauncher from './JamLauncher.jsx';
 import JamChordEditor from './JamChordEditor.jsx';
 import { createJamAudition } from '../jamAudition.js';
+import { HUM_SOURCE } from '../jamHumExpression.js';
 import { createJamHeldEdits } from '../jamHeldEdits.js';
 import { createJamPhraseHistory } from '../jamPhraseHistory.js';
 import { toggleJamTemplate, launchJamColumn, deleteJamTemplate } from '../jamTemplateSelection.js';
@@ -40,7 +41,7 @@ const performanceNow = () => globalThis.performance.now();
 const ART = Object.fromEntries(TRACKS.map(t => [t, `${import.meta.env.BASE_URL}assets/jam-instruments/${t}-v1.png`]));
 const timbreLabel = id => PERFORMANCE_SAMPLE_BANKS[id]?.label ?? ({ 'soft-electronic-kit':'柔和电子鼓', 'warm-electric-piano':'温暖电钢琴', 'round-electric-bass':'圆润电贝司', 'airy-synth-lead':'空气感合成器' })[id] ?? id;
 const emptySelection = () => Object.fromEntries(TRACKS.map(t => [t, null]));
-export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack, onHome, controlsRef, hardwareInput, projectStore: providedStore }) {
+export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack, onHome, controlsRef, hardwareInput, projectStore: providedStore, humControl }) {
   const [projectStore] = useState(() => providedStore ?? getJamTemplateProjects(genreId, profileId, initialBpm));
   const library = useSyncExternalStore(projectStore.subscribe, projectStore.getSnapshot);
   const project = library.projects.find(p => p.id === library.activeId), w = project.workspace;
@@ -184,8 +185,12 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     const phrase=projectStore.commitPhraseEdit({...next,editingTemplateId:id},{projectId:project.id});
     if (!phrase) { setMessage('乐句未能更新，请重新打开该格子。'); return; }
     if (record) phraseHistory.record(project.id,before,phrase);
-    if (updateAudio && (restart || before.timbreId!==phrase.timbreId || JSON.stringify(before.bars)!==JSON.stringify(phrase.bars))) {
-      void audio.startAudio();syncPhraseAudio(phrase,restart,knob);
+    const barsChanged = JSON.stringify(before.bars) !== JSON.stringify(phrase.bars);
+    const humExpressionChanged = (before.sourcePresetId === HUM_SOURCE || phrase.sourcePresetId === HUM_SOURCE)
+      && (before.sourcePresetId !== phrase.sourcePresetId || before.params?.strength !== phrase.params.strength || before.params?.groove !== phrase.params.groove);
+    if (updateAudio && (restart || before.timbreId !== phrase.timbreId || barsChanged || humExpressionChanged)) {
+      void audio.startAudio();
+      syncPhraseAudio(phrase, restart, knob || (humExpressionChanged && !barsChanged));
     }
   }
   function openEditor(t, template = null, options = {}, targetSlot = null) {
@@ -382,30 +387,35 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     };
   });
   const previewBar = Math.min(editBar,(draft?.bars.length ?? 1)-1);
-  return <section className="performance-mode jam-workspace template-jam jam-studio" hidden={!active} aria-label="Jam 演奏" data-editing={Boolean(draft)}>
+  const renderLauncher = (humButton, humFeedback) => <JamLauncher key={project.id} humButton={humButton} humFeedback={humFeedback} active={active} playback={playback} templates={w.templates} columnCount={columnCount} bank={effectivePage} onBankChange={setPage} navigationRef={launcherNav}
+          editingTrack={editingTrack} editingTemplateId={draft?.editingTemplateId} auditioning={solo} selection={w.selection} status={status} mutedTracks={w.mutedTracks} volumes={w.volumes}
+          timbres={Object.fromEntries(TRACKS.map(t => [t,instrumentTimbre(t)]))} timbreLabel={timbreLabel} artSources={ART} artNodes={artNodes}
+          onOpenEditor={openEditor} onTimbreChange={changeInstrumentTimbre} onToggleMute={toggleMute} onTrigger={trigger} onLaunchColumn={launchColumn} onRemove={phrase => hasJamNotes(phrase)?setDeleteTarget(phrase):removePhrase(phrase)} onMove={moveSlots}/>;
+  return <section className="performance-mode jam-workspace template-jam jam-studio" hidden={!active} aria-label="Jam 演奏" data-editing={Boolean(draft)} data-hum-preview={humControl ? true : undefined}>
     <header className="performance-header">
       {createElement(ThemeSwitcher)}
       {onHome && <button type="button" className="performance-home" aria-label="返回首页" onClick={() => { if (projectStore.save()) {audition.stop(); onHome();} }}><Home size={16}/></button>}
-      <button type="button" className="performance-connect" onClick={() => { if (projectStore.save()) {audition.stop(); onBack();} }}>← 创作模式</button>
+      {onBack && <button type="button" className="performance-connect" onClick={() => { if (projectStore.save()) {audition.stop(); onBack();} }}>← 创作模式</button>}
       <div className="performance-title"><span className="performance-eyebrow">PROJECT ARRANGER</span><h1>Jam · 演奏</h1></div>
       <label className="performance-tempo">BPM <input type="number" min="40" max="240" aria-label="演奏速度 BPM" value={w.bpm} onChange={e => { const value=Math.max(40,Math.min(240,Math.round(Number(e.target.value)||100))); projectStore.patch({bpm:value}); playback.setTempo(value); }}/></label>
       <button type="button" className="performance-connect" title="推子：收到初始值即同步音量、滤波、混响、弯音；两颗旋钮与当前编辑器左右顺序一致，转动直接接管，无需复位。" onClick={() => { void audio.startAudio(); void hardwareInput?.onConnect(); void midiInput.connect(); }}>{midiInput.status === 'connecting' ? '正在连接…' : <>{[hardwareInput?.status === 'connected' && 'Launchpad',midiInput.status === 'connected' && '旋钮推子'].filter(Boolean).join(' · ') || '连接控制器'}{hardwareInput?.status === 'connected' || midiInput.status === 'connected' ? ' 已连接' : ''}</>}</button>
     </header>
     <JamProjectControls project={project} projects={library.projects}
-      onNew={() => openProject(null)} onOpen={openProject} onRename={projectStore.rename}/>
+      onNew={() => openProject(null)} onOpen={openProject} onRename={projectStore.rename} transient={Boolean(humControl)}/>
     <div ref={workbench} className="template-jam-workbench studio-workbench">
       <main className="studio-main" aria-label="乐句工作台">
-        <JamLauncher key={project.id} active={active} playback={playback} templates={w.templates} columnCount={columnCount} bank={effectivePage} onBankChange={setPage} navigationRef={launcherNav}
-          editingTrack={editingTrack} editingTemplateId={draft?.editingTemplateId} auditioning={solo} selection={w.selection} status={status} mutedTracks={w.mutedTracks} volumes={w.volumes}
-          timbres={Object.fromEntries(TRACKS.map(t => [t,instrumentTimbre(t)]))} timbreLabel={timbreLabel} artSources={ART} artNodes={artNodes}
-          onOpenEditor={openEditor} onTimbreChange={changeInstrumentTimbre} onToggleMute={toggleMute} onTrigger={trigger} onLaunchColumn={launchColumn} onRemove={phrase => hasJamNotes(phrase)?setDeleteTarget(phrase):removePhrase(phrase)} onMove={moveSlots}/>
+        {humControl ? createElement(humControl, {
+          key: project.id, projectId: project.id, projectStore, jamPlaying: running,
+          pauseJam: () => { if (audition.getTrack()) audition.pause(); else playback.stop(); },
+          revealSlot: slot => { pendingReveal.current = slot; launcherNav.current?.revealSlot(slot); },
+        }, renderLauncher) : renderLauncher()}
         {draft && <section className="studio-editor" key={editingTrack} data-track={editingTrack} aria-label={`${LABELS[editingTrack]}乐句编辑`}>
           <header className="studio-editor-heading"><div className="studio-editor-identity"><label className="studio-template-name-field">名称<input aria-label="乐句名称" value={draft.name ?? ''} placeholder={`${LABELS[editingTrack]}新乐句`} maxLength={80} onFocus={() => beginGesture('name')} onBlur={endGesture} onChange={e => { beginGesture('name');replaceDraft({...draft,name:e.target.value},{updateAudio:false,gesture:true}); }}/></label></div>
             <div className="studio-editor-heading-actions">
               <button type="button" className="studio-text-button" onClick={finishEditor}><ArrowLeft size={13}/> 收起编辑</button></div></header>
           <div className="studio-editor-controls">
-            {editingTrack !== 'drums' && <div className="studio-phrase-settings"><label>音型<select aria-label={`${LABELS[editingTrack]}乐句起点`} value={draft.sourcePresetId} onChange={e => { const next = e.target.value === 'blank' ? blankJamDraft(editingTrack,draft.timbreId,draft.targetSlot) : sourceDraft(editingTrack,e.target.value,draft.timbreId); midiInput.useSoftwareValue(); replaceDraft({...next,name:draft.name,editingTemplateId:draft.editingTemplateId,targetSlot:draft.targetSlot},{restart:true}); setEditBar(0); }}><option value="blank">空白乐句</option><optgroup label="旋钮模板 · Ableton">{DIAL_PITCHED_PRESETS.filter(p => p.trackId === editingTrack).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup><optgroup label="原有模板">{catalog[editingTrack].map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup></select></label></div>}
-            <div className="studio-editor-knobs">{jamTrackKnobs(editingTrack).map(({parameter,hardwareParameter,label,lowLabel,highLabel}) => {
+            {editingTrack !== 'drums' && <div className="studio-phrase-settings"><label>音型<select aria-label={`${LABELS[editingTrack]}乐句起点`} value={draft.sourcePresetId} onChange={e => { const next = e.target.value === 'blank' ? blankJamDraft(editingTrack,draft.timbreId,draft.targetSlot) : sourceDraft(editingTrack,e.target.value,draft.timbreId); midiInput.useSoftwareValue(); replaceDraft({...next,name:draft.name,editingTemplateId:draft.editingTemplateId,targetSlot:draft.targetSlot},{restart:true}); setEditBar(0); }}>{draft.sourcePresetId === HUM_SOURCE && <option value={HUM_SOURCE}>哼唱生成</option>}<option value="blank">空白乐句</option><optgroup label="旋钮模板 · Ableton">{DIAL_PITCHED_PRESETS.filter(p => p.trackId === editingTrack).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup><optgroup label="原有模板">{catalog[editingTrack].map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup></select></label></div>}
+            <div className="studio-editor-knobs">{jamTrackKnobs(editingTrack, draft.sourcePresetId === HUM_SOURCE).map(({parameter,hardwareParameter,label,lowLabel,highLabel}) => {
               const position = midiInput.knobPositions[hardwareParameter], value = draft.params?.[parameter] ?? 50;
               return <RotaryKnob key={parameter} label={label} value={value} displayValue={position?.display ? position.percent : value}
                 valueDescription={position?.display ? `硬件位置 ${position.percent}%；当前乐句${label} ${value}%` : `${label} ${value}%`}

@@ -8,6 +8,7 @@ import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
 import { normalizeJamSlots, firstEmptyJamSlot, removeJamSlot, moveJamSlots, relocateJamDraft, jamLauncherColumnCount } from './jamTemplateSlots.js';
 import { isEmptyJamPhrase } from './jamPhraseContent.js';
 import { jamTrackParameters } from './jamPerformanceState.js';
+import { HUM_SOURCE, humPlaybackBars } from './jamHumExpression.js';
 
 const copy = value => structuredClone(value);
 const uid = () => globalThis.crypto.randomUUID();
@@ -207,6 +208,34 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
       commit({...state,projects:state.projects.map(item=>item.id===p.id?{...p,workspace:next.workspace}:item)});
       return next.phrase;
     },
+    insertHumPhrases(phrases, { projectId, melodyId, bpm } = {}) {
+      const project = current();
+      if (project.id !== projectId) return null;
+      const w = project.workspace;
+      const melody = melodyId && w.templates.melody.find(phrase => phrase.id === melodyId && phrase.sourcePresetId === HUM_SOURCE);
+      if (melodyId && !melody) return null;
+      const occupied = track => new Set([
+        ...w.templates[track].map(phrase => phrase.slotIndex),
+        w.draftsByTrack?.[track]?.targetSlot,
+        w.draft?.trackId === track ? w.draft.targetSlot : undefined,
+      ]);
+      const occupiedByTrack = byTrack(occupied);
+      let slotIndex = melody?.slotIndex ?? 0;
+      if (!melody) while (TRACKS.some(track => occupiedByTrack[track].has(slotIndex))) slotIndex++;
+      let next = w;
+      const inserted = [];
+      for (const phrase of phrases) {
+        if (occupiedByTrack[phrase.trackId].has(slotIndex)) return null;
+        const entry = phraseEdit(next, { ...phrase, sourcePresetId: HUM_SOURCE }, { create: true, slotIndex });
+        if (!entry) return null;
+        next = entry.workspace;
+        inserted.push(entry.phrase);
+      }
+      if (!inserted.length) return null;
+      const tempo = bpm != null && TRACKS.every(track => w.templates[track].length === 0) ? normalizeBpm(bpm, w.bpm) : w.bpm;
+      patch({ templates: next.templates, bpm: tempo });
+      return inserted;
+    },
     setDraft(draft) {
       if (!TRACKS.includes(draft?.trackId)) return false;
       draft = reconcileDraftLocation(draft, current().workspace.templates);
@@ -325,7 +354,8 @@ export function jamCombinationSnapshot(w, override = null, solo = false) {
   // Long, uneven legacy phrases can have an enormous common cycle. Keep their
   // individual loops compact rather than allocating that entire cycle.
   const phraseBars = totalBars > MAX_PROJECT_BARS ? byTrack(t => selected[t]?.bars.length ?? 1) : null;
-  const matrix = byTrack(t => Array.from({ length: phraseBars?.[t] ?? totalBars }, (_, b) => copy(selected[t]?.bars[b % selected[t].bars.length] ?? Array(16).fill(null))));
+  const bars = byTrack(t => selected[t] ? humPlaybackBars(selected[t]) : [Array(16).fill(null)]);
+  const matrix = byTrack(t => Array.from({ length: phraseBars?.[t] ?? totalBars }, (_, b) => copy(bars[t][b % bars[t].length])));
   const timbres = byTrack(t => w.timbres?.[t] ?? selected[t]?.timbreId ?? defaultJamTimbres()[t]);
   for (const t of TRACKS) for (const bar of matrix[t]) for (const cell of bar) if (cell) setTemplateTimbre(cell,t,timbres[t]);
   return { id: 'jam-current-combination', matrix, totalBars, phraseBars: byTrack(t => selected[t]?.bars.length ?? 1), repeat: null, kind: 'main', timbres, phraseIds: byTrack(t => selected[t] ? selected[t].id ?? selected[t].editingTemplateId ?? 'draft' : null) };

@@ -11,7 +11,7 @@ import { isEmptyJamPhrase } from '../jamPhraseContent.js';
 
 export default function JamLauncher({ active, templates, columnCount, bank, onBankChange, navigationRef,
   editingTrack, editingTemplateId, draftsByTrack = {}, auditioning = false, playback, selection, status, mutedTracks, volumes, timbres, timbreLabel, artSources, artNodes,
-  onOpenEditor, onTimbreChange, onToggleMute, onTrigger, onLaunchColumn, onRemove, onRemoveDraft, onMove }) {
+  onOpenEditor, onTimbreChange, onToggleMute, onTrigger, onLaunchColumn, onRemove, onRemoveDraft, onMove, humButton, humFeedback }) {
   const scrollRef = useRef(null);
   const [edges, setEdges] = useState({ left: false, right: false });
   const columns = useMemo(() => Object.fromEntries(TRACKS.map(t => [t, jamTemplateRange(templates[t], 0, columnCount)])), [templates, columnCount]);
@@ -86,7 +86,7 @@ export default function JamLauncher({ active, templates, columnCount, bank, onBa
         {TRACKS.map(t => <section className="studio-instrument" data-track={t} data-active={editingTrack === t} key={t} aria-label={`${LABELS[t]}模板`}>
           <div className="studio-instrument-top"><button type="button" className="studio-instrument-open" aria-label={`创作${LABELS[t]}模板`} onClick={() => onOpenEditor(t)} aria-expanded={editingTrack === t}>
             <span className="studio-instrument-art" data-art-track={t} ref={node => { artNodes.current[t] = node; }}><img src={artSources[t]} alt="" draggable={false} decoding="async"/></span>
-          </button><div className="studio-instrument-label"><strong>{LABELS[t]}</strong><span className="studio-editing-state">{editingTrack === t ? '编辑中' : ''}</span><label className="studio-instrument-timbre" title="切换音色"><select aria-label={`${LABELS[t]}音色`} value={timbres[t]} onChange={e => onTimbreChange(t,e.target.value)}>{TIMBRE_OPTIONS[t].map(id => <option key={id} value={id}>{timbreLabel(id)}</option>)}</select></label></div><button type="button" className="studio-track-mute" aria-label={`${mutedTracks[t] ? '取消静音' : '静音'}${LABELS[t]}`} aria-pressed={mutedTracks[t]} onClick={() => onToggleMute(t)} title={mutedTracks[t] ? '取消静音' : '静音'}>{mutedTracks[t] ? <VolumeX size={14}/> : <Volume2 size={14}/>}</button></div>
+          </button><div className="studio-instrument-label">{t === 'melody' && humButton ? <span className="jam-hum-label"><strong>{LABELS[t]}</strong>{humButton}</span> : <strong>{LABELS[t]}</strong>}<span className="studio-editing-state">{editingTrack === t ? '编辑中' : ''}</span><label className="studio-instrument-timbre" title="切换音色"><select aria-label={`${LABELS[t]}音色`} value={timbres[t]} onChange={e => onTimbreChange(t,e.target.value)}>{TIMBRE_OPTIONS[t].map(id => <option key={id} value={id}>{timbreLabel(id)}</option>)}</select></label></div><button type="button" className="studio-track-mute" aria-label={`${mutedTracks[t] ? '取消静音' : '静音'}${LABELS[t]}`} aria-pressed={mutedTracks[t]} onClick={() => onToggleMute(t)} title={mutedTracks[t] ? '取消静音' : '静音'}>{mutedTracks[t] ? <VolumeX size={14}/> : <Volume2 size={14}/>}</button></div>
           <div className="studio-template-list" aria-label={`${LABELS[t]}已保存乐句`}>{columns[t].map((p, index) => p
             ? <JamTemplateCard key={p.id} template={{...p,name:p.name || `${LABELS[t]}乐句`}} playback={playback} isEmpty={isEmptyJamPhrase(p)} index={index} reorderProps={reorder.cellProps(t,index)} selected={selection[t] === p.id}
               canCancel={!auditioning && status.playingPhraseIds?.[t] === p.id && status.mode !== 'stopped' && !mutedTracks[t] && volumes[t] > -24}
@@ -100,6 +100,7 @@ export default function JamLauncher({ active, templates, columnCount, bank, onBa
         </section>)}
       </div>
     </div></div>
+    {humFeedback}
     {drag && <div className="studio-reorder-preview" aria-hidden="true" data-valid={drag.valid}>
       {drag.valid && <div className="studio-reorder-insertion" style={{left:drag.targetLeft-4,top:drag.targetTop,height:drag.targetHeight}}/>}
       {drag.ghosts.map(g => g.name && <div className="studio-reorder-ghost" data-track={g.trackId} key={g.trackId}
