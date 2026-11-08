@@ -1,5 +1,5 @@
 import { PianoRoll } from './PianoRoll.jsx';
-import { jamEditorNotes, jamMelodyRenderState, jamPitchedNotes, jamPitchedRenderState, resizeJamPitchedNote, setJamPitchedNote } from '../jamNoteEditing.js';
+import { jamEditorNotes, jamMelodyRenderState, jamPitchedNotes, jamPitchedRenderState, resizeJamPitchedNote, resizeJamPitchedStart, setJamPitchedNote } from '../jamNoteEditing.js';
 import { editJamSequencerStep, HUM_SOURCE } from '../jamHumExpression.js';
 
 export default function JamChordEditor({ draft, editorBars = draft.bars, bar, step, onChange }) {
@@ -29,14 +29,29 @@ export default function JamChordEditor({ draft, editorBars = draft.bars, bar, st
         if (state.active && (!state.start || event.shiftKey)) return;
         onChange(editJamSequencerStep(draft, bar, step, cells => setJamPitchedNote(cells, step, note, 1, state.start, track)));
       }}
-      onCellResize={(step, note, delta) => {
+      onCellResize={(step, note, delta, edge) => {
         const state = renderState(step, note);
         if (!state.active) return;
         const { startBar, startStep, durationSteps } = state;
-        const length = Math.min(maxLength(startBar, startStep), Math.max(1, Math.ceil(durationSteps) + delta));
+        const limit = maxLength(startBar, startStep);
+        if (edge === 'start') {
+          if (sustained && startBar > 0 && delta < 0) {
+            const previous = jamMelodyRenderState(editorBars, startBar, 0, note);
+            if (previous.active && previous.startBar < startBar) {
+              const previousEnd = (previous.startBar - startBar) * 16 + previous.startStep + Math.ceil(previous.durationSteps);
+              delta = Math.max(delta, Math.min(previousEnd, startStep) - startStep);
+            }
+          }
+          const visibleBassEnd = track === 'bass' && draft.sourcePresetId === HUM_SOURCE ? durationSteps : undefined;
+          const next = editJamSequencerStep(draft, startBar, startStep, cells =>
+            resizeJamPitchedStart(cells, startStep, note, delta, track, limit, visibleBassEnd));
+          if (next !== draft) onChange(next);
+          return;
+        }
+        const length = Math.min(limit, Math.max(1, Math.ceil(durationSteps) + delta));
         if (length === Math.ceil(durationSteps)) return;
         onChange(editJamSequencerStep(draft, startBar, startStep, cells =>
-          resizeJamPitchedNote(cells, startStep, note, length, track, maxLength(startBar, startStep))));
+          resizeJamPitchedNote(cells, startStep, note, length, track, limit)));
       }}/></div>
   </div>;
 }

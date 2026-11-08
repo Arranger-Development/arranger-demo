@@ -96,9 +96,11 @@
 .jam-studio .studio-chord-roll .pitch-step-cell.previewing { outline:1px solid #fff1c9; outline-offset:-1px; }
 .jam-studio .studio-chord-roll .pitch-step-cell:hover { border-color:#ffe2a6; }
 .jam-studio .pitch-duration-handle {
-  position:absolute; inset:0 0 0 auto; width:min(45%,10px); cursor:ew-resize; touch-action:none;
+  position:absolute; inset-block:0; width:min(30%,10px); cursor:ew-resize; touch-action:none;
   display:grid; place-items:center;
 }
+.jam-studio .pitch-duration-handle[data-edge=start] { inset-inline-start:0; }
+.jam-studio .pitch-duration-handle[data-edge=end] { inset-inline-end:0; }
 .jam-studio .pitch-duration-handle::after {
   content:''; width:2px; height:55%; border-radius:1px; background:#19120dbb;
 }

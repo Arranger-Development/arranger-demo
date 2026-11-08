@@ -5,7 +5,7 @@ import { planHumHarmony } from '../src/preview/humHarmony.js';
 import { createJamTemplateProjects, jamCombinationSnapshot } from '../src/app/jamTemplateProjects.js';
 import { applyJamTrackParameter, blankJamDraft } from '../src/app/jamDraftActions.js';
 import { createMatrixPlaybackAdapter } from '../src/audio/matrixPlaybackAdapter.js';
-import { jamMelodyRenderState, resizeJamPitchedNote, setJamPitchedNote } from '../src/app/jamNoteEditing.js';
+import { jamMelodyRenderState, resizeJamPitchedNote, resizeJamPitchedStart, setJamPitchedNote } from '../src/app/jamNoteEditing.js';
 import { editJamSequencerStep, humPlaybackBars } from '../src/app/jamHumExpression.js';
 import { toggleDrumsCellInstrument } from '../src/domain/drumsCells.js';
 import { eventDuration, usesNaturalSampleTail } from '../src/domain/notePerformances.js';
@@ -165,6 +165,34 @@ test('resizing a recorded melody tail keeps its original attacks and velocity', 
   assert.equal(second.timingOffset + second.durationSteps, 4);
   assert.equal(jamMelodyRenderState(phrase.bars, 0, 3, 'C4').active, true);
   assert.equal(jamMelodyRenderState(phrase.bars, 0, 4, 'C4').active, false);
+});
+
+test('resizing the front of a recorded note preserves its release and later reattacks', () => {
+  const bar = Array(16).fill(null);
+  const first = { offsetSteps: 0.2, durationSteps: 0.3, velocity: 0.6 };
+  const repeat = { offsetSteps: 0.6, durationSteps: 2, velocity: 0.8 };
+  bar[4] = { type: 'melody', note: 'C4', notePerformances: { C4: [first, repeat] } };
+  const extended = resizeJamPitchedStart(bar, 4, 'C4', -2, 'melody', 12);
+  assert.deepEqual(extended[2].notePerformances.C4, [{ ...first, durationSteps: 2.3 }]);
+  assert.deepEqual(extended[4].notePerformances.C4, [repeat]);
+  const shortened = resizeJamPitchedStart(extended, 2, 'C4', 2, 'melody', 14);
+  assert.equal(shortened[2], null);
+  assert.equal(shortened[3].notePerformances.C4[0].offsetSteps, first.offsetSteps);
+  assert.ok(Math.abs(3 + 0.2 + shortened[3].notePerformances.C4[0].durationSteps - 4.5) < 1e-9);
+  assert.deepEqual(shortened[4].notePerformances.C4, [repeat]);
+});
+
+test('dragging a generated chord start across halves keeps both edited positions through knob changes', () => {
+  const bar = Array(16).fill(null);
+  bar[8] = { type: 'notes', notes: ['C3', 'E3'], durationSteps: 4 };
+  const phrase = { trackId: 'chord', sourcePresetId: 'hum-generated', bars: [bar], params: { strength: 100, groove: 60 } };
+  const edited = editJamSequencerStep(phrase, 0, 8, cells => resizeJamPitchedStart(cells, 8, 'C3', -2, 'chord', 8));
+  assert.deepEqual(edited.humEditedSteps, [8, 6]);
+  const played = humPlaybackBars(applyJamTrackParameter(edited, 'strength', 0))[0];
+  assert.equal(played[8], null);
+  assert.deepEqual(played[6].notes, ['C3']);
+  assert.equal(6 + played[6].notePerformances.C3[0].durationSteps, 10.6);
+  assert.deepEqual(played[10].notes, ['E3']);
 });
 
 test('accompaniment knobs change playback onsets, respect manual edits and restore the middle setting', () => {

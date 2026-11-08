@@ -70,3 +70,38 @@ export function resizeJamPitchedNote(bar, step, note, length, track, maxLength) 
   } : hit);
   return next;
 }
+
+export function resizeJamPitchedStart(bar, step, note, delta, track, maxLength, visibleEnd) {
+  const cell = bar[step];
+  const hit = jamPitchedNotes(cell, step, track, maxLength).find(item => item.note === note);
+  if (!hit) return bar;
+  const performances = cell.notePerformances?.[note] ?? [];
+  const [first, ...repeats] = performances.toSorted((a, b) => a.offsetSteps - b.offsetSteps);
+  const attack = first ?? { offsetSteps: cell.timingOffset ?? 0, durationSteps: hit.durationSteps, velocity: cell.velocity ?? 1 };
+  const duration = visibleEnd == null ? attack.durationSteps : visibleEnd - attack.offsetSteps;
+  const conflictsAt = index => jamPitchedNotes(bar[index], index, track).filter(item => track === 'bass' || item.note === note);
+  let target = Math.max(0, Math.min(15, step + delta));
+  if (target < step) {
+    // The newly extended head cannot cover an earlier attack or its sustain.
+    for (let index = 0; index < step; index++) {
+      for (const previous of conflictsAt(index)) target = Math.max(target, index + Math.ceil(previous.durationSteps));
+    }
+    target = Math.min(target, step);
+  } else if (target > step) {
+    if (repeats.length) return bar;
+    target = Math.min(target, step + Math.max(0, Math.ceil(duration) - 1));
+    for (let index = step + 1; index <= target; index++) {
+      if (conflictsAt(index).length) target = index - 1;
+    }
+  }
+  if (target === step) return bar;
+
+  const shift = step - target;
+  const resized = { ...attack, durationSteps: duration + shift };
+  const length = Math.ceil(resized.offsetSteps + resized.durationSteps);
+  const cleared = repeats.length ? [...bar] : setJamPitchedNote(bar, step, note, 1, true, track, maxLength);
+  if (repeats.length) cleared[step] = { ...cell, notePerformances: { ...cell.notePerformances, [note]: repeats } };
+  const next = setJamPitchedNote(cleared, target, note, length, false, track, maxLength + shift);
+  next[target].notePerformances[note] = [resized];
+  return next;
+}

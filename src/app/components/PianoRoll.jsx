@@ -141,26 +141,27 @@ function PianoRoll({
     }
   }, [activeNoteIds, autoRevealActiveNote, noteIndexById, revealPitchRow]);
 
-  function startResize(event, step, note) {
+  function startResize(event, step, note, edge) {
     if (event.button !== 0 || durationDrag.current) return;
     const handle = event.currentTarget;
     const cell = handle.closest('.pitch-step-cell');
     const row = cell.dataset.row;
+    const side = edge === 'start' ? 'left' : 'right';
     const edges = Array.from(pianoRollRef.current.querySelectorAll(`.pitch-step-cell[data-row="${row}"]`),
-      element => ({ step: Number(element.dataset.step), right: element.getBoundingClientRect().right }));
-    const right = edges.find(edge => edge.step === step).right;
+      element => ({ step: Number(element.dataset.step), x: element.getBoundingClientRect()[side] }));
+    const anchor = cell.getBoundingClientRect()[side];
     event.stopPropagation();
     event.preventDefault();
     cell.focus({ preventScroll: true });
     handle.setPointerCapture(event.pointerId);
     resizeConsumedClick.current = true;
-    durationDrag.current = { pointer: event.pointerId, step, note, edges, right, origin: event.clientX };
+    durationDrag.current = { pointer: event.pointerId, step, note, edge, edges, anchor, origin: event.clientX };
   }
 
   function resizeStep(event, drag) {
-    const target = drag.right + event.clientX - drag.origin;
+    const target = drag.anchor + event.clientX - drag.origin;
     return drag.edges.reduce((nearest, edge) =>
-      Math.abs(edge.right - target) < Math.abs(nearest.right - target) ? edge : nearest).step;
+      Math.abs(edge.x - target) < Math.abs(nearest.x - target) ? edge : nearest).step;
   }
 
   function moveResize(event) {
@@ -179,7 +180,7 @@ function PianoRoll({
     setResizeTarget(null);
     if (!commit) return;
     const delta = resizeStep(event, drag) - drag.step;
-    if (delta) onCellResize(drag.step, drag.note, delta);
+    if (delta) onCellResize(drag.step, drag.note, delta, drag.edge);
   }
 
   return (
@@ -289,7 +290,8 @@ function PianoRoll({
                       const highlighted = highlightedNoteIds.has(note.note);
                       const rhythmHighlighted = highlightedStepIds.has(step);
                       const previewing = activeNoteIds.has(note.note);
-                      const canResize = !disabled && onCellResize && renderState?.end;
+                      const resizeEdges = !disabled && onCellResize && active
+                        ? [noteStart && 'start', renderState?.end && 'end'].filter(Boolean) : [];
 
                       return (
                         <button
@@ -319,7 +321,7 @@ function PianoRoll({
                           type="button"
                           aria-label={`${formatNoteLabel(note.note)} beat ${beatNumber}.${stepNumber}`}
                           aria-pressed={active}
-                          aria-keyshortcuts={active && onCellResize ? 'Shift+ArrowLeft Shift+ArrowRight' : undefined}
+                          aria-keyshortcuts={active && onCellResize ? 'Shift+ArrowLeft Shift+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight' : undefined}
                           disabled={disabled}
                           onClick={(event) => {
                             if (onCellPressStart || (event.detail && resizeConsumedClick.current)) return;
@@ -339,13 +341,14 @@ function PianoRoll({
                           onKeyDown={active && onCellResize ? event => {
                             if (!event.shiftKey || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
                             event.preventDefault();
-                            onCellResize(step, note.note, event.key === 'ArrowLeft' ? -1 : 1);
+                            onCellResize(step, note.note, event.key === 'ArrowLeft' ? -1 : 1, event.altKey ? 'start' : 'end');
                           } : undefined}
-                        >{canResize && <span className="pitch-duration-handle" title="拖动调整时值" aria-hidden="true"
-                          onPointerDown={event => startResize(event, step, note.note)}
+                        >{resizeEdges.map(edge => <span key={edge} className="pitch-duration-handle" data-edge={edge}
+                          title={edge === 'start' ? '拖动调整起音' : '拖动调整结束'} aria-hidden="true"
+                          onPointerDown={event => startResize(event, step, note.note, edge)}
                           onPointerMove={moveResize} onPointerUp={event => finishResize(event, true)}
                           onPointerCancel={finishResize} onLostPointerCapture={finishResize}
-                          onClick={event => event.stopPropagation()}/>}
+                          onClick={event => event.stopPropagation()}/>)}
                         </button>
                       );
                     })

@@ -22,7 +22,7 @@ export function editJamSequencerStep(phrase, barIndex, step, editBar) {
   const bars = [...phrase.bars];
   if (!isHumBacking(phrase)) {
     bars[barIndex] = editBar(baseBar);
-    return { ...phrase, bars };
+    return bars[barIndex] === baseBar ? phrase : { ...phrase, bars };
   }
 
   const { strength, groove } = jamTrackParameters(phrase.params, phrase.trackId);
@@ -31,10 +31,12 @@ export function editJamSequencerStep(phrase, barIndex, step, editBar) {
   // Keep the rhythm around the edited pitch intact, without saving knob-dependent gain or length.
   const edited = editBar(visibleRhythm);
   if (edited === visibleRhythm) return phrase;
-  const start = drums ? step : step - step % 8;
-  const end = start + (drums ? 1 : 8);
-  bars[barIndex] = baseBar.map((cell, index) => index >= start && index < end ? edited[index] : cell);
-  const humEditedSteps = [...new Set([...(phrase.humEditedSteps ?? []), barIndex * 16 + step])];
+  const changedSteps = [step];
+  edited.forEach((cell, index) => { if (cell !== visibleRhythm[index]) changedSteps.push(index); });
+  const windowAt = index => drums ? index : Math.floor(index / 8);
+  const windows = new Set(changedSteps.map(windowAt));
+  bars[barIndex] = baseBar.map((cell, index) => windows.has(windowAt(index)) ? edited[index] : cell);
+  const humEditedSteps = [...new Set([...(phrase.humEditedSteps ?? []), ...changedSteps.map(index => barIndex * 16 + index)])];
   return { ...phrase, bars, humEditedSteps };
 }
 
