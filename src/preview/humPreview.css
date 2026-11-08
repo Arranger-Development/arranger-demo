@@ -46,3 +46,7 @@
 }
 
 .jam-hum-timing { color: var(--tj-muted); font-variant-numeric: tabular-nums; }
+
+.jam-studio .studio-template-tools[data-visible-edit=true] { visibility: visible; }
+.jam-studio .studio-template-tools[data-visible-edit=true] .studio-template-remove { display: none; }
+.jam-studio .studio-template:is(:hover,:has(:focus-visible)) .studio-template-tools[data-visible-edit=true] .studio-template-remove { display: inline-flex; }

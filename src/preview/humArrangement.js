@@ -6,21 +6,40 @@ const pitches = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'
 const noteName = midi => `${pitches[midi % 12]}${Math.floor(midi / 12) - 1}`;
 const stepsPerBar = 16;
 const minNoteSeconds = 0.065;
+const preciseStep = value => Math.round(value * 1e6) / 1e6;
 const clamp = (value, low, high) => Math.max(low, Math.min(value, high));
 const median = values => values.toSorted((a, b) => a - b)[Math.floor(values.length / 2)];
 const emptySteps = length => Array(length).fill(null);
 const toBars = steps => Array.from({ length: steps.length / stepsPerBar }, (_, bar) => steps.slice(bar * stepsPerBar, (bar + 1) * stepsPerBar));
 
-function hasNewAttack(samples, time) {
-  const index = Math.round(time * 22050), window = 330;
-  const energy = offset => {
+const envelopeWindow = 221;
+const envelopeStep = envelopeWindow / 22050;
+function humEnvelope(samples) {
+  const window = envelopeWindow;
+  return Array.from({ length: Math.ceil(samples.length / window) }, (_, frame) => {
     let sum = 0;
-    for (let i = 0; i < window; i++) sum += (samples[index + offset + i] ?? 0) ** 2;
+    for (let i = 0; i < window; i++) sum += (samples[frame * window + i] ?? 0) ** 2;
     return Math.sqrt(sum / window);
-  };
-  const before = Math.min(energy(-2 * window), energy(-window));
-  const after = Math.max(energy(0), energy(window));
-  return after > before * 1.2 + 0.004;
+  });
+}
+
+function continuousHumEnd(envelope, previous, candidate) {
+  if (!envelope || previous.pitch !== candidate.pitch || Math.abs(candidate.start - previous.end) > 0.12) return null;
+  const frameAt = time => Math.round(time / envelopeStep);
+  const split = frameAt(candidate.start), join = frameAt(previous.end);
+  const nearby = envelope.slice(Math.max(0, split - 4), split + 4);
+  const floor = Math.max(0.002, Math.max(...nearby) * 0.16);
+  const bridge = envelope.slice(Math.max(0, Math.min(join, split) - 2), Math.max(join, split) + 2);
+  if (bridge.filter(level => level < floor).length >= 2) return null;
+  const before = Math.min(...envelope.slice(Math.max(0, split - 3), split));
+  const after = Math.max(...envelope.slice(split, split + 3));
+  if (after > before * 1.5 + 0.006) return null;
+  // The decoder may pad a fragment into the following rest. Extend only through voiced audio.
+  let endFrame = Math.min(envelope.length - 1, frameAt(candidate.end));
+  for (let i = split; i < endFrame; i++) {
+    if (envelope[i] < floor && envelope[i + 1] < floor) { endFrame = i; break; }
+  }
+  return Math.max(previous.end, Math.min(candidate.end, endFrame * envelopeStep));
 }
 
 export function cleanHumNotes(events, recordingSeconds, samples) {
@@ -31,10 +50,14 @@ export function cleanHumNotes(events, recordingSeconds, samples) {
     return [{ start, end, pitch: pitchMidi, amplitude }];
   }).sort((a, b) => a.start - b.start || b.amplitude - a.amplitude);
   const notes = [];
+  const envelope = samples && humEnvelope(samples);
   for (const candidate of candidates) {
     const previous = notes.at(-1);
-    if (samples && previous?.pitch === candidate.pitch && Math.abs(candidate.start - previous.end) < 0.032
-      && candidate.end - candidate.start < 0.65 * (previous.end - previous.start) && !hasNewAttack(samples, candidate.start)) continue;
+    const sustainedEnd = previous && continuousHumEnd(envelope, previous, candidate);
+    if (sustainedEnd != null) {
+      previous.end = sustainedEnd;
+      continue;
+    }
     if (previous && candidate.start < previous.end) {
       // A competing pitch over most of the same note is usually an overtone.
       const overlap = Math.min(previous.end, candidate.end) - candidate.start;
@@ -78,7 +101,11 @@ export function makeHumMelody(notes, bpm) {
     const rawStart = (note.start - origin) * stepRate;
     const closest = Math.round(rawStart);
     const start = Math.abs(closest - rawStart) <= 0.35 ? rawStart + (closest - rawStart) * 0.25 : rawStart;
-    return { start, end: start + (note.end - note.start) * stepRate, pitch: note.pitch + shift, amplitude: note.amplitude };
+    const measuredLength = (note.end - note.start) * stepRate;
+    const gridLength = Math.floor(preciseStep(measuredLength));
+    // A small detected tail should not light another grid cell or consume a rest.
+    const length = gridLength >= 1 && measuredLength - gridLength <= 0.35 ? gridLength : measuredLength;
+    return { start: preciseStep(start), end: preciseStep(start + length), pitch: note.pitch + shift, amplitude: note.amplitude };
   });
   for (let i = 1; i < events.length; i++) events[i - 1].end = Math.min(events[i - 1].end, events[i].start);
   const steps = emptySteps(Math.max(1, Math.ceil(events.at(-1).end / stepsPerBar)) * stepsPerBar);

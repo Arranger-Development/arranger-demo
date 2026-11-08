@@ -1,9 +1,9 @@
-import { PERFORMANCE_SAMPLE_BANKS } from '../data/performanceTimbres.js';
+import { HUM_SUSTAIN, PERFORMANCE_SAMPLE_BANKS } from '../data/performanceTimbres.js';
 import { loopRepeat } from './loopOrder.js';
 import { createJamTrackPlayback } from './jamTrackPlayback.js';
 
 // Read musical transitions before the scheduler reads events at the boundary.
-export function createSessionPlayback(audio, notify = () => {}, automation) {
+export function createSessionPlayback(audio, notify = () => {}, automation, { humPreview = false } = {}) {
   let generation = 0, current = null, pending = null, sequence = [], sourceSnapshot = null;
   let startStep = 0, lastStep = -1, cycle = 1, mode = 'stopped', loading = false, bpm = 100, audible = null;
   let recordingStopAt = null, previousRepeat = null;
@@ -106,7 +106,12 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
     try {
       await audio.preparePerformanceEffects?.();
       if (request !== generation) return;
-      const banks = Object.values(PERFORMANCE_SAMPLE_BANKS);
+      const banks = Object.values(PERFORMANCE_SAMPLE_BANKS).filter(bank => bank.id !== HUM_SUSTAIN);
+      const gatedHumTimbres = humPreview ? [
+        { trackId: 'melody', timbreId: HUM_SUSTAIN, playbackMode: 'gated' },
+        { trackId: 'chord', timbreId: 'piano', playbackMode: 'gated' },
+        ...banks.filter(bank => ['melody', 'chord'].includes(bank.track)).map(bank => ({ trackId: bank.track, timbreId: bank.id, playbackMode: 'gated' })),
+      ] : [];
       const started = await audio.play({ bpm, bar: 0, step: 0, totalBars: current.snapshot.totalBars,
         matrixSource: () => current?.snapshot.matrix ?? targets[0].snapshot.matrix,
         playbackSource: (step, time) => request === generation ? source(step, time) : { done: true },
@@ -114,7 +119,7 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
         additionalDrumTimbres: banks.filter(bank => bank.track === 'drums').map(bank => ({ trackId: bank.track, timbreId: bank.id })),
         additionalTimbres: ['piano', 'yangqin', 'blues'].flatMap(timbreId => [
           { trackId: 'chord', timbreId, playbackMode: 'natural' }, { trackId: 'melody', timbreId, playbackMode: 'natural' },
-        ]).concat(banks.filter(bank => bank.track !== 'drums').map(bank => ({ trackId: bank.track, timbreId: bank.id, playbackMode: 'natural' }))),
+        ]).concat(banks.filter(bank => bank.track !== 'drums').map(bank => ({ trackId: bank.track, timbreId: bank.id, playbackMode: 'natural' })), gatedHumTimbres),
       });
       if (request !== generation) return;
       if (!started) throw new Error('音频未能启动，请重试。');

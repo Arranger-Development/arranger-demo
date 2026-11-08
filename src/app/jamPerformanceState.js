@@ -20,13 +20,18 @@ export function jamParameterLevels(trackId, parameter) {
 // Keep stored parameter keys stable: groove is Ableton's Level axis, strength
 // is its Int axis. Hardware keys describe the physical left/right CC5/CC6 knobs.
 export function jamTrackKnobs(trackId, humGenerated = false) {
-  if (humGenerated && trackId !== 'drums') return [
+  if (humGenerated && trackId === 'drums') return [
+    { parameter: 'strength', hardwareParameter: 'strength', label: '强度', lowLabel: '温和', highLabel: '强烈' },
+    { parameter: 'groove', hardwareParameter: 'groove', label: '律动', lowLabel: '稀疏', highLabel: '十六分' },
+  ];
+  if (humGenerated) return [
     { parameter: 'groove', hardwareParameter: 'strength', ...{
       melody: { label: '力度', lowLabel: '轻柔', highLabel: '饱满' },
       chord: { label: '色彩', lowLabel: '偏低', highLabel: '偏高' },
       bass: { label: '长短', lowLabel: '短促', highLabel: '连贯' },
     }[trackId] },
-    { parameter: 'strength', hardwareParameter: 'groove', label: '律动', lowLabel: '平稳', highLabel: '重音' },
+    { parameter: 'strength', hardwareParameter: 'groove', label: '律动', lowLabel: trackId === 'chord' ? '齐奏' : trackId === 'bass' ? '根音' : '平稳',
+      highLabel: trackId === 'chord' ? '分解' : trackId === 'bass' ? '切分' : '重音' },
   ];
   if (['chord','bass','melody'].includes(trackId)) return [
     { parameter: 'groove', hardwareParameter: 'strength', label: trackId === 'chord' ? '色彩' : '旋律',

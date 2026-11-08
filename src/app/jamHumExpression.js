@@ -1,4 +1,5 @@
 import { getDrumsCellInstruments, getDrumsCellVelocity } from '../domain/drumsCells.js';
+import { humRhythmBars } from './jamHumRhythm.js';
 import { jamTrackParameters } from './jamPerformanceState.js';
 
 export const HUM_SOURCE = 'hum-generated';
@@ -8,12 +9,13 @@ const pitchOrder = note => Number(note.at(-1)) * 12 + pitchClasses.indexOf(note.
 const velocity = (value = 1, gain) => Math.max(0.2, Math.min(1, value * gain));
 
 export function humPlaybackBars(phrase) {
-  const { trackId, bars } = phrase;
-  if (phrase.sourcePresetId !== HUM_SOURCE) return bars;
+  const { trackId } = phrase;
+  if (phrase.sourcePresetId !== HUM_SOURCE) return phrase.bars;
   const { strength, groove } = jamTrackParameters(phrase.params, trackId);
   const left = (groove - (trackId === 'chord' ? 60 : 50)) / 50;
   const right = (strength - 50) / 50;
-  return bars.map(bar => bar.map((cell, step) => {
+  const bars = humRhythmBars(phrase, trackId === 'drums' ? groove : strength);
+  return bars.map((bar, barIndex) => bar.map((cell, step) => {
     if (!cell) return cell;
     if (trackId === 'drums') {
       const gain = instrument => 1 + right * 0.38 + left * (instrument === 'hihat' || step % 4 !== 0 ? 0.36 : 0);
@@ -28,13 +30,14 @@ export function humPlaybackBars(phrase) {
     };
     const length = trackId === 'bass' ? 0.77 + 0.23 * left : 1;
     const notes = Object.entries(cell.notePerformances ?? {});
-    if (trackId === 'chord') notes.sort(([a], [b]) => pitchOrder(a) - pitchOrder(b));
+    const voices = trackId === 'chord' ? (phrase.bars[barIndex][step - step % 8]?.notes ?? notes.map(([note]) => note)).toSorted((a, b) => pitchOrder(a) - pitchOrder(b)) : [];
     return {
       ...cell,
       velocity: velocity(cell.velocity, gainAt(cell.timingOffset ?? 0)),
       ...(trackId === 'bass' && Number.isFinite(cell.durationSteps) ? { durationSteps: cell.durationSteps * length } : {}),
-      ...(notes.length ? { notePerformances: Object.fromEntries(notes.map(([note, hits], index) => {
-        const voiceGain = trackId === 'chord' && notes.length > 1 ? left * 0.38 * (2 * index / (notes.length - 1) - 1) : 0;
+      ...(notes.length ? { notePerformances: Object.fromEntries(notes.map(([note, hits]) => {
+        const index = voices.indexOf(note);
+        const voiceGain = index >= 0 && voices.length > 1 ? left * 0.38 * (2 * index / (voices.length - 1) - 1) : 0;
         return [note, hits.map(hit => ({ ...hit, velocity: velocity(hit.velocity ?? cell.velocity, gainAt(hit.offsetSteps ?? 0) + voiceGain), durationSteps: hit.durationSteps * length }))];
       })) } : {}),
     };

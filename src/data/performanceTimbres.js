@@ -4,7 +4,9 @@ export const DEEP_AUTUMN_DRUMS = 'deep-autumn-drums';
 export const DEEP_AUTUMN_CHORD = 'deep-autumn-chord';
 export const DEEP_AUTUMN_BASS = 'deep-autumn-bass';
 export const DEEP_AUTUMN_MELODY = 'deep-autumn-melody';
+export const HUM_SUSTAIN = 'hum-sustain';
 export const PERFORMANCE_SAMPLE_BANKS = Object.freeze({
+  [HUM_SUSTAIN]: { id: HUM_SUSTAIN, track: 'melody', label: '延音', gainDb: -8, sampleFiles: {} },
   [DEEP_AUTUMN_DRUMS]: {
     id: DEEP_AUTUMN_DRUMS, track: 'drums', label: '深秋鼓组', gainDb: -5.5,
     sampleFiles: Object.fromEntries(['Kick', 'Snare', 'Hihat'].map((name) => [
@@ -62,6 +64,6 @@ export function withPerformanceTimbre(event, requestedTimbreId) {
   return {
     ...event,
     ...(requestedTimbreId ? { requestedTimbreId } : {}),
-    ...(bank ? { timbreId: bank.id, ...(bank.track !== 'drums' ? { playbackMode: 'natural' } : {}) } : {}),
+    ...(bank ? { timbreId: bank.id, ...(bank.track !== 'drums' ? { playbackMode: bank.id === HUM_SUSTAIN || event.playbackMode === 'gated' ? 'gated' : 'natural' } : {}) } : {}),
   };
 }

@@ -300,11 +300,11 @@ function createMatrixPlaybackAdapter(matrixSource, options = {}) {
             events = extractMelodyEvents(cell, bar, step);
           }
 
-          return expandNotePerformances(events, cell).map((event) => withPerformanceTimbre(instanceAware ? {
+          return expandNotePerformances(events, cell).map(event => withPerformanceTimbre({
             ...event,
-            trackId,
-            trackType,
-          } : event, cell?.requestedTimbreId));
+            ...(instanceAware ? { trackId, trackType } : {}),
+            ...(cell?.playbackMode === 'gated' ? { playbackMode: 'gated' } : {}),
+          }, cell?.requestedTimbreId));
         })
     ));
   }

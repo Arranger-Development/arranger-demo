@@ -11,6 +11,7 @@ import JamLauncher from './JamLauncher.jsx';
 import JamChordEditor from './JamChordEditor.jsx';
 import { createJamAudition } from '../jamAudition.js';
 import { HUM_SOURCE } from '../jamHumExpression.js';
+import { rememberHumEdits } from '../jamHumRhythm.js';
 import { createJamHeldEdits } from '../jamHeldEdits.js';
 import { createJamPhraseHistory } from '../jamPhraseHistory.js';
 import { toggleJamTemplate, launchJamColumn, deleteJamTemplate } from '../jamTemplateSelection.js';
@@ -22,7 +23,7 @@ import { JAM_PITCHED_PRESETS as DIAL_PITCHED_PRESETS } from '../jamPitchedPreset
 import { getJamTemplateProjects, jamCombinationSnapshot, upgradeJamSlotLayout, defaultJamTimbres } from '../jamTemplateProjects.js';
 import { snapshotSection } from '../performanceSession.js';
 import { getDialDrumPreset } from '../../data/dialDrumPresets.js';
-import { PERFORMANCE_SAMPLE_BANKS } from '../../data/performanceTimbres.js';
+import { HUM_SUSTAIN, PERFORMANCE_SAMPLE_BANKS } from '../../data/performanceTimbres.js';
 import { createJamEffects } from '../jamEffects.js';
 import { createSessionPlayback } from '../sessionPlayback.js';
 import createAudioEngine from '../../audio/createAudioEngine.js';
@@ -54,7 +55,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const [effects] = useState(() => createJamEffects(audio));
   const fx = useSyncExternalStore(effects.subscribe, effects.getSnapshot);
   const [status, setStatus] = useState({ mode: 'stopped', loading: false });
-  const [playback] = useState(() => createSessionPlayback(audio, setStatus));
+  const [playback] = useState(() => createSessionPlayback(audio, setStatus, undefined, { humPreview: Boolean(humControl) }));
   const [editingTrack, setEditingTrack] = useState(null);
   const [solo, setSolo] = useState(false), [message, setMessage] = useState('');
   function retainMixChange({selection,trackId,restoreSound}) {
@@ -144,7 +145,8 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const pageCount = columnCount / 8;
   const effectivePage = Math.min(page, pageCount - 1);
   const templates = Object.fromEntries(TRACKS.map(t => [t, jamTemplatePage(w.templates[t], effectivePage)]));
-  const instrumentTimbre = t => w.timbres?.[t] ?? w.templates[t].find(p => p.id === w.selection[t])?.timbreId ?? w.draftsByTrack?.[t]?.timbreId ?? defaultJamTimbres()[t];
+  const instrumentTimbre = t => w.timbres?.[t] ?? w.templates[t].find(p => p.id === w.selection[t])?.timbreId ?? w.draftsByTrack?.[t]?.timbreId
+    ?? (humControl && t === 'melody' && w.templates.melody.some(p => p.timbreId === HUM_SUSTAIN) ? HUM_SUSTAIN : defaultJamTimbres()[t]);
   function sourceDraft(t, sourceId, timbreId) {
     const timbre = timbreId ?? instrumentTimbre(t);
     if (t === 'drums') {
@@ -182,7 +184,9 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     const id=next.editingTemplateId??next.id??draft?.editingTemplateId;
     const before=current.templates[next.trackId]?.find(p=>p.id===id);
     if (!before || !projectStore.commitPhraseEdit) return;
-    const phrase=projectStore.commitPhraseEdit({...next,editingTemplateId:id},{projectId:project.id});
+    const candidate = record && !knob && next.trackId !== 'melody' && before.sourcePresetId === HUM_SOURCE && next.sourcePresetId === HUM_SOURCE
+      ? rememberHumEdits(before, next) : next;
+    const phrase=projectStore.commitPhraseEdit({...candidate,editingTemplateId:id},{projectId:project.id});
     if (!phrase) { setMessage('乐句未能更新，请重新打开该格子。'); return; }
     if (record) phraseHistory.record(project.id,before,phrase);
     const barsChanged = JSON.stringify(before.bars) !== JSON.stringify(phrase.bars);
@@ -295,8 +299,17 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   }
   function changeInstrumentTimbre(t, timbreId) {
     heldEdits.cancel(t);
-    projectStore.setTimbre(t,timbreId);
-    if (draft && audition.getTrack()) audition.update(projectStore.current().workspace.draft);
+    if (!projectStore.setTimbre(t, timbreId)) return;
+    if (humControl && t === 'melody' && playback.isActive()) {
+      const w = projectStore.current().workspace;
+      const ids = new Set([playback.getDesiredPhraseIds().melody, playback.getQueuedPhraseIds()?.melody,
+        playback.getProgress()?.snapshot.phraseIds.melody]);
+      for (const id of ids) {
+        const phrase = w.templates.melody.find(item => item.id === id);
+        if (phrase) playback.updatePhrase(jamCombinationSnapshot(w, phrase, true), t, id, { preserveEffects: true });
+      }
+      if (audition.getMode() === 'solo' && w.draft?.trackId === t) audition.update(w.draft, { preserveEffects: true });
+    } else if (draft && audition.getTrack()) audition.update(projectStore.current().workspace.draft);
     else if (playback.isActive()) launch('step',null,false);
   }
   function changeMix(track, value) {
@@ -389,7 +402,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const previewBar = Math.min(editBar,(draft?.bars.length ?? 1)-1);
   const renderLauncher = (humButton, humFeedback) => <JamLauncher key={project.id} humButton={humButton} humFeedback={humFeedback} active={active} playback={playback} templates={w.templates} columnCount={columnCount} bank={effectivePage} onBankChange={setPage} navigationRef={launcherNav}
           editingTrack={editingTrack} editingTemplateId={draft?.editingTemplateId} auditioning={solo} selection={w.selection} status={status} mutedTracks={w.mutedTracks} volumes={w.volumes}
-          timbres={Object.fromEntries(TRACKS.map(t => [t,instrumentTimbre(t)]))} timbreLabel={timbreLabel} artSources={ART} artNodes={artNodes}
+          timbres={Object.fromEntries(TRACKS.map(t => [t,instrumentTimbre(t)]))} timbreLabel={timbreLabel} humPreview={Boolean(humControl)} artSources={ART} artNodes={artNodes}
           onOpenEditor={openEditor} onTimbreChange={changeInstrumentTimbre} onToggleMute={toggleMute} onTrigger={trigger} onLaunchColumn={launchColumn} onRemove={phrase => hasJamNotes(phrase)?setDeleteTarget(phrase):removePhrase(phrase)} onMove={moveSlots}/>;
   return <section className="performance-mode jam-workspace template-jam jam-studio" hidden={!active} aria-label="Jam 演奏" data-editing={Boolean(draft)} data-hum-preview={humControl ? true : undefined}>
     <header className="performance-header">

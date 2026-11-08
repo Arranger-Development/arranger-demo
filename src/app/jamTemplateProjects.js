@@ -1,7 +1,7 @@
 import { PERFORMANCE_TRACKS as TRACKS } from './performanceModel.js';
 import { createJamProjects } from './jamProjects.js';
 import { snapshotSection, TIMBRE_OPTIONS } from './performanceSession.js';
-import { DEEP_AUTUMN_DRUMS, DEEP_AUTUMN_CHORD, DEEP_AUTUMN_BASS, DEEP_AUTUMN_MELODY, withPerformanceTimbre } from '../data/performanceTimbres.js';
+import { DEEP_AUTUMN_DRUMS, DEEP_AUTUMN_CHORD, DEEP_AUTUMN_BASS, DEEP_AUTUMN_MELODY, HUM_SUSTAIN, withPerformanceTimbre } from '../data/performanceTimbres.js';
 import { normalizeBpm } from '../domain/bpm.js';
 import { createClipRecord } from '../domain/clipHelpers.js';
 import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
@@ -120,7 +120,7 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
           p.workspace.templates[t] = normalizeJamSlots(p.workspace.templates[t]);
         }
         p.workspace = { ...workspace(bpm), ...p.workspace, slotLayoutVersion: p.workspace.slotLayoutVersion ?? 0, bpm: normalizeBpm(p.workspace.bpm) };
-        p.workspace.timbres = byTrack(t => TIMBRE_OPTIONS[t].includes(p.workspace.timbres?.[t]) ? p.workspace.timbres[t] : null);
+        p.workspace.timbres = byTrack(t => TIMBRE_OPTIONS[t].includes(p.workspace.timbres?.[t]) || (t === 'melody' && p.workspace.timbres?.[t] === HUM_SUSTAIN) ? p.workspace.timbres[t] : null);
         p.workspace.draftsByTrack ??= {};
         if (TRACKS.includes(p.workspace.draft?.trackId) && !p.workspace.draftsByTrack[p.workspace.draft.trackId]) {
           p.workspace.draftsByTrack = { ...p.workspace.draftsByTrack, [p.workspace.draft.trackId]: p.workspace.draft };
@@ -226,7 +226,7 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
       const inserted = [];
       for (const phrase of phrases) {
         if (occupiedByTrack[phrase.trackId].has(slotIndex)) return null;
-        const entry = phraseEdit(next, { ...phrase, sourcePresetId: HUM_SOURCE }, { create: true, slotIndex });
+        const entry = phraseEdit(next, { ...phrase, ...(phrase.trackId === 'melody' ? { timbreId: HUM_SUSTAIN } : {}), sourcePresetId: HUM_SOURCE }, { create: true, slotIndex });
         if (!entry) return null;
         next = entry.workspace;
         inserted.push(entry.phrase);
@@ -253,7 +253,7 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
         ? { ...item, workspace: { ...w, draftsByTrack, draft: w.draft?.trackId === t ? null : w.draft } } : item) }, false);
     },
     setTimbre(t, timbreId) {
-      if (!TIMBRE_OPTIONS[t]?.includes(timbreId)) return false;
+      if (!TIMBRE_OPTIONS[t]?.includes(timbreId) && !(t === 'melody' && timbreId === HUM_SUSTAIN)) return false;
       return patch({timbres:{...current().workspace.timbres,[t]:timbreId}});
     },
     saveTemplate(draft, name, id = null, { slotIndex } = {}) {
@@ -336,12 +336,12 @@ export function getJamTemplateProjects(genre, profile, bpm) {
 export function selectedJamTemplates(w, override = null) {
   return byTrack(t => override?.trackId === t ? override : w.templates[t].find(p => p.id === w.selection[t]) ?? null);
 }
-function setTemplateTimbre(cell, track, id) {
+function setTemplateTimbre(cell, track, id, gated = false) {
   cell.requestedTimbreId = id;
-  const resolved = withPerformanceTimbre({ type:track },id);
+  const resolved = withPerformanceTimbre({ type: track, ...(gated ? { playbackMode: 'gated' } : {}) }, id);
   if (resolved.timbreId) cell.timbreId = resolved.timbreId;
   else if (track === 'drums' || track === 'bass') delete cell.timbreId;
-  else { cell.timbreId = 'piano'; cell.playbackMode = 'natural'; }
+  else { cell.timbreId = 'piano'; cell.playbackMode = gated ? 'gated' : 'natural'; }
   if (resolved.playbackMode) cell.playbackMode = resolved.playbackMode;
 }
 export function jamCombinationSnapshot(w, override = null, solo = false) {
@@ -357,7 +357,10 @@ export function jamCombinationSnapshot(w, override = null, solo = false) {
   const bars = byTrack(t => selected[t] ? humPlaybackBars(selected[t]) : [Array(16).fill(null)]);
   const matrix = byTrack(t => Array.from({ length: phraseBars?.[t] ?? totalBars }, (_, b) => copy(bars[t][b % bars[t].length])));
   const timbres = byTrack(t => w.timbres?.[t] ?? selected[t]?.timbreId ?? defaultJamTimbres()[t]);
-  for (const t of TRACKS) for (const bar of matrix[t]) for (const cell of bar) if (cell) setTemplateTimbre(cell,t,timbres[t]);
+  for (const t of TRACKS) for (const bar of matrix[t]) for (const cell of bar) if (cell) {
+    const gated = (t === 'melody' || t === 'chord') && selected[t]?.sourcePresetId === HUM_SOURCE;
+    setTemplateTimbre(cell, t, timbres[t], gated);
+  }
   return { id: 'jam-current-combination', matrix, totalBars, phraseBars: byTrack(t => selected[t]?.bars.length ?? 1), repeat: null, kind: 'main', timbres, phraseIds: byTrack(t => selected[t] ? selected[t].id ?? selected[t].editingTemplateId ?? 'draft' : null) };
 }
 export function applyUserTemplate(state, template, startBar, trackId = template.trackId) {

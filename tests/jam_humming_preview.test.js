@@ -4,8 +4,10 @@ import { arrangeHumMelody, cleanHumNotes, estimateHumBpm, makeHumMelody } from '
 import { createJamTemplateProjects, jamCombinationSnapshot } from '../src/app/jamTemplateProjects.js';
 import { applyJamTrackParameter, blankJamDraft } from '../src/app/jamDraftActions.js';
 import { createMatrixPlaybackAdapter } from '../src/audio/matrixPlaybackAdapter.js';
-import { setJamPitchedNote } from '../src/app/jamNoteEditing.js';
-import { usesNaturalSampleTail } from '../src/domain/notePerformances.js';
+import { jamMelodyRenderState, setJamPitchedNote } from '../src/app/jamNoteEditing.js';
+import { rememberHumEdits } from '../src/app/jamHumRhythm.js';
+import { toggleDrumsCellInstrument } from '../src/domain/drumsCells.js';
+import { eventDuration, usesNaturalSampleTail } from '../src/domain/notePerformances.js';
 
 function makeStore() {
   const data = new Map();
@@ -96,4 +98,89 @@ test('Jam snapshots play all four tracks, and rotating generated expression pres
   assert.ok(after.velocity < original.velocity);
   assert.equal(after.timingOffset, original.timingOffset);
   assert.deepEqual(playbackAtStart(applyJamTrackParameter(turned, 'groove', 50)), before);
+});
+
+test('a fragmented sustained quarter note schedules once, but four articulated syllables stay four', () => {
+  const sampleRate = 22050;
+  const starts = [0.10, 0.25, 0.40, 0.55];
+  const notes = starts.map((start, index) => event(start, 60, index === 1 ? 0.08 : 0.15));
+  const samples = new Float32Array(sampleRate);
+  const fill = (start, end) => samples.fill(0.4, Math.round(start * sampleRate), Math.round(end * sampleRate));
+  fill(0.10, 0.70);
+  const sustained = cleanHumNotes(notes, 1, samples);
+  assert.equal(sustained.length, 1);
+  assert.ok(Math.abs(sustained[0].end - sustained[0].start - 0.6) < 0.011);
+  const store = makeStore();
+  const [phrase] = store.insertHumPhrases([{ trackId: 'melody', bars: makeHumMelody(sustained, 100).bars }], { projectId: store.current().id });
+  const adapter = () => createMatrixPlaybackAdapter(jamCombinationSnapshot(store.current().workspace, phrase, true));
+  const [attack] = adapter().getEventsForStep(0, 0);
+  assert.equal(attack.timbreId, 'hum-sustain');
+  assert.equal(attack.playbackMode, 'gated');
+  assert.equal(eventDuration(attack, 100), 0.6);
+  const slightlyLong = makeHumMelody([{ ...sustained[0], end: sustained[0].start + 0.65 }], 100).bars;
+  assert.equal(jamMelodyRenderState(slightlyLong, 0, 3, 'C4').active, true);
+  assert.equal(jamMelodyRenderState(slightlyLong, 0, 4, 'C4').active, false);
+  for (const step of [1, 2, 3]) {
+    assert.deepEqual(adapter().getEventsForStep(0, step), []);
+    assert.equal(jamMelodyRenderState(phrase.bars, 0, step, 'C4').start, false);
+  }
+  store.setTimbre('melody', 'deep-autumn-melody');
+  const [sampleAttack] = adapter().getEventsForStep(0, 0);
+  assert.equal(sampleAttack.timbreId, 'deep-autumn-melody');
+  assert.equal(sampleAttack.playbackMode, 'gated');
+  assert.equal(eventDuration(sampleAttack, 100), eventDuration(attack, 100));
+  samples.fill(0);
+  for (const start of starts) fill(start, start + 0.095);
+  assert.equal(cleanHumNotes(notes, 1, samples).length, 4);
+});
+
+test('a sustained melody continues visibly across a bar with no attack until the next loop', () => {
+  const bars = makeHumMelody([{ start: 0, end: 0.15, pitch: 62, amplitude: 1 },
+    { start: 2.1, end: 2.7, pitch: 60, amplitude: 1 }], 100).bars;
+  const continuation = jamMelodyRenderState(bars, 1, 0, 'C4');
+  assert.deepEqual(continuation, { active: true, start: false, startBar: 0, startStep: 14, durationSteps: 4 });
+  const store = makeStore();
+  const [phrase] = store.insertHumPhrases([{ trackId: 'melody', bars }], { projectId: store.current().id });
+  const adapter = createMatrixPlaybackAdapter(jamCombinationSnapshot(store.current().workspace, phrase, true));
+  assert.equal(adapter.getEventsForStep(0, 14)[0].durationSteps, 4);
+  assert.deepEqual(adapter.getEventsForStep(1, 0), []);
+  assert.equal(adapter.getEventsForStep(2, 0, 32)[0].note, 'D4');
+});
+
+test('accompaniment knobs change playback onsets, respect manual edits and restore the middle setting', () => {
+  const store = makeStore();
+  const bars = melody([60, 64, 67, 60]);
+  const projectId = store.current().id;
+  const [phrase] = store.insertHumPhrases([{ trackId: 'melody', bars }], { projectId });
+  const backing = store.insertHumPhrases(backingPhrases(bars), { projectId, melodyId: phrase.id });
+  const events = phrase => {
+    const adapter = createMatrixPlaybackAdapter(jamCombinationSnapshot(store.current().workspace, phrase, true));
+    return Array.from({ length: 16 }, (_, step) => adapter.getEventsForStep(0, step)).flat();
+  };
+  for (const track of backing) {
+    const parameter = track.trackId === 'drums' ? 'groove' : 'strength';
+    const low = applyJamTrackParameter(track, parameter, 0), high = applyJamTrackParameter(track, parameter, 100);
+    const rhythm = phrase => events(phrase).map(({ step, instrument, note, notes }) => [step, instrument, note, notes]);
+    assert.notDeepEqual(rhythm(low), rhythm(high));
+    assert.deepEqual(events(applyJamTrackParameter(high, parameter, 50)), events(track));
+    if (track.trackId === 'drums') {
+      const foundation = phrase => events(phrase).filter(hit => hit.instrument !== 'hihat').map(hit => [hit.instrument, hit.step]);
+      assert.deepEqual(foundation(low), foundation(high));
+      const bars = structuredClone(track.bars);
+      if (!bars[0][1]?.instruments.includes('hihat')) bars[0][1] = toggleDrumsCellInstrument(bars[0][1], 'hihat');
+      const withHat = rememberHumEdits(track, { ...track, bars });
+      const removed = structuredClone(bars);
+      removed[0][1] = toggleDrumsCellInstrument(removed[0][1], 'hihat');
+      const authored = rememberHumEdits(withHat, { ...withHat, bars: removed });
+      const dense = events(applyJamTrackParameter(authored, parameter, 100));
+      assert.ok(!dense.some(hit => hit.step === 1 && hit.instrument === 'hihat'));
+      assert.ok(dense.some(hit => hit.step === 3 && hit.instrument === 'hihat'));
+    } else if (track.trackId === 'chord') {
+      const notesInWindow = phrase => events(phrase).filter(hit => hit.step < 8).flatMap(hit => hit.notes).sort();
+      assert.deepEqual(notesInWindow(low), notesInWindow(high));
+    } else {
+      const pitches = phrase => new Set(events(phrase).filter(hit => hit.step < 8).map(hit => hit.note));
+      assert.deepEqual(pitches(low), pitches(high));
+    }
+  }
 });

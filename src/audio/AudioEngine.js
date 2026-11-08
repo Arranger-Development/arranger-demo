@@ -14,6 +14,7 @@ import {
   getPitchedSampleBank,
   normalizePitchedSampleBankId,
   getPerformanceSampleBank,
+  HUM_SUSTAIN,
 } from '../data/performanceTimbres.js';
 import { AUDIO_STATUSES } from './audioStatus.js';
 import { createMatrixPlaybackAdapter } from './matrixPlaybackAdapter.js';
@@ -741,6 +742,14 @@ export default class AudioEngine {
     const cached = banks.get(bankKey);
     if (cached?.ready) return true;
     if (cached?.promise) return cached.promise;
+
+    if (normalizedTimbreId === HUM_SUSTAIN) {
+      const sampler = this.createChordSynth(trackId);
+      if (!sampler) return false;
+      sampler.set?.({ oscillator: { type: 'triangle' }, envelope: { attack: 0.025, decay: 0.12, sustain: 0.75, release: 0.12 } });
+      banks.set(bankKey, { timbreId: normalizedTimbreId, sampler, ready: true });
+      return true;
+    }
 
     let sampler = null;
     try {
@@ -1885,7 +1894,7 @@ export default class AudioEngine {
       for (const cell of bars.flat()) {
         const bank = getPerformanceSampleBank(getTrackTypeFromInstanceId(trackId), cell?.requestedTimbreId ?? cell?.timbreId);
         if (bank?.track === 'drums') drumTimbres.set(`${trackId}:${bank.id}`, [trackId, bank.id]);
-        if (bank && bank.track !== 'drums') addTimbre(trackId, bank.id, 'natural');
+        if (bank && bank.track !== 'drums') addTimbre(trackId, bank.id, cell.playbackMode ?? 'natural');
         if (!bank && ['melody', 'note', 'notes'].includes(cell?.type) && cell.timbreId) {
           addTimbre(trackId, cell.timbreId, cell.playbackMode);
         }

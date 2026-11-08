@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { PianoRoll } from './PianoRoll.jsx';
-import { jamEditorNotes, jamPitchedNotes, jamPitchedRenderState, setJamPitchedNote } from '../jamNoteEditing.js';
+import { jamEditorNotes, jamMelodyRenderState, jamPitchedNotes, jamPitchedRenderState, setJamPitchedNote } from '../jamNoteEditing.js';
+import { HUM_SOURCE } from '../jamHumExpression.js';
 import { formatNoteLabel } from '../noteDisplay.js';
 
 export default function JamChordEditor({ draft, bar, step, onChange }) {
@@ -9,16 +10,18 @@ export default function JamChordEditor({ draft, bar, step, onChange }) {
   const track = draft.trackId;
   const label = { chord: '和弦', bass: '贝斯', melody: '旋律' }[track];
   const notes = jamEditorNotes(track);
-  const notesAt = (cell, step) => jamPitchedNotes(cell, step, track);
-  const renderState = (step, note) => jamPitchedRenderState(cells, step, note, track);
+  const sustained = track === 'melody' && draft.sourcePresetId === HUM_SOURCE;
+  const maxLength = (index, step) => (sustained ? (draft.bars.length - index) * 16 : 16) - step;
+  const notesAt = (cell, step, index = bar) => jamPitchedNotes(cell, step, track, maxLength(index, step));
+  const renderState = (step, note) => sustained ? jamMelodyRenderState(draft.bars, bar, step, note) : jamPitchedRenderState(cells, step, note, track);
   const cells = draft.bars[bar];
-  const hit = selection?.bar === bar
-    ? notesAt(cells[selection.step], selection.step).find(hit => hit.note === selection.note) : null;
+  const hit = selection && (sustained || selection.bar === bar)
+    ? notesAt(draft.bars[selection.bar]?.[selection.step], selection.step, selection.bar).find(hit => hit.note === selection.note) : null;
   const selected = hit ? selection : null;
   function edit(length, remove = false) {
     if (!selected) return;
     const bars = [...draft.bars];
-    bars[bar] = setJamPitchedNote(cells, selected.step, selected.note, length, remove, track);
+    bars[selected.bar] = setJamPitchedNote(bars[selected.bar], selected.step, selected.note, length, remove, track, maxLength(selected.bar, selected.step));
     onChange({ ...draft, bars });
     if (remove) setSelection(null);
   }
@@ -34,7 +37,7 @@ export default function JamChordEditor({ draft, bar, step, onChange }) {
     <div className="studio-chord-progression" aria-label={`${label}辅助信息`}>{track === 'chord' ? `和弦进行 · ${progression.join(' → ') || '自由音符'}` : '点击空格添加 · 选中音符后修改时值或删除'}</div>
     <div className="studio-note-tools">
       <span>{selected ? `${formatNoteLabel(selected.note)} · 第 ${selected.step + 1} 步` : '点格子添加音符 · 点音符选择'}</span>
-      <label>时值 <input type="number" aria-label={`${label}音符时值（步）`} min="1" max={selected ? 16 - selected.step : 16}
+      <label>时值 <input type="number" aria-label={`${label}音符时值（步）`} min="1" max={selected ? maxLength(selected.bar, selected.step) : 16}
         disabled={!selected} value={hit ? Math.max(1, Math.round(hit.durationSteps)) : 1} onChange={event => edit(event.target.value)}/> 步</label>
       <button type="button" aria-label={`删除${label}音符`} disabled={!selected} onClick={() => edit(1, true)}><Trash2 size={14}/></button>
     </div>
@@ -43,7 +46,7 @@ export default function JamChordEditor({ draft, bar, step, onChange }) {
       getCellRenderState={renderState} isCellActive={() => false}
       onCellToggle={(step, note) => {
         const state = renderState(step, note);
-        if (state.active) { setSelection({ bar, step: state.startStep, note }); return; }
+        if (state.active) { setSelection({ bar: state.startBar ?? bar, step: state.startStep, note }); return; }
         const bars = [...draft.bars]; bars[bar] = setJamPitchedNote(cells, step, note, 1, false, track);
         onChange({ ...draft, bars }); setSelection({ bar, step, note });
       }}/></div>

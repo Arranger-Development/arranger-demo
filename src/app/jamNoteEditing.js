@@ -6,10 +6,10 @@ import { JAM_CHORD_NOTES, jamChordNotes, setJamChordNote } from './jamChordEditi
 
 export const jamEditorNotes = track => track === 'chord' ? JAM_CHORD_NOTES : track === 'bass' ? BASS_NOTES : MELODY_NOTES;
 
-export function jamPitchedNotes(cell, step, track) {
+export function jamPitchedNotes(cell, step, track, maxLength = 16 - step) {
   if (track === 'chord') return jamChordNotes(cell, step);
   const notes = track === 'bass' ? [cell?.note].filter(note => BASS_NOTE_IDS.includes(note)) : getMelodyCellNotes(cell);
-  return notes.map(note => ({ note, durationSteps: Math.min(16 - step,
+  return notes.map(note => ({ note, durationSteps: Math.min(maxLength,
     cell?.notePerformances?.[note]?.reduce((length, p) => Math.max(length, p.offsetSteps + p.durationSteps), 0)
     || cell?.noteDurationSteps?.[note] || noteDurationSteps(cell)) }));
 }
@@ -22,11 +22,23 @@ export function jamPitchedRenderState(bar, step, note, track) {
   return { active: false, start: false, startStep: null, durationSteps: 0 };
 }
 
-export function setJamPitchedNote(bar, step, note, length = 1, remove = false, track = 'chord') {
+export function jamMelodyRenderState(bars, bar, step, note) {
+  const absolute = bar * 16 + step;
+  for (let start = absolute; start >= 0; start--) {
+    const startBar = Math.floor(start / 16), startStep = start % 16;
+    const hit = jamPitchedNotes(bars[startBar]?.[startStep], startStep, 'melody', Infinity).find(item => item.note === note);
+    if (hit && start + hit.durationSteps > absolute) {
+      return { active: true, start: start === absolute, startBar, startStep, durationSteps: hit.durationSteps };
+    }
+  }
+  return { active: false, start: false, startStep: null, durationSteps: 0 };
+}
+
+export function setJamPitchedNote(bar, step, note, length = 1, remove = false, track = 'chord', maxLength = 16 - step) {
   if (track === 'chord') return setJamChordNote(bar, step, note, length, remove);
   const valid = track === 'bass' ? BASS_NOTE_IDS : MELODY_NOTE_IDS;
   if (!Array.isArray(bar) || !Number.isInteger(step) || step < 0 || step >= 16 || !valid.includes(note)) return bar;
-  const duration = Math.max(1, Math.min(16 - step, Math.round(Number(length) || 1)));
+  const duration = Math.max(1, Math.min(maxLength, Math.round(Number(length) || 1)));
   const next = [...bar], previous = bar[step];
   if (track === 'bass') {
     next[step] = remove ? null : { ...previous, type: 'bass', note, durationSteps: duration,
@@ -37,7 +49,7 @@ export function setJamPitchedNote(bar, step, note, length = 1, remove = false, t
     if (!remove) notes.push(note);
     const durations = { ...previous?.noteDurationSteps };
     // Retain the lengths of untouched legacy pitches before assigning the edited one.
-    for (const hit of jamPitchedNotes(previous, step, track)) durations[hit.note] ??= hit.durationSteps;
+    for (const hit of jamPitchedNotes(previous, step, track, maxLength)) durations[hit.note] ??= hit.durationSteps;
     if (remove) delete durations[note]; else durations[note] = duration;
     next[step] = createMelodyCellFromNotes(notes, { ...previous, duration: '16n', noteDurationSteps: durations, ...withoutNotePerformance(previous, note, duration, remove) });
   }
