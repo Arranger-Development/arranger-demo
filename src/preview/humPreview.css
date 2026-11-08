@@ -47,30 +47,30 @@
 
 .jam-hum-timing { color: var(--tj-muted); font-variant-numeric: tabular-nums; }
 
-.jam-studio[data-hum-preview] .studio-template[data-show-edit] {
+.jam-studio[data-hum-preview][data-editing=false] .studio-template[data-show-edit] {
   width: 100%;
   background: var(--studio-soft);
   border: 1px solid var(--studio-line);
 }
-.jam-studio[data-hum-preview] .studio-template[data-show-edit]::before {
+.jam-studio[data-hum-preview][data-editing=false] .studio-template[data-show-edit]::before {
   inset: 50% auto auto 1px;
   width: 18px;
   height: 18px;
   transform: translateY(-50%);
 }
-.jam-studio[data-hum-preview] .studio-template[data-show-edit] .studio-template-play {
+.jam-studio[data-hum-preview][data-editing=false] .studio-template[data-show-edit] .studio-template-play {
   flex: 1;
   width: auto;
   padding: 1px 2px 1px 20px;
 }
-.jam-studio[data-hum-preview] .studio-template[data-show-edit] .studio-template-index { left: 2px; }
-.jam-studio[data-hum-preview] .studio-template[data-show-edit] .studio-template-name {
+.jam-studio[data-hum-preview][data-editing=false] .studio-template[data-show-edit] .studio-template-index { left: 2px; }
+.jam-studio[data-hum-preview][data-editing=false] .studio-template[data-show-edit] .studio-template-name {
   display: block;
   padding: 0;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.jam-studio[data-hum-preview] .studio-template[data-show-edit] .studio-template-tools {
+.jam-studio[data-hum-preview][data-editing=false] .studio-template[data-show-edit] .studio-template-tools {
   position: static;
   flex: none;
   visibility: visible;
@@ -79,7 +79,7 @@
   border-radius: 0;
   background: transparent;
 }
-.jam-studio[data-hum-preview] .studio-template[data-show-edit] .studio-template-remove {
+.jam-studio[data-hum-preview][data-editing=false] .studio-template[data-show-edit] .studio-template-remove {
   position: absolute;
   top: 50%;
   left: 0;
@@ -89,16 +89,47 @@
   opacity: 0;
   pointer-events: none;
 }
-.jam-studio[data-hum-preview] .studio-template[data-show-edit]:is(:hover,:has(:focus-visible)) .studio-template-remove {
+.jam-studio[data-hum-preview][data-editing=false] .studio-template[data-show-edit]:is(:hover,:has(:focus-visible)) .studio-template-remove {
   opacity: 1;
   pointer-events: auto;
 }
 
+/* Keep generated-card tools beside the square gem when the editor is open. */
+.jam-studio[data-hum-preview][data-editing=true] .studio-template[data-show-edit] .studio-template-tools {
+  inset: 0;
+  visibility: visible;
+  padding: 0;
+  background: transparent;
+  pointer-events: none;
+}
+.jam-studio[data-hum-preview][data-editing=true] .studio-template[data-show-edit] :is(.studio-template-edit,.studio-template-remove) {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  transform: translateY(-50%);
+  pointer-events: auto;
+}
+.jam-studio[data-hum-preview][data-editing=true] .studio-template[data-show-edit] .studio-template-edit { inset-inline-start: 100%; }
+.jam-studio[data-hum-preview][data-editing=true] .studio-template[data-show-edit] .studio-template-remove {
+  inset-inline-end: 100%;
+  visibility: hidden;
+}
+.jam-studio[data-hum-preview][data-editing=true] .studio-template[data-show-edit]:is(:hover,:has(:focus-visible)) .studio-template-remove {
+  visibility: visible;
+}
+
+@media (min-width: 840px) and (max-height: 760px) {
+  .jam-studio[data-hum-preview][data-editing=true] .studio-template-play { padding: 2px; }
+  .jam-studio[data-hum-preview][data-editing=true] .studio-template-name { padding-inline: 0; }
+}
+
 @media (hover: none) {
-  .jam-studio[data-hum-preview] .studio-template[data-show-edit] .studio-template-remove {
+  .jam-studio[data-hum-preview][data-editing=false] .studio-template[data-show-edit] .studio-template-remove {
     opacity: 1;
     pointer-events: auto;
   }
+  .jam-studio[data-hum-preview][data-editing=true] .studio-template[data-show-edit] .studio-template-remove { visibility: visible; }
 }
 
 @media (max-width: 839px) {
