@@ -271,9 +271,9 @@ function PianoRoll({
                           aria-label={`${formatNoteLabel(note.note)} beat ${beatNumber}.${stepNumber}`}
                           aria-pressed={active}
                           disabled={disabled}
-                          onClick={() => {
+                          onClick={(event) => {
                             if (onCellPressStart) return;
-                            onCellToggle(step, note.note);
+                            onCellToggle(step, note.note, event);
                           }}
                           onPointerDown={(event) => {
                             if (!onCellPressStart) return;
