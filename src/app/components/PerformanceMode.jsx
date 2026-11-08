@@ -496,10 +496,11 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         <div className="studio-editor-knob-panel">
           <div className="studio-editor-knobs">{jamTrackKnobs(editingTrack, draft.sourcePresetId === HUM_SOURCE).map(({parameter,hardwareParameter,label,lowLabel,highLabel,valueLabels}) => {
             const position = midiInput.knobPositions[hardwareParameter], value = draft.params?.[parameter] ?? 50;
-            const currentValue = valueLabels?.[value] ?? `${value}%`;
+            const valueLabel = valueLabels?.[value];
+            const currentValue = valueLabel ?? `${value}%`;
             return <RotaryKnob key={parameter} label={label} value={value} displayValue={position?.display ? position.percent : value}
               valueDescription={position?.display ? `硬件位置 ${position.percent}%；当前乐句${label} ${currentValue}` : `${label} ${currentValue}`}
-              showValue={Boolean(valueLabels)} format={() => currentValue} step={parameter === 'groove' && editingTrack === 'chord' ? 20 : 25}
+              showValue={Boolean(valueLabels)} format={() => valueLabel ?? ''} step={parameter === 'groove' && editingTrack === 'chord' ? 20 : 25}
               ticks={jamParameterLevels(editingTrack,parameter).map(v => ({value:v,label:v}))} spectrum showTicks={false}
               lowLabel={lowLabel} highLabel={highLabel}
               onBegin={() => { midiInput.useSoftwareValue(hardwareParameter); beginGesture(); }} onEnd={endGesture} onChange={v => changeParameter(parameter,v)}/>;
