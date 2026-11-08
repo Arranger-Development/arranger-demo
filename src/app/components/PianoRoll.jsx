@@ -5,6 +5,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from 'react';
 import {
   PIANO_ROLL_VISIBLE_ROWS,
@@ -76,6 +77,7 @@ function PianoRoll({
   notes,
   onCellPressEnd,
   onCellPressStart,
+  onCellResize,
   onCellToggle,
   onNotePreview,
   onPitchInteraction,
@@ -88,6 +90,9 @@ function PianoRoll({
   const initialTopRow = noteIndexById.get(initialTopNote)
     ?? Math.min(PIANO_ROLL_VISIBLE_ROWS, Math.max(0, notes.length - PIANO_ROLL_VISIBLE_ROWS));
   const previousActiveNoteIdsRef = useRef(new Set());
+  const durationDrag = useRef(null);
+  const resizeConsumedClick = useRef(false);
+  const [resizeTarget, setResizeTarget] = useState(null);
   const {
     canScrollPitchDown,
     canScrollPitchUp,
@@ -136,6 +141,47 @@ function PianoRoll({
     }
   }, [activeNoteIds, autoRevealActiveNote, noteIndexById, revealPitchRow]);
 
+  function startResize(event, step, note) {
+    if (event.button !== 0 || durationDrag.current) return;
+    const handle = event.currentTarget;
+    const cell = handle.closest('.pitch-step-cell');
+    const row = cell.dataset.row;
+    const edges = Array.from(pianoRollRef.current.querySelectorAll(`.pitch-step-cell[data-row="${row}"]`),
+      element => ({ step: Number(element.dataset.step), right: element.getBoundingClientRect().right }));
+    const right = edges.find(edge => edge.step === step).right;
+    event.stopPropagation();
+    event.preventDefault();
+    cell.focus({ preventScroll: true });
+    handle.setPointerCapture(event.pointerId);
+    resizeConsumedClick.current = true;
+    durationDrag.current = { pointer: event.pointerId, step, note, edges, right, origin: event.clientX };
+  }
+
+  function resizeStep(event, drag) {
+    const target = drag.right + event.clientX - drag.origin;
+    return drag.edges.reduce((nearest, edge) =>
+      Math.abs(edge.right - target) < Math.abs(nearest.right - target) ? edge : nearest).step;
+  }
+
+  function moveResize(event) {
+    const drag = durationDrag.current;
+    if (drag?.pointer !== event.pointerId) return;
+    const step = resizeStep(event, drag);
+    if (drag.target === step) return;
+    drag.target = step;
+    setResizeTarget({ note: drag.note, step });
+  }
+
+  function finishResize(event, commit = false) {
+    const drag = durationDrag.current;
+    if (drag?.pointer !== event.pointerId) return;
+    durationDrag.current = null;
+    setResizeTarget(null);
+    if (!commit) return;
+    const delta = resizeStep(event, drag) - drag.step;
+    if (delta) onCellResize(drag.step, drag.note, delta);
+  }
+
   return (
     <div
       className={`seq-body piano-roll ${trackId}-seq-body`}
@@ -149,6 +195,7 @@ function PianoRoll({
       onFocusCapture={handleFocusCapture}
       onPointerLeave={handlePointerLeave}
       onPointerOver={handlePointerOver}
+      onPointerDownCapture={onCellResize ? () => { resizeConsumedClick.current = false; } : undefined}
     >
       <aside className={`scale-rail ${trackId}-scale-rail`} aria-label={`${ariaLabel} note ruler`}>
         <button
@@ -242,6 +289,7 @@ function PianoRoll({
                       const highlighted = highlightedNoteIds.has(note.note);
                       const rhythmHighlighted = highlightedStepIds.has(step);
                       const previewing = activeNoteIds.has(note.note);
+                      const canResize = !disabled && onCellResize && renderState?.end;
 
                       return (
                         <button
@@ -266,13 +314,15 @@ function PianoRoll({
                           data-col={colIndex}
                           data-note={note.note}
                           data-step={step}
+                          data-resize-target={resizeTarget?.note === note.note && resizeTarget.step === step || undefined}
                           key={`${note.note}-${step}`}
                           type="button"
                           aria-label={`${formatNoteLabel(note.note)} beat ${beatNumber}.${stepNumber}`}
                           aria-pressed={active}
+                          aria-keyshortcuts={active && onCellResize ? 'Shift+ArrowLeft Shift+ArrowRight' : undefined}
                           disabled={disabled}
                           onClick={(event) => {
-                            if (onCellPressStart) return;
+                            if (onCellPressStart || (event.detail && resizeConsumedClick.current)) return;
                             onCellToggle(step, note.note, event);
                           }}
                           onPointerDown={(event) => {
@@ -286,7 +336,17 @@ function PianoRoll({
                             onCellPressEnd(step, note.note);
                           }}
                           onPointerCancel={() => onCellPressEnd?.(step, note.note)}
-                        />
+                          onKeyDown={active && onCellResize ? event => {
+                            if (!event.shiftKey || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+                            event.preventDefault();
+                            onCellResize(step, note.note, event.key === 'ArrowLeft' ? -1 : 1);
+                          } : undefined}
+                        >{canResize && <span className="pitch-duration-handle" title="拖动调整时值" aria-hidden="true"
+                          onPointerDown={event => startResize(event, step, note.note)}
+                          onPointerMove={moveResize} onPointerUp={event => finishResize(event, true)}
+                          onPointerCancel={finishResize} onLostPointerCapture={finishResize}
+                          onClick={event => event.stopPropagation()}/>}
+                        </button>
                       );
                     })
                   ))}

@@ -55,3 +55,18 @@ export function setJamPitchedNote(bar, step, note, length = 1, remove = false, t
   }
   return next;
 }
+
+export function resizeJamPitchedNote(bar, step, note, length, track, maxLength) {
+  const next = setJamPitchedNote(bar, step, note, length, false, track, maxLength);
+  if (next === bar) return next;
+  const hits = bar[step]?.notePerformances?.[note];
+  if (!hits?.length) return next;
+  const end = hit => (hit.offsetSteps ?? 0) + hit.durationSteps;
+  const tail = hits.reduce((latest, hit) => end(hit) >= end(latest) ? hit : latest);
+  const targetEnd = next[step].noteDurationSteps[note];
+  // Resize the final release without re-quantizing a recorded attack or losing repeats.
+  next[step].notePerformances[note] = hits.map(hit => hit === tail ? {
+    ...hit, durationSteps: Math.max(0.05, targetEnd - (hit.offsetSteps ?? 0)),
+  } : hit);
+  return next;
+}

@@ -5,7 +5,7 @@ import { planHumHarmony } from '../src/preview/humHarmony.js';
 import { createJamTemplateProjects, jamCombinationSnapshot } from '../src/app/jamTemplateProjects.js';
 import { applyJamTrackParameter, blankJamDraft } from '../src/app/jamDraftActions.js';
 import { createMatrixPlaybackAdapter } from '../src/audio/matrixPlaybackAdapter.js';
-import { jamMelodyRenderState, setJamPitchedNote } from '../src/app/jamNoteEditing.js';
+import { jamMelodyRenderState, resizeJamPitchedNote, setJamPitchedNote } from '../src/app/jamNoteEditing.js';
 import { editJamSequencerStep, humPlaybackBars } from '../src/app/jamHumExpression.js';
 import { toggleDrumsCellInstrument } from '../src/domain/drumsCells.js';
 import { eventDuration, usesNaturalSampleTail } from '../src/domain/notePerformances.js';
@@ -146,6 +146,25 @@ test('a sustained melody continues visibly across a bar with no attack until the
   assert.equal(adapter.getEventsForStep(0, 14)[0].durationSteps, 4);
   assert.deepEqual(adapter.getEventsForStep(1, 0), []);
   assert.equal(adapter.getEventsForStep(2, 0, 32)[0].note, 'D4');
+});
+
+test('resizing a recorded melody tail keeps its original attacks and velocity', () => {
+  const store = makeStore();
+  const notes = [
+    { offsetSteps: 0.1, durationSteps: 0.35, velocity: 0.6 },
+    { offsetSteps: 0.55, durationSteps: 1.15, velocity: 0.8 },
+  ];
+  const bar = Array(16).fill(null);
+  bar[0] = { type: 'melody', note: 'C4', notePerformances: { C4: notes } };
+  const [phrase] = store.insertHumPhrases([{ trackId: 'melody', bars: [resizeJamPitchedNote(bar, 0, 'C4', 4, 'melody', 16)] }], { projectId: store.current().id });
+  const adapter = createMatrixPlaybackAdapter(jamCombinationSnapshot(store.current().workspace, phrase, true));
+  const [first, second] = adapter.getEventsForStep(0, 0);
+  assert.equal(first.durationSteps, notes[0].durationSteps);
+  assert.equal(second.timingOffset, notes[1].offsetSteps);
+  assert.equal(second.velocity, notes[1].velocity);
+  assert.equal(second.timingOffset + second.durationSteps, 4);
+  assert.equal(jamMelodyRenderState(phrase.bars, 0, 3, 'C4').active, true);
+  assert.equal(jamMelodyRenderState(phrase.bars, 0, 4, 'C4').active, false);
 });
 
 test('accompaniment knobs change playback onsets, respect manual edits and restore the middle setting', () => {
