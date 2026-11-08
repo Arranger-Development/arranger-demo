@@ -1,5 +1,30 @@
 .jam-studio[data-hum-preview] .studio-launcher { --identity: 156px; }
 
+.jam-studio[data-hum-preview][data-editing=true] .studio-launcher { --jam-editor-gem: 56px; }
+
+.jam-studio[data-hum-preview][data-editing=true] .studio-chord-editor {
+  display: grid;
+  grid-template-rows: minmax(184px, 1fr);
+}
+
+@media (min-width: 840px) {
+  /* Keep the launcher a little under half of the workbench. */
+  .jam-studio[data-hum-preview][data-editing=true] .studio-launcher {
+    --jam-launcher-controls: 88px;
+    --jam-feedback-space: 0px;
+    --jam-editor-gem: clamp(36px, (47cqh - var(--jam-launcher-controls) - var(--jam-feedback-space)) / 4, 62px);
+  }
+  .jam-studio[data-hum-preview][data-editing=true] .studio-launcher:has(.jam-hum-feedback) {
+    --jam-feedback-space: 30px;
+  }
+}
+
+@media (min-width: 840px) and (max-height: 680px) {
+  .jam-studio[data-hum-preview][data-editing=true] .studio-launcher {
+    --jam-launcher-controls: 57px;
+  }
+}
+
 .jam-studio .jam-hum-label {
   grid-column: 1 / -1;
   grid-row: 1;
@@ -113,15 +138,20 @@
 .jam-studio[data-hum-preview][data-editing=true] .studio-template[data-show-edit] .studio-template-edit { inset-inline-start: 100%; }
 .jam-studio[data-hum-preview][data-editing=true] .studio-template[data-show-edit] .studio-template-remove {
   inset-inline-end: 100%;
+  top: 0;
+  transform: none;
   visibility: hidden;
 }
 .jam-studio[data-hum-preview][data-editing=true] .studio-template[data-show-edit]:is(:hover,:has(:focus-visible)) .studio-template-remove {
   visibility: visible;
 }
 
-@media (min-width: 840px) and (max-height: 760px) {
-  .jam-studio[data-hum-preview][data-editing=true] .studio-template-play { padding: 2px; }
-  .jam-studio[data-hum-preview][data-editing=true] .studio-template-name { padding-inline: 0; }
+.jam-studio[data-hum-preview][data-editing=true] .studio-template-name {
+  font-size: 11px;
+  line-height: 13px;
+}
+.jam-studio[data-hum-preview][data-editing=true] .studio-template-index {
+  font-size: 8px;
 }
 
 @media (hover: none) {
