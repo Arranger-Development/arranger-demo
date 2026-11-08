@@ -8,7 +8,6 @@ import { jamColumnState, jamTemplateState } from '../jamPerformanceState.js';
 import { createJamStripController, jamStripLayout, JAM_STRIP_GAP } from '../jamStripController.js';
 import useJamReorder from './useJamReorder.js';
 import { HUM_SUSTAIN } from '../../data/performanceTimbres.js';
-import { HUM_SOURCE } from '../jamHumExpression.js';
 import { isEmptyJamPhrase } from '../jamPhraseContent.js';
 
 export default function JamLauncher({ active, templates, columnCount, bank, onBankChange, navigationRef,
@@ -90,7 +89,7 @@ export default function JamLauncher({ active, templates, columnCount, bank, onBa
             <span className="studio-instrument-art" data-art-track={t} ref={node => { artNodes.current[t] = node; }}><img src={artSources[t]} alt="" draggable={false} decoding="async"/></span>
           </button><div className="studio-instrument-label">{t === 'melody' && humButton ? <span className="jam-hum-label"><strong>{LABELS[t]}</strong>{humButton}</span> : <strong>{LABELS[t]}</strong>}<span className="studio-editing-state">{editingTrack === t ? '编辑中' : ''}</span><label className="studio-instrument-timbre" title="切换音色"><select aria-label={`${LABELS[t]}音色`} value={timbres[t]} onChange={e => onTimbreChange(t,e.target.value)}>{(humPreview && t === 'melody' ? [HUM_SUSTAIN, ...TIMBRE_OPTIONS[t]] : TIMBRE_OPTIONS[t]).map(id => <option key={id} value={id}>{timbreLabel(id)}</option>)}</select></label></div><button type="button" className="studio-track-mute" aria-label={`${mutedTracks[t] ? '取消静音' : '静音'}${LABELS[t]}`} aria-pressed={mutedTracks[t]} onClick={() => onToggleMute(t)} title={mutedTracks[t] ? '取消静音' : '静音'}>{mutedTracks[t] ? <VolumeX size={14}/> : <Volume2 size={14}/>}</button></div>
           <div className="studio-template-list" aria-label={`${LABELS[t]}已保存乐句`}>{columns[t].map((p, index) => p
-            ? <JamTemplateCard key={p.id} template={{...p,name:p.name || `${LABELS[t]}乐句`}} showEdit={humPreview && t !== 'melody' && p.sourcePresetId === HUM_SOURCE} playback={playback} isEmpty={isEmptyJamPhrase(p)} index={index} reorderProps={reorder.cellProps(t,index)} selected={selection[t] === p.id}
+            ? <JamTemplateCard key={p.id} template={{...p,name:p.name || `${LABELS[t]}乐句`}} playback={playback} isEmpty={isEmptyJamPhrase(p)} index={index} reorderProps={reorder.cellProps(t,index)} selected={selection[t] === p.id}
               canCancel={!auditioning && status.playingPhraseIds?.[t] === p.id && status.mode !== 'stopped' && !mutedTracks[t] && volumes[t] > -24}
               state={isEmptyJamPhrase(p) || mutedTracks[t] || volumes[t] <= -24 ? 'idle' : jamTemplateState(status,t,p.id)} editing={editingTemplateId === p.id}
               onSelect={() => isEmptyJamPhrase(p)?onOpenEditor(t,p):onTrigger(t,p.id)} onEdit={() => onOpenEditor(t,p)} onRemove={() => onRemove(p)}/>

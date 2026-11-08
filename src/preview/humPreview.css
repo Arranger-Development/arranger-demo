@@ -90,29 +90,28 @@
 
 .jam-hum-editor-controls [role=status] { flex-basis: 100%; }
 
-/* Put both actions in the trailing column gap in browsing and editing. */
-.jam-studio[data-hum-preview] .studio-template[data-show-edit] .studio-template-tools {
-  inset-block: 0;
-  inset-inline: 100% auto;
-  flex-direction: column;
-  justify-content: center;
-  gap: 1px;
-  visibility: visible;
+/* Reveal both actions together without covering the gem or its name. */
+.jam-studio[data-hum-preview] .studio-template-tools {
+  inset: 0;
   padding: 0;
   background: transparent;
+  visibility: visible;
+  opacity: 0;
   pointer-events: none;
 }
-.jam-studio[data-hum-preview] .studio-template[data-show-edit] :is(.studio-template-edit,.studio-template-remove) {
+.jam-studio[data-hum-preview] .studio-template:hover { z-index: 1; }
+.jam-studio[data-hum-preview] .studio-template:is(:hover,:has(:focus-visible)) .studio-template-tools { opacity: 1; }
+.jam-studio[data-hum-preview] .studio-template-tools > button {
+  position: absolute;
+  inset-block-start: 50%;
   width: 16px;
   height: 16px;
-  pointer-events: auto;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
-.jam-studio[data-hum-preview] .studio-template[data-show-edit] .studio-template-remove {
-  visibility: hidden;
-}
-.jam-studio[data-hum-preview] .studio-template[data-show-edit]:is(:hover,:has(:focus-visible)) .studio-template-remove {
-  visibility: visible;
-}
+.jam-studio[data-hum-preview] .studio-template:is(:hover,:has(:focus-visible)) .studio-template-tools > button { pointer-events: auto; }
+.jam-studio[data-hum-preview] .studio-template-edit { inset-inline-start: 100%; }
+.jam-studio[data-hum-preview] .studio-template-remove { inset-inline-end: 100%; }
 
 .jam-studio[data-hum-preview][data-editing=true] .studio-template-name {
   font-size: 11px;
@@ -123,7 +122,15 @@
 }
 
 @media (hover: none) {
-  .jam-studio[data-hum-preview] .studio-template[data-show-edit] .studio-template-remove { visibility: visible; }
+  .jam-studio[data-hum-preview] .studio-template-tools { opacity: 1; }
+  .jam-studio[data-hum-preview] .studio-template-tools > button {
+    inset-block-start: auto;
+    inset-block-end: 0;
+    transform: none;
+    pointer-events: auto;
+  }
+  .jam-studio[data-hum-preview] .studio-template-edit { inset-inline-start: 0; }
+  .jam-studio[data-hum-preview] .studio-template-remove { inset-inline-end: 0; }
 }
 
 @media (max-width: 839px) {
