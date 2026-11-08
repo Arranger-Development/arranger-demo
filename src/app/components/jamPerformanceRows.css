@@ -78,6 +78,7 @@
 .jam-studio .studio-editor-heading { grid-column:1 / -1; }
 .jam-studio .studio-editor-controls { grid-column:1; grid-row:2 / span 2; display:flex; flex-direction:column; justify-content:center; gap:20px; }
 .jam-studio .studio-editor-controls .studio-phrase-settings { width:100%; }
+.jam-studio .studio-editor-knob-panel { display:contents; }
 .jam-studio .studio-editor-controls .studio-editor-knobs { gap:10px; padding:0; }
 .jam-studio .studio-grid-toolbar { grid-column:2; grid-row:2; font-size:12px; }
 .jam-studio .studio-editor > :is(.studio-chord-editor,.studio-drum-grid,.studio-piano-preview) { grid-column:2; grid-row:3; min-width:0; }

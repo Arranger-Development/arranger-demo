@@ -437,6 +437,52 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           editingTrack={editingTrack} editingTemplateId={draft?.editingTemplateId} auditioning={solo} selection={w.selection} status={status} mutedTracks={w.mutedTracks} volumes={w.volumes}
           timbres={Object.fromEntries(TRACKS.map(t => [t,instrumentTimbre(t)]))} timbreLabel={timbreLabel} humPreview={Boolean(humControl)} artSources={ART} artNodes={artNodes}
           onOpenEditor={openEditor} onTimbreChange={changeInstrumentTimbre} onToggleMute={toggleMute} onTrigger={trigger} onLaunchColumn={launchColumn} onRemove={phrase => hasJamNotes(phrase)?setDeleteTarget(phrase):removePhrase(phrase)} onMove={moveSlots}/>;
+  const renderMain = (humButton, humFeedback) => <>
+    {renderLauncher(draft ? null : humButton, draft ? null : humFeedback)}
+    {draft && <section className="studio-editor" key={editingTrack} data-track={editingTrack} aria-label={`${LABELS[editingTrack]}乐句编辑`}>
+      <header className="studio-editor-heading">
+        <div className="studio-editor-identity">
+          <label className="studio-template-name-field">名称<input aria-label="乐句名称" value={draft.name ?? ''} placeholder={`${LABELS[editingTrack]}新乐句`} maxLength={80} onFocus={() => beginGesture('name')} onBlur={endGesture} onChange={e => { beginGesture('name');replaceDraft({...draft,name:e.target.value},{updateAudio:false,gesture:true}); }}/></label>
+          {columnPhrases && <button type="button" className="studio-refresh-harmony"
+            title="按当前旋律更新自动伴奏，保留手编乐句" disabled={!canArrange}
+            onClick={() => fillColumnBacking(harmonySlot)}>重配和声</button>}
+        </div>
+        <div className="studio-editor-heading-actions">
+          <button type="button" className="studio-text-button" onClick={finishEditor}><ArrowLeft size={13}/> 收起编辑</button>
+        </div>
+      </header>
+      <div className="studio-editor-controls">
+        {editingTrack !== 'drums' && <div className="studio-phrase-settings"><label>音型<select aria-label={`${LABELS[editingTrack]}乐句起点`} value={draft.sourcePresetId} onChange={e => { const next = e.target.value === 'blank' ? blankJamDraft(editingTrack,draft.timbreId,draft.targetSlot) : sourceDraft(editingTrack,e.target.value,draft.timbreId); midiInput.useSoftwareValue(); replaceDraft({...next,name:draft.name,editingTemplateId:draft.editingTemplateId,targetSlot:draft.targetSlot},{restart:true}); setEditBar(0); }}>{draft.sourcePresetId === HUM_SOURCE && <option value={HUM_SOURCE}>{editingTrack === 'melody' ? '哼唱生成' : '旋律配轨'}</option>}<option value="blank">空白乐句</option><optgroup label="旋钮模板 · Ableton">{DIAL_PITCHED_PRESETS.filter(p => p.trackId === editingTrack).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup><optgroup label="原有模板">{catalog[editingTrack].map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup></select></label></div>}
+        <div className="studio-editor-knob-panel">
+          <div className="studio-editor-knobs">{jamTrackKnobs(editingTrack, draft.sourcePresetId === HUM_SOURCE).map(({parameter,hardwareParameter,label,lowLabel,highLabel}) => {
+            const position = midiInput.knobPositions[hardwareParameter], value = draft.params?.[parameter] ?? 50;
+            return <RotaryKnob key={parameter} label={label} value={value} displayValue={position?.display ? position.percent : value}
+              valueDescription={position?.display ? `硬件位置 ${position.percent}%；当前乐句${label} ${value}%` : `${label} ${value}%`}
+              showValue={false} format={v => `${v}%`} step={parameter === 'groove' && editingTrack === 'chord' ? 20 : 25}
+              ticks={jamParameterLevels(editingTrack,parameter).map(v => ({value:v,label:v}))} spectrum showTicks={false}
+              lowLabel={lowLabel} highLabel={highLabel}
+              onBegin={() => { midiInput.useSoftwareValue(hardwareParameter); beginGesture(); }} onEnd={endGesture} onChange={v => changeParameter(parameter,v)}/>;
+          })}</div>
+          {humButton && <div className="jam-hum-editor-controls">{humButton}{humFeedback}</div>}
+        </div>
+      </div>
+      <div className="studio-grid-toolbar"><span>{editingTrack === 'drums' ? '鼓点音序器' : `${LABELS[editingTrack]}音序器`}<small className="studio-editor-position" aria-label="编辑播放位置">{editorPlaying && editorPosition ? ` · 播放 ${editorPosition.bar+1}/${draft.bars.length}` : editorPlaying || editorQueued ? ' · 准备播放' : hasJamNotes(draft) ? ' · 已暂停' : ' · 空白'}</small></span><div className="studio-bar-pager"><button type="button" aria-label="上一小节" disabled={previewBar === 0} onClick={() => setEditBar(previewBar-1)}><ChevronLeft size={13}/></button><span>{previewBar+1} / {draft.bars.length} 小节</span><button type="button" aria-label="下一小节" disabled={previewBar+1 === draft.bars.length} onClick={() => setEditBar(previewBar+1)}><ChevronRight size={13}/></button></div><div className="studio-undo"><button type="button" aria-label="撤销模板修改" disabled={!history.undo.length} onClick={() => undo()}><Undo2 size={14}/></button><button type="button" aria-label="重做模板修改" disabled={!history.redo.length} onClick={() => undo(true)}><Redo2 size={14}/></button></div></div>
+      {editingTrack === 'drums' ? <div className="studio-drum-grid"><DrumStepGrid renderStep={(row,stepNumber) => {
+        const step=stepNumber-1,cell=editorBars[previewBar][step],hits=cell?.drumHits?.filter(h => h.instrument === row.id) ?? [];
+        const on=getDrumsCellInstruments(cell).includes(row.id);
+        const label={kick:'底鼓',snare:'军鼓',hihat:'踩镲'}[row.id];
+        return <button type="button" key={`${row.id}:${step}`} className={`drum-step ${on ? 'active' : ''} ${stepNumber%4 === 0 ? 'beat-end' : ''}`}
+          data-instrument={row.id} data-step={step} data-playing={editorPlaying && editorPosition?.bar === previewBar && editorPosition?.step === step} aria-label={`${label}第${step+1}格`} aria-pressed={on}
+          onClick={() => replaceDraft(editJamSequencerStep(draft, previewBar, step, bar => {
+            const next = [...bar];
+            next[step] = toggleDrumsCellInstrument(bar[step], row.id);
+            return next;
+          }))}>
+          {hits.length > 1 && <span className="studio-hit-count" aria-label={`${hits.length}次击打`}>{hits.length}</span>}
+        </button>;
+      }}/></div> : <JamChordEditor key={draft.editingTemplateId ?? draft.targetSlot ?? 'draft'} draft={draft} editorBars={editorBars} bar={previewBar} step={editorPlaying && editorPosition?.bar === previewBar ? editorPosition?.step : null} onChange={replaceDraft}/>}
+    </section>}
+  </>;
   return <section className="performance-mode jam-workspace template-jam jam-studio" hidden={!active} aria-label="Jam 演奏" data-editing={Boolean(draft)} data-hum-preview={humControl ? true : undefined}>
     <header className="performance-header">
       {createElement(ThemeSwitcher)}
@@ -454,47 +500,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           key: project.id, projectId: project.id, projectStore, jamPlaying: running,
           pauseJam: () => { if (audition.getTrack()) audition.pause(); else playback.stop(); },
           revealSlot: slot => { pendingReveal.current = slot; launcherNav.current?.revealSlot(slot); },
-        }, renderLauncher) : renderLauncher()}
-        {draft && <section className="studio-editor" key={editingTrack} data-track={editingTrack} aria-label={`${LABELS[editingTrack]}乐句编辑`}>
-          <header className="studio-editor-heading">
-            <div className="studio-editor-identity">
-              <label className="studio-template-name-field">名称<input aria-label="乐句名称" value={draft.name ?? ''} placeholder={`${LABELS[editingTrack]}新乐句`} maxLength={80} onFocus={() => beginGesture('name')} onBlur={endGesture} onChange={e => { beginGesture('name');replaceDraft({...draft,name:e.target.value},{updateAudio:false,gesture:true}); }}/></label>
-              {columnPhrases && <button type="button" className="studio-refresh-harmony"
-                title="按当前旋律更新自动伴奏，保留手编乐句" disabled={!canArrange}
-                onClick={() => fillColumnBacking(harmonySlot)}>重配和声</button>}
-            </div>
-            <div className="studio-editor-heading-actions">
-              <button type="button" className="studio-text-button" onClick={finishEditor}><ArrowLeft size={13}/> 收起编辑</button>
-            </div>
-          </header>
-          <div className="studio-editor-controls">
-            {editingTrack !== 'drums' && <div className="studio-phrase-settings"><label>音型<select aria-label={`${LABELS[editingTrack]}乐句起点`} value={draft.sourcePresetId} onChange={e => { const next = e.target.value === 'blank' ? blankJamDraft(editingTrack,draft.timbreId,draft.targetSlot) : sourceDraft(editingTrack,e.target.value,draft.timbreId); midiInput.useSoftwareValue(); replaceDraft({...next,name:draft.name,editingTemplateId:draft.editingTemplateId,targetSlot:draft.targetSlot},{restart:true}); setEditBar(0); }}>{draft.sourcePresetId === HUM_SOURCE && <option value={HUM_SOURCE}>{editingTrack === 'melody' ? '哼唱生成' : '旋律配轨'}</option>}<option value="blank">空白乐句</option><optgroup label="旋钮模板 · Ableton">{DIAL_PITCHED_PRESETS.filter(p => p.trackId === editingTrack).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup><optgroup label="原有模板">{catalog[editingTrack].map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup></select></label></div>}
-            <div className="studio-editor-knobs">{jamTrackKnobs(editingTrack, draft.sourcePresetId === HUM_SOURCE).map(({parameter,hardwareParameter,label,lowLabel,highLabel}) => {
-              const position = midiInput.knobPositions[hardwareParameter], value = draft.params?.[parameter] ?? 50;
-              return <RotaryKnob key={parameter} label={label} value={value} displayValue={position?.display ? position.percent : value}
-                valueDescription={position?.display ? `硬件位置 ${position.percent}%；当前乐句${label} ${value}%` : `${label} ${value}%`}
-                showValue={false} format={v => `${v}%`} step={parameter === 'groove' && editingTrack === 'chord' ? 20 : 25}
-                ticks={jamParameterLevels(editingTrack,parameter).map(v => ({value:v,label:v}))} spectrum showTicks={false}
-                lowLabel={lowLabel} highLabel={highLabel}
-                onBegin={() => { midiInput.useSoftwareValue(hardwareParameter); beginGesture(); }} onEnd={endGesture} onChange={v => changeParameter(parameter,v)}/>;
-            })}</div>
-          </div>
-          <div className="studio-grid-toolbar"><span>{editingTrack === 'drums' ? '鼓点音序器' : `${LABELS[editingTrack]}音序器`}<small className="studio-editor-position" aria-label="编辑播放位置">{editorPlaying && editorPosition ? ` · 播放 ${editorPosition.bar+1}/${draft.bars.length}` : editorPlaying || editorQueued ? ' · 准备播放' : hasJamNotes(draft) ? ' · 已暂停' : ' · 空白'}</small></span><div className="studio-bar-pager"><button type="button" aria-label="上一小节" disabled={previewBar === 0} onClick={() => setEditBar(previewBar-1)}><ChevronLeft size={13}/></button><span>{previewBar+1} / {draft.bars.length} 小节</span><button type="button" aria-label="下一小节" disabled={previewBar+1 === draft.bars.length} onClick={() => setEditBar(previewBar+1)}><ChevronRight size={13}/></button></div><div className="studio-undo"><button type="button" aria-label="撤销模板修改" disabled={!history.undo.length} onClick={() => undo()}><Undo2 size={14}/></button><button type="button" aria-label="重做模板修改" disabled={!history.redo.length} onClick={() => undo(true)}><Redo2 size={14}/></button></div></div>
-          {editingTrack === 'drums' ? <div className="studio-drum-grid"><DrumStepGrid renderStep={(row,stepNumber) => {
-            const step=stepNumber-1,cell=editorBars[previewBar][step],hits=cell?.drumHits?.filter(h => h.instrument === row.id) ?? [];
-            const on=getDrumsCellInstruments(cell).includes(row.id);
-            const label={kick:'底鼓',snare:'军鼓',hihat:'踩镲'}[row.id];
-            return <button type="button" key={`${row.id}:${step}`} className={`drum-step ${on ? 'active' : ''} ${stepNumber%4 === 0 ? 'beat-end' : ''}`}
-              data-instrument={row.id} data-step={step} data-playing={editorPlaying && editorPosition?.bar === previewBar && editorPosition?.step === step} aria-label={`${label}第${step+1}格`} aria-pressed={on}
-              onClick={() => replaceDraft(editJamSequencerStep(draft, previewBar, step, bar => {
-                const next = [...bar];
-                next[step] = toggleDrumsCellInstrument(bar[step], row.id);
-                return next;
-              }))}>
-              {hits.length > 1 && <span className="studio-hit-count" aria-label={`${hits.length}次击打`}>{hits.length}</span>}
-            </button>;
-          }}/></div> : <JamChordEditor key={draft.editingTemplateId ?? draft.targetSlot ?? 'draft'} draft={draft} editorBars={editorBars} bar={previewBar} step={editorPlaying && editorPosition?.bar === previewBar ? editorPosition?.step : null} onChange={replaceDraft}/>}
-        </section>}
+        }, renderMain) : renderMain()}
       </main>
       <aside id="jam-studio-effects" className="jam-effects studio-effects" data-track={fx.selectedTrack}><header className="studio-effects-heading"><h2>现场效果</h2><button type="button" className="studio-text-button" title="恢复四轨的平衡音量，再用推子微调" onClick={() => { if(projectStore.patch({volumes:Object.fromEntries(TRACKS.map(t=>[t,0]))})) setMessage('四轨音量已平衡。'); }}>平衡四轨</button></header><div className="effect-targets" role="group" aria-label="效果目标轨道">{TRACKS.map(t => <button type="button" key={t} aria-pressed={fx.selectedTracks.includes(t)} onClick={() => effects.toggleTrack(t)}>{LABELS[t]}</button>)}</div>
         <JamPerformanceDeck key={project.id} effects={effects} session={w} enabled={active && running && !status.loading} hardwarePitch={midiInput.faderPositions.pitch?.value} changeMix={changeMix}/>

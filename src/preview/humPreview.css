@@ -11,11 +11,7 @@
   /* Keep the launcher a little under half of the workbench. */
   .jam-studio[data-hum-preview][data-editing=true] .studio-launcher {
     --jam-launcher-controls: 88px;
-    --jam-feedback-space: 0px;
-    --jam-editor-gem: clamp(36px, (47cqh - var(--jam-launcher-controls) - var(--jam-feedback-space)) / 4, 62px);
-  }
-  .jam-studio[data-hum-preview][data-editing=true] .studio-launcher:has(.jam-hum-feedback) {
-    --jam-feedback-space: 30px;
+    --jam-editor-gem: clamp(36px, (47cqh - var(--jam-launcher-controls)) / 4, 62px);
   }
 }
 
@@ -69,6 +65,30 @@
   color: var(--ink);
   font-size: 12px;
 }
+
+.jam-studio[data-hum-preview] .studio-editor-controls { gap: 10px; }
+
+.jam-studio[data-hum-preview] .studio-editor-knob-panel {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.jam-hum-editor-controls, .jam-hum-editor-controls .jam-hum-feedback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 5px;
+}
+
+.jam-hum-editor-controls .jam-hum-feedback {
+  min-height: 0;
+  padding: 0;
+  text-align: center;
+}
+
+.jam-hum-editor-controls [role=status] { flex-basis: 100%; }
 
 .jam-studio[data-hum-preview][data-editing=false] .studio-template[data-show-edit] {
   width: 100%;
