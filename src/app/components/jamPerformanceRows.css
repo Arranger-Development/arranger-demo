@@ -93,6 +93,7 @@
 .jam-studio .studio-editor[data-track=bass] .pitch-step-cell.active { background:#639fd2; border-color:#acd7fa; }
 .jam-studio .studio-editor[data-track=melody] .pitch-step-cell.active { background:#b779d4; border-color:#e1b7f4; }
 .jam-studio .studio-chord-roll .pitch-step-cell.note-sustain { border-radius:0; border-left-color:#c88644; border-right-color:#c88644; opacity:.86; }
+.jam-studio .studio-chord-roll .pitch-step-cell.note-start[data-duration-steps]::after { content:none; }
 .jam-studio .studio-chord-roll .pitch-step-cell.previewing { outline:1px solid #fff1c9; outline-offset:-1px; }
 .jam-studio .studio-chord-roll .pitch-step-cell:hover { border-color:#ffe2a6; }
 .jam-studio .pitch-duration-handle {
