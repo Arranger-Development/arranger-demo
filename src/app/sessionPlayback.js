@@ -141,10 +141,10 @@ export function createSessionPlayback(audio, notify = () => {}, automation, { hu
       if (!jam || !isActive() || finishing || !snapshot) return;
       jam.updatePhrase(snapshot,trackId,id,lastStep+1,options);emit();
     },
-    toggleTrack(snapshot, trackId, tempo, { restart = false } = {}) {
+    toggleTrack(snapshot, trackId, tempo, { restart = false, alignWith } = {}) {
       if (automation?.isRecording() || !snapshot) return;
       if (!isActive() || !jam || finishing) { void start('jam', [targetFor(snapshot)], tempo); return; }
-      jam.toggle(snapshot, trackId, (Math.floor(lastStep / 16) + 1) * 16, lastStep + 1, restart);
+      jam.toggle(snapshot, trackId, (Math.floor(lastStep / 16) + 1) * 16, lastStep + 1, restart, alignWith);
       if (!jam.hasWork() && lastStep < 0) stop(); else emit();
     },
     removeTrack(trackId, id) {

@@ -6,7 +6,7 @@ import { normalizeBpm } from '../domain/bpm.js';
 import { createClipRecord } from '../domain/clipHelpers.js';
 import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
 import { normalizeJamSlots, firstEmptyJamSlot, removeJamSlot, moveJamSlots, relocateJamDraft, jamLauncherColumnCount } from './jamTemplateSlots.js';
-import { isEmptyJamPhrase } from './jamPhraseContent.js';
+import { hasJamPhraseNotes, isEmptyJamPhrase } from './jamPhraseContent.js';
 import { jamTrackParameters } from './jamPerformanceState.js';
 import { HUM_SOURCE, humPlaybackBars } from './jamHumExpression.js';
 
@@ -208,12 +208,12 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
       commit({...state,projects:state.projects.map(item=>item.id===p.id?{...p,workspace:next.workspace}:item)});
       return next.phrase;
     },
-    insertHumPhrases(phrases, { projectId, melodyId, bpm } = {}) {
+    insertHumPhrases(phrases, { projectId, melodyId, bpm, fillEmpty = false } = {}) {
       const project = current();
       if (project.id !== projectId) return null;
       const w = project.workspace;
-      const melody = melodyId && w.templates.melody.find(phrase => phrase.id === melodyId && phrase.sourcePresetId === HUM_SOURCE);
-      if (melodyId && !melody) return null;
+      const melody = melodyId && w.templates.melody.find(phrase => phrase.id === melodyId && (fillEmpty ? hasJamPhraseNotes(phrase) : phrase.sourcePresetId === HUM_SOURCE));
+      if ((melodyId || fillEmpty) && !melody) return null;
       const occupied = track => new Set([
         ...w.templates[track].map(phrase => phrase.slotIndex),
         w.draftsByTrack?.[track]?.targetSlot,
@@ -225,15 +225,27 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
       let next = w;
       const inserted = [];
       for (const phrase of phrases) {
-        if (occupiedByTrack[phrase.trackId].has(slotIndex)) return null;
-        const entry = phraseEdit(next, { ...phrase, ...(phrase.trackId === 'melody' ? { timbreId: HUM_SUSTAIN } : {}), sourcePresetId: HUM_SOURCE }, { create: true, slotIndex });
+        if (!TRACKS.includes(phrase.trackId) || fillEmpty && phrase.trackId === 'melody') return null;
+        const existing = w.templates[phrase.trackId].find(item => item.slotIndex === slotIndex);
+        if (occupiedByTrack[phrase.trackId].has(slotIndex)) {
+          if (!fillEmpty) return null;
+          if (!existing || hasJamPhraseNotes(existing)) continue;
+        }
+        const draft = { ...phrase, ...(existing ? { id: existing.id, name: existing.name } : {}),
+          ...(phrase.trackId === 'melody' ? { timbreId: HUM_SUSTAIN } : {}), sourcePresetId: HUM_SOURCE };
+        const entry = phraseEdit(next, draft, { create: !existing, slotIndex });
         if (!entry) return null;
         next = entry.workspace;
         inserted.push(entry.phrase);
       }
-      if (!inserted.length) return null;
+      if (!inserted.length) return fillEmpty ? [] : null;
       const tempo = bpm != null && TRACKS.every(track => w.templates[track].length === 0) ? normalizeBpm(bpm, w.bpm) : w.bpm;
-      patch({ templates: next.templates, bpm: tempo });
+      const updated = draft => {
+        const phrase = inserted.find(item => item.id === draft?.editingTemplateId);
+        return phrase ? { ...copy(phrase), editingTemplateId: phrase.id, dirty: false } : draft;
+      };
+      patch({ templates: next.templates, bpm: tempo, draft: updated(w.draft),
+        draftsByTrack: Object.fromEntries(Object.entries(w.draftsByTrack).map(([track, draft]) => [track, updated(draft)])) });
       return inserted;
     },
     setDraft(draft) {

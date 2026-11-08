@@ -13,8 +13,8 @@ import { createJamAudition } from '../jamAudition.js';
 import { editJamSequencerStep, HUM_SOURCE, humPlaybackBars, isHumBacking } from '../jamHumExpression.js';
 import { createJamHeldEdits } from '../jamHeldEdits.js';
 import { createJamPhraseHistory } from '../jamPhraseHistory.js';
-import { toggleJamTemplate, launchJamColumn, deleteJamTemplate } from '../jamTemplateSelection.js';
-import { jamTrackParameters, jamParameterLevels, jamTrackKnobs } from '../jamPerformanceState.js';
+import { toggleJamTemplate, launchJamColumn, deleteJamTemplate, jamColumnPhrases } from '../jamTemplateSelection.js';
+import { jamColumnState, jamTrackParameters, jamParameterLevels, jamTrackKnobs } from '../jamPerformanceState.js';
 import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, performanceTemplates } from '../performanceModel.js';
 import { blankJamDraft, hasJamNotes, applyJamTrackParameter } from '../jamDraftActions.js';
 import { jamTemplatePage, jamLauncherColumnCount } from '../jamTemplateSlots.js';
@@ -41,7 +41,7 @@ const performanceNow = () => globalThis.performance.now();
 const ART = Object.fromEntries(TRACKS.map(t => [t, `${import.meta.env.BASE_URL}assets/jam-instruments/${t}-v1.png`]));
 const timbreLabel = id => PERFORMANCE_SAMPLE_BANKS[id]?.label ?? ({ 'soft-electronic-kit':'柔和电子鼓', 'warm-electric-piano':'温暖电钢琴', 'round-electric-bass':'圆润电贝司', 'airy-synth-lead':'空气感合成器' })[id] ?? id;
 const emptySelection = () => Object.fromEntries(TRACKS.map(t => [t, null]));
-export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack, onHome, controlsRef, hardwareInput, projectStore: providedStore, humControl }) {
+export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack, onHome, controlsRef, hardwareInput, projectStore: providedStore, humControl, arrangeMelody }) {
   const [projectStore] = useState(() => providedStore ?? getJamTemplateProjects(genreId, profileId, initialBpm));
   const library = useSyncExternalStore(projectStore.subscribe, projectStore.getSnapshot);
   const project = library.projects.find(p => p.id === library.activeId), w = project.workspace;
@@ -205,19 +205,21 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       phrase=current.templates[t].find(p=>p.id===last);
     }
     if (!phrase) {
-      phrase=projectStore.commitPhraseEdit?.(blankJamDraft(t,instrumentTimbre(t),targetSlot??undefined),{create:true,projectId:project.id});
+      const melody = options?.editColumn ? current.templates.melody.find(item => item.slotIndex === targetSlot) : null;
+      phrase=projectStore.commitPhraseEdit?.(blankJamDraft(t,instrumentTimbre(t),targetSlot??undefined,melody?.bars.length),{create:true,projectId:project.id});
       if (!phrase) { setMessage('乐句未能创建，请重试。'); return; }
       pendingReveal.current=phrase.slotIndex;
     } else projectStore.setDraft({...copy(phrase),params:jamTrackParameters(phrase.params,t),editingTemplateId:phrase.id,dirty:false});
     midiInput.reset(); midiEditorVersion.current += 1;
     if (!editingTrack) captureArt();
-    setEditingTrack(t);setMessage('');setEditBar(0);
+    setEditingTrack(t); setMessage('');
+    setEditBar(previous => options?.editColumn ? Math.min(previous, phrase.bars.length - 1) : 0);
     if (options?.followPlayback) {
       audition.follow({...phrase,editingTemplateId:phrase.id});
       return;
     }
     void audio.startAudio();
-    audition.open({...phrase,editingTemplateId:phrase.id},{mode:'mix',autoStart:true});
+    audition.open({...phrase,editingTemplateId:phrase.id},{mode:'mix',autoStart:!options?.editColumn,editColumn:options?.editColumn});
   }
   function finishEditor() {
     clearTimeout(midiGesture.current);endGesture();
@@ -270,7 +272,20 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   }
   function launchColumn(columnIndex) {
     heldEdits.clear(true);
-    launchJamColumn({ projectStore, playback, audition, slotIndex: columnIndex, toggle: true });
+    const launched = launchJamColumn({ projectStore, playback, audition, slotIndex: columnIndex, toggle: true });
+    if (launched && playback.isActive()) audition.resumeColumn(columnIndex);
+  }
+  function fillColumnBacking(slot) {
+    const { id, workspace } = projectStore.current();
+    const { melody } = jamColumnPhrases(workspace.templates, slot);
+    if (!hasJamNotes(melody)) return;
+    try {
+      const phrases = Object.entries(arrangeMelody(melody.bars)).map(([trackId, bars]) => ({ trackId, bars }));
+      const inserted = projectStore.insertHumPhrases(phrases, { projectId: id, melodyId: melody.id, fillEmpty: true });
+      setMessage(inserted?.length ? `已按旋律补齐${inserted.map(phrase => LABELS[phrase.trackId]).join('、')}` : '当前列没有可填充的空轨');
+    } catch {
+      setMessage('无法根据当前旋律配轨，请检查旋律音符后再试。');
+    }
   }
   function moveSlots(move, expected) {
     if (!projectStore.moveSlots) {
@@ -399,6 +414,13 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   });
   const editorBars = useMemo(() => isHumBacking(draft) ? humPlaybackBars(draft) : draft?.bars, [draft]);
   const previewBar = Math.min(editBar,(draft?.bars.length ?? 1)-1);
+  const editedSlot = humControl && draft ? draft.slotIndex : null;
+  const columnPhrases = editedSlot === null ? null : jamColumnPhrases(w.templates, editedSlot);
+  const editColumn = columnPhrases?.melody ? editedSlot : null;
+  const canAuditionColumn = editColumn !== null && Object.values(columnPhrases).some(hasJamNotes);
+  const columnState = !canAuditionColumn || solo ? 'idle' : jamColumnState(status, Object.fromEntries(
+    Object.entries(columnPhrases).map(([track, phrase]) => [track, [phrase]])
+  ), 0);
   const renderLauncher = (humButton, humFeedback) => <JamLauncher key={project.id} humButton={humButton} humFeedback={humFeedback} active={active} playback={playback} templates={w.templates} columnCount={columnCount} bank={effectivePage} onBankChange={setPage} navigationRef={launcherNav}
           editingTrack={editingTrack} editingTemplateId={draft?.editingTemplateId} auditioning={solo} selection={w.selection} status={status} mutedTracks={w.mutedTracks} volumes={w.volumes}
           timbres={Object.fromEntries(TRACKS.map(t => [t,instrumentTimbre(t)]))} timbreLabel={timbreLabel} humPreview={Boolean(humControl)} artSources={ART} artNodes={artNodes}
@@ -424,9 +446,25 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
         {draft && <section className="studio-editor" key={editingTrack} data-track={editingTrack} aria-label={`${LABELS[editingTrack]}乐句编辑`}>
           <header className="studio-editor-heading"><div className="studio-editor-identity"><label className="studio-template-name-field">名称<input aria-label="乐句名称" value={draft.name ?? ''} placeholder={`${LABELS[editingTrack]}新乐句`} maxLength={80} onFocus={() => beginGesture('name')} onBlur={endGesture} onChange={e => { beginGesture('name');replaceDraft({...draft,name:e.target.value},{updateAudio:false,gesture:true}); }}/></label></div>
             <div className="studio-editor-heading-actions">
-              <button type="button" className="studio-text-button" onClick={finishEditor}><ArrowLeft size={13}/> 收起编辑</button></div></header>
+              <button type="button" className="studio-text-button" onClick={finishEditor}><ArrowLeft size={13}/> 收起编辑</button></div>
+          {editColumn !== null && <div className="studio-column-editor" role="group" aria-label={`第 ${editColumn + 1} 列手动配轨`}>
+            <span>第 {editColumn + 1} 列</span>
+            {['melody', 'drums', 'bass', 'chord'].map(track => {
+              const populated = hasJamNotes(columnPhrases[track]);
+              return <button type="button" key={track} aria-pressed={editingTrack === track}
+                onClick={() => { if (editingTrack !== track) openEditor(track, null, { editColumn: true }, editColumn); }}>
+                {!populated && track !== editingTrack ? '＋' : ''}{LABELS[track]}
+              </button>;
+            })}
+            {arrangeMelody && editingTrack === 'melody' && <button type="button" title="根据旋律填充同列空轨"
+              disabled={!hasJamNotes(columnPhrases.melody) || TRACKS.every(track => hasJamNotes(columnPhrases[track]))}
+              onClick={() => fillColumnBacking(editColumn)}>按旋律配轨</button>}
+            <button type="button" className="studio-column-audition" disabled={!canAuditionColumn} onClick={() => launchColumn(editColumn)}>
+              {columnState === 'idle' ? '试听整列' : columnState === 'queued' ? '取消等待' : '暂停整列'}
+            </button>
+          </div>}</header>
           <div className="studio-editor-controls">
-            {editingTrack !== 'drums' && <div className="studio-phrase-settings"><label>音型<select aria-label={`${LABELS[editingTrack]}乐句起点`} value={draft.sourcePresetId} onChange={e => { const next = e.target.value === 'blank' ? blankJamDraft(editingTrack,draft.timbreId,draft.targetSlot) : sourceDraft(editingTrack,e.target.value,draft.timbreId); midiInput.useSoftwareValue(); replaceDraft({...next,name:draft.name,editingTemplateId:draft.editingTemplateId,targetSlot:draft.targetSlot},{restart:true}); setEditBar(0); }}>{draft.sourcePresetId === HUM_SOURCE && <option value={HUM_SOURCE}>哼唱生成</option>}<option value="blank">空白乐句</option><optgroup label="旋钮模板 · Ableton">{DIAL_PITCHED_PRESETS.filter(p => p.trackId === editingTrack).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup><optgroup label="原有模板">{catalog[editingTrack].map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup></select></label></div>}
+            {editingTrack !== 'drums' && <div className="studio-phrase-settings"><label>音型<select aria-label={`${LABELS[editingTrack]}乐句起点`} value={draft.sourcePresetId} onChange={e => { const next = e.target.value === 'blank' ? blankJamDraft(editingTrack,draft.timbreId,draft.targetSlot) : sourceDraft(editingTrack,e.target.value,draft.timbreId); midiInput.useSoftwareValue(); replaceDraft({...next,name:draft.name,editingTemplateId:draft.editingTemplateId,targetSlot:draft.targetSlot},{restart:true}); setEditBar(0); }}>{draft.sourcePresetId === HUM_SOURCE && <option value={HUM_SOURCE}>{editingTrack === 'melody' ? '哼唱生成' : '旋律配轨'}</option>}<option value="blank">空白乐句</option><optgroup label="旋钮模板 · Ableton">{DIAL_PITCHED_PRESETS.filter(p => p.trackId === editingTrack).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup><optgroup label="原有模板">{catalog[editingTrack].map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup></select></label></div>}
             <div className="studio-editor-knobs">{jamTrackKnobs(editingTrack, draft.sourcePresetId === HUM_SOURCE).map(({parameter,hardwareParameter,label,lowLabel,highLabel}) => {
               const position = midiInput.knobPositions[hardwareParameter], value = draft.params?.[parameter] ?? 50;
               return <RotaryKnob key={parameter} label={label} value={value} displayValue={position?.display ? position.percent : value}

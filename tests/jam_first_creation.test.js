@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createJamTemplateProjects, defaultJamTimbres } from '../src/app/jamTemplateProjects.js';
+import { launchJamColumn } from '../src/app/jamTemplateSelection.js';
 import { createJamAudition } from '../src/app/jamAudition.js';
 import { createSessionPlayback } from '../src/app/sessionPlayback.js';
 import { blankJamDraft, applyJamTrackParameter } from '../src/app/jamDraftActions.js';
@@ -24,11 +25,11 @@ function fixture({deferred=false,fail=false}={}) {
     },
   });
   return {store,playback,editor,resolveStart,get state(){return state;},get plays(){return plays;},get stops(){return stops;},
-    open(track,slot=0){
+    open(track,slot=0,{editColumn=false,barCount=1}={}){
       let phrase=store.current().workspace.templates[track].find(p=>p.slotIndex===slot);
-      if(!phrase)phrase=store.commitPhraseEdit(blankJamDraft(track,defaultJamTimbres()[track],slot),{create:true});
+      if(!phrase)phrase=store.commitPhraseEdit(blankJamDraft(track,defaultJamTimbres()[track],slot,barCount),{create:true});
       else store.setDraft({...phrase,editingTemplateId:phrase.id});
-      editor.open({...phrase,editingTemplateId:phrase.id},{mode:'mix',autoStart:true});return phrase;
+      editor.open({...phrase,editingTemplateId:phrase.id},{mode:'mix',autoStart:!editColumn,editColumn});return phrase;
     },
     edit(method='knob',value=0){
       const draft=store.current().workspace.draft,track=draft.trackId;
@@ -110,4 +111,34 @@ test('failed first startup leaves subsequent editing paused until an explicit pl
   const f=fixture({fail:true});f.open('drums');f.edit();await ready();
   assert.equal(f.state.error,'samples failed');f.edit('knob',100);f.open('chord');f.edit();await ready();
   assert.equal(f.plays,1);assert.equal(f.playback.isActive(),false);
+});
+
+
+test('manual column edit stays paused until audition and adds a new track at the melody phase', async () => {
+  const f = fixture();
+  const slot = 9;
+  const melody = f.open('melody', slot, { editColumn: true, barCount: 2 });
+  const melodyBars = structuredClone(melody.bars);
+  melodyBars[0][0] = { type: 'melody', note: 'C4' };
+  melodyBars[1][0] = { type: 'melody', note: 'G4' };
+  f.store.commitPhraseEdit({ ...melody, bars: melodyBars });
+  const drums = f.open('drums', slot, { editColumn: true, barCount: 2 });
+  const drumBars = structuredClone(drums.bars);
+  drumBars[0][0] = { instruments: ['kick'] };
+  drumBars[1][0] = { instruments: ['snare'] };
+  assert.equal(f.plays, 0);
+  launchJamColumn({ projectStore: f.store, playback: f.playback, audition: f.editor, slotIndex: slot, toggle: true });
+  f.editor.resumeColumn(slot);
+  await ready();
+  f.tick(0);
+  f.tick(5);
+  const edited = f.store.commitPhraseEdit({ ...drums, bars: drumBars });
+  f.editor.update(edited);
+  f.tick(15);
+  assert.equal(f.state.playingPhraseIds.drums, null);
+  f.tick(16);
+  assert.equal(f.state.trackPositions.drums.startStep, f.state.trackPositions.melody.startStep);
+  assert.equal(f.state.trackPositions.drums.bar, 1);
+  assert.equal(f.state.playingPhraseIds.drums, drums.id);
+  assert.equal(f.plays, 1);
 });

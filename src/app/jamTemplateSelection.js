@@ -31,6 +31,11 @@ export function deleteJamTemplate({ projectStore, playback, audition, trackId, t
   return saved;
 }
 
+export function jamColumnPhrases(templates, slotIndex) {
+  const page = Math.floor(slotIndex / 8), position = slotIndex % 8;
+  return Object.fromEntries(PERFORMANCE_TRACKS.map(track => [track, jamTemplatePage(templates[track] ?? [], page)[position]]));
+}
+
 // A column is one atomic launch, not four toggles (which would queue partial mixes).
 export function launchJamColumn({ projectStore, playback, audition, columnIndex, page = 0, slotIndex, toggle = false }) {
   if (slotIndex === undefined) {
@@ -39,10 +44,8 @@ export function launchJamColumn({ projectStore, playback, audition, columnIndex,
   }
   if (!Number.isSafeInteger(slotIndex) || slotIndex < 0) return false;
   const w = projectStore.current().workspace;
-  const selection = Object.fromEntries(PERFORMANCE_TRACKS.map(t => {
-    const phrase=jamTemplatePage(w.templates[t] ?? [], Math.floor(slotIndex / 8))[slotIndex % 8];
-    return [t,phrase && !isEmptyJamPhrase(phrase)?phrase.id:null];
-  }));
+  const selection = Object.fromEntries(Object.entries(jamColumnPhrases(w.templates, slotIndex))
+    .map(([track, phrase]) => [track, phrase && !isEmptyJamPhrase(phrase) ? phrase.id : null]));
   if (!Object.values(selection).some(Boolean)) return false;
   // Explicit launches stay idempotent; the column's transport button toggles
   // either its audible mix or its pending request, including during loading.

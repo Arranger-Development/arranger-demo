@@ -1,6 +1,8 @@
 import { getDialDrumPreset } from '../data/dialDrumPresets.js';
 import { createDrumsCell } from '../domain/drumsCells.js';
 import { createMelodyCellFromNotes } from '../domain/melodyCells.js';
+import { extractMelodyEvents } from '../audio/matrixPlaybackAdapter.js';
+import { expandNotePerformances, noteDurationSteps } from '../domain/notePerformances.js';
 
 const pitches = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = midi => `${pitches[midi % 12]}${Math.floor(midi / 12) - 1}`;
@@ -126,10 +128,15 @@ const keys = scaleModes.flatMap(scale => pitches.map((_, tonic) => {
 }));
 
 function melodyEvents(bars) {
-  return bars.flatMap((bar, i) => bar.flatMap((cell, step) => Object.entries(cell?.notePerformances ?? {}).flatMap(([note, hits]) => {
-    const pitch = pitches.indexOf(note.slice(0, -1));
-    return hits.map(hit => ({ pitch, start: i * stepsPerBar + step + hit.offsetSteps, duration: hit.durationSteps }));
-  })));
+  const length = bars.length * stepsPerBar;
+  return bars.flatMap((bar, index) => bar.flatMap((cell, step) => (
+    expandNotePerformances(extractMelodyEvents(cell, index, step), cell).flatMap(event => {
+      const pitch = pitches.indexOf(event.note.slice(0, -1));
+      const start = Math.max(0, index * stepsPerBar + step + (event.timingOffset ?? 0));
+      const duration = Math.min(noteDurationSteps(event), length - start);
+      return pitch < 0 || duration <= 0 ? [] : [{ pitch, start, duration }];
+    })
+  ))).sort((a, b) => a.start - b.start);
 }
 
 function fitHarmony(events, halfBars) {

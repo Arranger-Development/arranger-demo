@@ -6,9 +6,9 @@ import { HUM_SOURCE } from './jamHumExpression.js';
 
 export const hasJamNotes = hasJamPhraseNotes;
 
-export function blankJamDraft(trackId, timbreId, targetSlot) {
+export function blankJamDraft(trackId, timbreId, targetSlot, barCount = 1) {
   return { trackId, timbreId, targetSlot, name: '', sourcePresetId: 'blank',
-    params: jamTrackParameters(undefined, trackId), bars: [Array(16).fill(null)], dirty: false };
+    params: jamTrackParameters(undefined, trackId), bars: Array.from({ length: barCount }, () => Array(16).fill(null)), dirty: false };
 }
 
 export function applyJamTrackParameter(draft, parameter, value) {

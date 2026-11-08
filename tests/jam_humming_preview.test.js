@@ -216,3 +216,31 @@ test('editing a visible bass or chord variant keeps that half bar and its edited
     assert.deepEqual(edited.bars[0].slice(8), track.bars[0].slice(8));
   }
 });
+
+
+test('fills accompaniment for a hand-written melody using its actual pitches without replacing authored tracks', () => {
+  const store = makeStore();
+  const projectId = store.current().id, slotIndex = 4;
+  const written = (notes, slotIndex) => {
+    const bars = [Array(16).fill(null)];
+    notes.forEach((note, index) => { bars[0][index * 4] = { type: 'melody', note, duration: '4n' }; });
+    return store.commitPhraseEdit({ ...blankJamDraft('melody'), bars }, { create: true, slotIndex });
+  };
+  const melody = written(['C4', 'E4', 'G4', 'C4'], slotIndex);
+  const transposed = written(['D4', 'F#4', 'A4', 'D4'], slotIndex + 1);
+  const drumBars = [Array(16).fill(null)];
+  drumBars[0][3] = { instruments: ['snare'] };
+  const drums = store.commitPhraseEdit({ ...blankJamDraft('drums'), bars: drumBars }, { create: true, slotIndex });
+  const emptyBass = store.commitPhraseEdit(blankJamDraft('bass'), { create: true, slotIndex });
+  store.setDraft({ ...melody, editingTemplateId: melody.id });
+  const fill = phrase => store.insertHumPhrases(backingPhrases(phrase.bars), { projectId, melodyId: phrase.id, fillEmpty: true });
+  const first = fill(melody), second = fill(transposed);
+  assert.deepEqual(first.map(item => item.trackId), ['chord', 'bass']);
+  assert.ok(first.every(item => item.slotIndex === slotIndex));
+  assert.equal(first[1].id, emptyBass.id);
+  assert.notDeepEqual(first[0].bars[0][0].notes, second[0].bars[0][0].notes);
+  assert.notEqual(first[1].bars[0][0].note, second[1].bars[0][0].note);
+  assert.deepEqual(store.current().workspace.templates.drums[0], drums);
+  assert.deepEqual(store.current().workspace.draft.bars, melody.bars);
+  assert.deepEqual(fill(melody), []);
+});
