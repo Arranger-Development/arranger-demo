@@ -1,15 +1,20 @@
 import { createDrumsCell, getDrumsCellInstruments, getDrumsCellVelocity, getDrumsCellTimingOffset } from '../domain/drumsCells.js';
 
 function drumRhythm(bar, level, edited) {
+  const keepBaseHats = level >= 75;
   return bar.map((cell, step) => {
     if (edited(step)) return cell;
     const instruments = getDrumsCellInstruments(cell);
     const hits = cell?.drumHits ?? instruments.map(instrument => ({ instrument, offsetSteps: getDrumsCellTimingOffset(cell, instrument),
       durationSteps: 1, velocity: getDrumsCellVelocity(cell, instrument) }));
-    const hats = level === 0 ? step % 4 === 0 : level === 25 || level === 75 ? step % 2 === 0 : true;
-    const next = hits.filter(hit => hit.instrument !== 'hihat' || hats && (level === 100 || hit.offsetSteps === 0));
-    if (level > 50 && hats && !next.some(hit => hit.instrument === 'hihat')) {
-      next.push({ instrument: 'hihat', offsetSteps: 0, durationSteps: 1, velocity: step % 4 ? 0.43 : 0.60 });
+    const hatStep = level === 0 ? step % 8 === 0
+      : level === 25 ? step % 4 === 2
+      : level === 75 ? step % 2 === 0 : true;
+    const next = hits.filter(hit => hit.instrument !== 'hihat'
+      || keepBaseHats || (hatStep && hit.offsetSteps === 0));
+    if (hatStep && !next.some(hit => hit.instrument === 'hihat')) {
+      const velocity = step % 4 === 0 ? 0.60 : step % 2 === 0 ? 0.51 : 0.39;
+      next.push({ instrument: 'hihat', offsetSteps: 0, durationSteps: 1, velocity });
     }
     return createDrumsCell(next.map(hit => hit.instrument), { drumHits: next });
   });

@@ -249,6 +249,26 @@ test('accompaniment knobs change playback onsets, respect manual edits and resto
 });
 
 
+test('every generated drum groove has distinct hat steps with sparse or dense melodies', () => {
+  const store = makeStore();
+  for (const starts of [[0, 4, 8], [0, 1, 2, 3, 4, 5, 6, 7]]) {
+    const lead = [Array.from({ length: 16 }, (_, step) =>
+      starts.includes(step) ? { type: 'melody', note: 'D4', durationSteps: 1 } : null)];
+    const { drums: bars } = arrangeHumMelody(lead);
+    const phrase = { trackId: 'drums', sourcePresetId: 'hum-generated', bars };
+    const hatSteps = [0, 25, 50, 75, 100].map(groove => {
+      const variant = applyJamTrackParameter(phrase, 'groove', groove);
+      const adapter = createMatrixPlaybackAdapter(jamCombinationSnapshot(store.current().workspace, variant, true));
+      return Array.from({ length: 16 }, (_, step) => step)
+        .filter(step => adapter.getEventsForStep(0, step).some(hit => hit.instrument === 'hihat'));
+    });
+    assert.equal(new Set(hatSteps.map(steps => steps.join(','))).size, 5);
+    assert.deepEqual(hatSteps[0], [0, 8]);
+    assert.deepEqual(hatSteps[1], [2, 6, 10, 14]);
+    assert.deepEqual(hatSteps[2], bars[0].flatMap((cell, step) => cell?.instruments.includes('hihat') ? [step] : []));
+  }
+});
+
 test('generated chord voicing changes octave and density without changing rhythm or hand-edited voices', () => {
   const store = makeStore();
   const bars = [Array(16).fill(null)];
