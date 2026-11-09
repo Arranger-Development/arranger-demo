@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { arrangeHumMelody, cleanHumNotes, estimateHumBpm, makeHumMelody } from '../src/preview/humArrangement.js';
 import { planHumHarmony } from '../src/preview/humHarmony.js';
+import { humPitchCenter } from '../src/preview/humPitchCorrection.js';
 import { createJamTemplateProjects, jamCombinationSnapshot } from '../src/app/jamTemplateProjects.js';
 import { applyJamTrackParameter, blankJamDraft } from '../src/app/jamDraftActions.js';
 import { createMatrixPlaybackAdapter } from '../src/audio/matrixPlaybackAdapter.js';
@@ -39,6 +40,39 @@ test('removes a short continuous tail while keeping a fresh attack on the same p
   tone(0.9, 1.235);
   tone(1.26, 1.42);
   assert.deepEqual(cleanHumNotes(events, 2, samples).map(note => note.start), [0.1, 0.9, 1.26]);
+});
+
+test('humming correction uses steady pitch evidence without changing deliberate chromatic notes', () => {
+  const contour = Array(264).fill(0);
+  const detected = { startFrame: 0, durationFrames: 10, pitchMidi: 63 };
+  const base = (detected.pitchMidi - 21) * 3 + 1;
+  contour[base] = 0.4;
+  contour[base + 1] = 0.9;
+  contour[base + 2] = 0.6;
+  const center = humPitchCenter(Array(10).fill(contour), detected);
+  assert.ok(center > 63.33 && center < 63.5);
+
+  const anchors = [60, 62, 67, 64, 60].map((pitch, i) => ({
+    ...event(i * 0.5 + (i >= 2 ? 0.5 : 0), pitch, 0.3), pitchCenter: pitch,
+  }));
+  const fragment = { ...event(1, 63, 0.18), pitchCenter: center };
+  const continuation = { ...event(1.18, 64, 0.2), pitchCenter: 64 };
+  const sustain = new Float32Array(3 * 22050);
+  sustain.fill(0.2, 22050, Math.round(1.38 * 22050));
+  const corrected = cleanHumNotes([...anchors, fragment, continuation], 3, sustain);
+  assert.deepEqual(corrected.map(note => note.pitch), [60, 62, 64, 67, 64, 60]);
+  assert.ok(corrected[2].end > 1.35);
+
+  const deliberate = cleanHumNotes([...anchors, { ...fragment, pitchCenter: 63.03 }, continuation], 3, sustain);
+  assert.deepEqual(deliberate.map(note => note.pitch), [60, 62, 63, 64, 67, 64, 60]);
+  const separate = new Float32Array(sustain);
+  separate.fill(0, Math.round(1.14 * 22050), Math.round(1.18 * 22050));
+  const repeated = cleanHumNotes([...anchors, fragment, continuation], 3, separate);
+  assert.deepEqual(repeated.map(note => note.pitch), [60, 62, 64, 64, 67, 64, 60]);
+  assert.equal(cleanHumNotes([fragment], 3)[0].pitch, 63);
+  const splitNearBoundary = [fragment, { ...continuation, pitchCenter: 63.4 }];
+  assert.deepEqual(cleanHumNotes(splitNearBoundary, 3, sustain).map(note => note.pitch), [63]);
+  assert.deepEqual(cleanHumNotes(splitNearBoundary, 3, separate).map(note => note.pitch), [63, 64]);
 });
 
 test('pitch changes harmony and bass, and dense starts thin the drums', () => {

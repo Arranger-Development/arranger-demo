@@ -3,6 +3,7 @@ import { createDrumsCell } from '../domain/drumsCells.js';
 import { createMelodyCellFromNotes } from '../domain/melodyCells.js';
 import { authoredChordAnchors, planHumHarmony } from './humHarmony.js';
 import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
+import { correctHumPitch } from './humPitchCorrection.js';
 
 const pitches = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = midi => `${pitches[midi % 12]}${Math.floor(midi / 12) - 1}`;
@@ -26,7 +27,7 @@ function humEnvelope(samples) {
 }
 
 function continuousHumEnd(envelope, previous, candidate) {
-  if (!envelope || previous.pitch !== candidate.pitch || Math.abs(candidate.start - previous.end) > 0.12) return null;
+  if (!envelope || Math.abs(candidate.start - previous.end) > 0.12) return null;
   const frameAt = time => Math.round(time / envelopeStep);
   const split = frameAt(candidate.start), join = frameAt(previous.end);
   const nearby = envelope.slice(Math.max(0, split - 4), split + 4);
@@ -44,20 +45,34 @@ function continuousHumEnd(envelope, previous, candidate) {
   return Math.max(previous.end, Math.min(candidate.end, endFrame * envelopeStep));
 }
 
+function sharedHumPitchCenter(previous, candidate) {
+  if (Math.abs(previous.pitch - candidate.pitch) !== 1
+    || !(Math.abs(previous.pitchCenter - candidate.pitchCenter) <= 0.18)) return null;
+  const center = (previous.pitchCenter + candidate.pitchCenter) / 2;
+  const boundary = (previous.pitch + candidate.pitch) / 2;
+  return Math.abs(center - boundary) <= 0.21 ? center : null;
+}
+
 export function cleanHumNotes(events, recordingSeconds, samples) {
-  const candidates = events.flatMap(({ startTimeSeconds, durationSeconds, pitchMidi, amplitude }) => {
+  const candidates = events.flatMap(({ startTimeSeconds, durationSeconds, pitchMidi, amplitude, pitchCenter }) => {
     const start = Math.max(0, startTimeSeconds);
     const end = Math.min(recordingSeconds, startTimeSeconds + durationSeconds);
     if (!Number.isInteger(pitchMidi) || pitchMidi < 36 || pitchMidi > 88 || !(end - start >= minNoteSeconds) || !(amplitude > 0)) return [];
-    return [{ start, end, pitch: pitchMidi, amplitude }];
+    return [{ start, end, pitch: pitchMidi, amplitude, ...(Number.isFinite(pitchCenter) && { pitchCenter }) }];
   }).sort((a, b) => a.start - b.start || b.amplitude - a.amplitude);
   const notes = [];
   const envelope = samples && humEnvelope(samples);
   for (const candidate of candidates) {
     const previous = notes.at(-1);
-    const sustainedEnd = previous && continuousHumEnd(envelope, previous, candidate);
+    const sharedCenter = previous && sharedHumPitchCenter(previous, candidate);
+    const sustainedEnd = previous && (previous.pitch === candidate.pitch || sharedCenter != null)
+      ? continuousHumEnd(envelope, previous, candidate) : null;
     if (sustainedEnd != null) {
       previous.end = sustainedEnd;
+      if (sharedCenter != null) {
+        previous.pitch = Math.round(sharedCenter);
+        previous.pitchCenter = sharedCenter;
+      }
       continue;
     }
     if (previous && candidate.start < previous.end) {
@@ -73,7 +88,18 @@ export function cleanHumNotes(events, recordingSeconds, samples) {
     if (last && last.end > candidate.start) last.end = candidate.start;
     notes.push(candidate);
   }
-  return notes.filter(note => note.end - note.start >= minNoteSeconds);
+  const valid = notes.filter(note => note.end - note.start >= minNoteSeconds);
+  if (!valid.some(note => note.pitchCenter !== undefined)) return valid;
+  const corrected = correctHumPitch(valid);
+  if (!envelope || corrected.every((note, index) => note.pitch === valid[index].pitch)) return corrected;
+  const joined = [];
+  for (const note of corrected) {
+    const previous = joined.at(-1);
+    const end = previous?.pitch === note.pitch ? continuousHumEnd(envelope, previous, note) : null;
+    if (end != null) previous.end = end;
+    else joined.push(note);
+  }
+  return joined;
 }
 
 export function estimateHumBpm(notes) {
