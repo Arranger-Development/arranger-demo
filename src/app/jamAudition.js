@@ -2,7 +2,7 @@ import { jamCombinationSnapshot } from './jamTemplateProjects.js';
 import { hasJamNotes } from './jamDraftActions.js';
 
 // Also used by deferred knob edits after their editor has switched or collapsed.
-export function applyJamMixEdit(playback, workspace, draft, { restart = false, canJoin = false, preserveEffects = false } = {}) {
+export function applyJamMixEdit(playback, workspace, draft, { restart = false, canJoin = false, preserveEffects = false, alignWith } = {}) {
   const track = draft.trackId, id = draft.editingTemplateId ?? draft.id;
   const desired = playback.getDesiredPhraseIds()[track];
   const queued = playback.getQueuedPhraseIds?.()?.[track];
@@ -17,7 +17,8 @@ export function applyJamMixEdit(playback, workspace, draft, { restart = false, c
     if (restart) playback.toggleTrack(snapshot,track,workspace.bpm,{restart:true});
     else playback.updatePhrase(snapshot,track,id,{preserveEffects});
   } else if (canJoin) {
-    playback.toggleTrack(snapshot,track,workspace.bpm,{restart:true}); return { restoreSound:true };
+    playback.toggleTrack(snapshot, track, workspace.bpm, { restart: true, ...(alignWith ? { alignWith } : {}) });
+    return { restoreSound: true };
   } else if (audible === id && !restart) playback.updatePhrase(snapshot,track,id,{preserveEffects});
   return null;
 }
@@ -25,15 +26,27 @@ export function applyJamMixEdit(playback, workspace, draft, { restart = false, c
 // Solo editing owns an overlay; mix editing changes only its own saved phrase.
 export function createJamAudition(playback, { readWorkspace, readDraft, onSoloChange = () => {}, onMixChange = () => {}, stopArp = () => {} }) {
   let track = null, resumeCombination = false, editor = false, paused = false, empty = false, revision = 0;
-  let mode = 'solo', phraseId = null, autoJoinBlocked = false;
+  let mode = 'solo', phraseId = null, autoJoinBlocked = false, columnEditing = false;
   const idOf = draft => draft?.editingTemplateId ?? draft?.id ?? null;
   function mixChanged(restoreSound = false) {
     onMixChange({ selection: playback.getDesiredPhraseIds(), trackId: track, restoreSound });
   }
+  function columnAnchor(draft) {
+    if (!columnEditing || !draft) return null;
+    const desired = playback.getDesiredPhraseIds();
+    if (desired[draft.trackId] && desired[draft.trackId] !== idOf(draft)) return null;
+    const { templates } = readWorkspace();
+    const trackId = ['melody', 'drums', 'bass', 'chord'].find(track => track !== draft.trackId && desired[track]
+      && templates[track].some(phrase => phrase.id === desired[track] && phrase.slotIndex === draft.slotIndex));
+    return trackId ? { trackId, phraseId: desired[trackId] } : null;
+  }
+  function canJoin(draft = readDraft()) {
+    return !paused && !autoJoinBlocked && (!columnEditing || Boolean(columnAnchor(draft)));
+  }
   function updateMix(draft, restart, preserveEffects) {
     const w = readWorkspace(), id = idOf(draft);
     if (!id || id !== phraseId) return;
-    const changed = applyJamMixEdit(playback,w,draft,{restart,canJoin:!paused&&!autoJoinBlocked,preserveEffects});
+    const changed = applyJamMixEdit(playback, w, draft, { restart, canJoin: canJoin(draft), preserveEffects, alignWith: columnAnchor(draft) });
     if (changed) mixChanged(changed.restoreSound);
   }
   function playDraft(draft, restart) {
@@ -48,7 +61,7 @@ export function createJamAudition(playback, { readWorkspace, readDraft, onSoloCh
     if (stop) playback.stop();
     stopArp();
   }
-  function open(draft, { mode: requestedMode, autoStart = false } = {}) {
+  function open(draft, { mode: requestedMode, autoStart = false, editColumn = false } = {}) {
     if (!draft) return;
     const nextMode = requestedMode ?? (editor && mode === 'mix' && phraseId === idOf(draft) ? 'mix' : 'solo');
     if (editor && mode === 'solo' && nextMode === 'mix') playback.resumeJam?.();
@@ -61,6 +74,7 @@ export function createJamAudition(playback, { readWorkspace, readDraft, onSoloCh
       if (nextMode === 'mix' && playback.isActive()) paused = false;
     }
     if (!editor) { resumeCombination = playback.isActive(); paused = false; }
+    columnEditing = editColumn;
     mode = nextMode; phraseId = idOf(draft);
     editor = true; track = draft.trackId; empty = !hasJamNotes(draft);
     if (mode === 'mix') {
@@ -79,7 +93,7 @@ export function createJamAudition(playback, { readWorkspace, readDraft, onSoloCh
     const wasMix = mode === 'mix';
     track = null;
     editor = paused = empty = false;
-    mode = 'solo'; phraseId = null; autoJoinBlocked = false;
+    mode = 'solo'; phraseId = null; columnEditing = false; autoJoinBlocked = false;
     revision++;
     onSoloChange(false);
     if (wasMix) { resumeCombination = false; return; }
@@ -99,7 +113,11 @@ export function createJamAudition(playback, { readWorkspace, readDraft, onSoloCh
     getTrack: () => track,
     getMode: () => track ? mode : null,
     getPhraseId: () => phraseId,
-    canJoin: () => !paused && !autoJoinBlocked,
+    canJoin,
+    resumeColumn(slot) {
+      if (!columnEditing || readDraft()?.slotIndex !== slot) return;
+      paused = autoJoinBlocked = false;
+    },
     getRevision: () => revision,
     isPlaying: () => mode === 'mix' ? Boolean(track && !empty && playback.isActive()
       && playback.getProgress()?.snapshot.phraseIds[track] === phraseId
@@ -114,7 +132,7 @@ export function createJamAudition(playback, { readWorkspace, readDraft, onSoloCh
     // editor here: no overlay, transport request, or implicit audition.
     follow(draft) {
       if (!draft) return;
-      track = draft.trackId; phraseId = idOf(draft); mode = 'mix'; editor = true;
+      track = draft.trackId; phraseId = idOf(draft); mode = 'mix'; editor = true; columnEditing = false;
       empty = !hasJamNotes(draft); resumeCombination = false; paused = !playback.isActive();
       autoJoinBlocked = playback.getDesiredPhraseIds()[track] !== phraseId
         && playback.getQueuedPhraseIds?.()?.[track] !== phraseId;

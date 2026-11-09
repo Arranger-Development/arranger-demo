@@ -1,8 +1,10 @@
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 def module(name):
@@ -13,7 +15,8 @@ def module(name):
 
 
 prepare = module('prepare-pages-release').prepare
-validate = module('check-pages-artifact').validate
+artifact_checker = module('check-pages-artifact')
+validate = artifact_checker.validate
 verify = module('verify-preview-release').verify
 SOURCE = 'a' * 40
 RELEASE = 'b' * 40
@@ -68,6 +71,32 @@ class ReleaseTests(unittest.TestCase):
         (self.source / '.nojekyll').symlink_to(self.source / 'index.html')
         with self.assertRaises(ValueError):
             validate(self.source, 'arranger-demo')
+
+    def test_only_hashed_model_binaries_with_exact_bytes_are_allowed(self):
+        for name in artifact_checker.MODEL_BINARY_SHA256:
+            stem, suffix = name.rsplit('.', 1)
+            data = name.encode()
+            asset = self.source / 'assets' / f'{stem}-X1_a-A23.{suffix}'
+            asset.write_bytes(data)
+            with patch.dict(artifact_checker.MODEL_BINARY_SHA256, {name: hashlib.sha256(data).hexdigest()}):
+                validate(self.source, 'arranger-demo')
+                asset.write_bytes(data + b'changed')
+                with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+                    validate(self.source, 'arranger-demo')
+                asset.write_bytes(data)
+                misplaced = self.source / asset.name
+                asset.rename(misplaced)
+                with self.assertRaisesRegex(ValueError, 'Forbidden binary asset'):
+                    validate(self.source, 'arranger-demo')
+                misplaced.unlink()
+
+    def test_other_and_unhashed_binary_assets_are_rejected(self):
+        for name in ('extra-X1_a-A23.wasm', 'extra-X1_a-A23.bin', 'group1-shard1of1.bin'):
+            asset = self.source / 'assets' / name
+            asset.touch()
+            with self.assertRaisesRegex(ValueError, 'Forbidden binary asset'):
+                validate(self.source, 'arranger-demo')
+            asset.unlink()
 
     def promotion_api(self, path, state='success', ancestry='ahead'):
         if '/compare/' in path:

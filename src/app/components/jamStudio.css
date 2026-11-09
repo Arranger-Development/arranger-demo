@@ -68,7 +68,14 @@
 .jam-studio .rotary-knob { width:68px; height:68px; }
 .jam-studio .rotary-face { width:54px; height:54px; }
 .jam-studio .rotary-marker { height:13px; top:6px; width:3px; left:calc(50% - 1.5px); }
-.jam-studio .rotary-value { font-size:18px; line-height:20px; }
+.jam-studio .studio-editor-knobs .rotary-value {
+  min-block-size:14px;
+  color:var(--tj-muted);
+  font-size:10px;
+  font-weight:400;
+  line-height:14px;
+  white-space:nowrap;
+}
 .jam-studio .rotary-ticks { width:100px; font-size:8px; line-height:10px; }
 .jam-studio .studio-grid-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; color:var(--tj-muted); font-size:10px; }
 .jam-studio .studio-bar-pager,.jam-studio .studio-undo { display:flex; gap:4px; align-items:center; }
@@ -158,7 +165,6 @@
   .jam-studio[data-editing=true] .studio-gallery { padding-bottom:5px; }
   .jam-studio .rotary-knob { width:52px; height:52px; }
   .jam-studio .rotary-face { width:42px; height:42px; }
-  .jam-studio .rotary-value { font-size:16px; line-height:18px; }
   .jam-studio .studio-transport { min-height:42px; padding-block:6px; }
   .jam-studio .studio-effects h2 { margin:0 0 5px; }
   .jam-studio .studio-effects .jam-effect-hint { margin:4px 0; }
@@ -205,8 +211,8 @@
 .jam-studio[data-editing=true] .studio-main { gap:8px; }
 .jam-studio[data-editing=true] .studio-instrument-top { height:56px; flex-shrink:0; padding:4px 20px 4px 6px; border-radius:4px; }
 .jam-studio[data-editing=true] .studio-instrument[data-active=true] .studio-instrument-top {
-  background:color-mix(in srgb,var(--studio-track-tone) 9%,transparent);
-  box-shadow:inset 0 -2px var(--studio-track-tone);
+  background:color-mix(in srgb,var(--studio-track-tone) 9%,var(--tj-panel));
+  box-shadow:inset 0 -2px var(--studio-track-tone),4px 0 0 var(--tj-panel);
 }
 .jam-studio[data-editing=true] .studio-instrument[data-active=true] .studio-instrument-label strong { text-decoration-color:var(--studio-track-tone); }
 .jam-studio .studio-editing-state { font-size:9px; line-height:12px; color:var(--ink); }

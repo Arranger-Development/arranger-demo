@@ -28,7 +28,7 @@ export function createJamTrackPlayback(nextVersion) {
       launches[t] = { entry: value, at, revision: value?.revision ?? nextVersion() };
     }
   }
-  function toggle(snapshot, t, at, stopAt, restart = false) {
+  function toggle(snapshot, t, at, stopAt, restart = false, alignWith) {
     const id = snapshot.phraseIds[t];
     if (!restart && launches[t]?.entry?.id === id) {
       const cancelledRequest = launches[t]; invalidate(t, true);
@@ -46,6 +46,11 @@ export function createJamTrackPlayback(nextVersion) {
     } else {
       invalidate(t);
       const value = entry(snapshot, t, at, false);
+      if (alignWith) {
+        const pending = launches[alignWith.trackId]?.entry;
+        const anchor = pending?.id === alignWith.phraseId ? pending : tracks[alignWith.trackId];
+        if (anchor?.id === alignWith.phraseId) value.startStep = anchor.startStep;
+      }
       launches[t] = { entry: value, at, revision: value.revision };
     }
   }

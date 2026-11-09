@@ -62,6 +62,6 @@ export function withPerformanceTimbre(event, requestedTimbreId) {
   return {
     ...event,
     ...(requestedTimbreId ? { requestedTimbreId } : {}),
-    ...(bank ? { timbreId: bank.id, ...(bank.track !== 'drums' ? { playbackMode: 'natural' } : {}) } : {}),
+    ...(bank ? { timbreId: bank.id, ...(bank.track !== 'drums' ? { playbackMode: event.playbackMode === 'gated' ? 'gated' : 'natural' } : {}) } : {}),
   };
 }

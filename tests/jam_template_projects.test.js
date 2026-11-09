@@ -247,6 +247,30 @@ test('each instrument draft survives switching instruments, project reload, rena
   assert.equal(reloaded.current().workspace.draftsByTrack.drums.editingTemplateId,undefined);
   assert.ok(reloaded.current().workspace.draftsByTrack.drums.bars[0].some(Boolean));
 });
+
+test('reopening a Jam project replaces the retired humming timbre without changing its notes', () => {
+  const storage = memory(), store = createJamTemplateProjects(storage, 'pop', null, 88);
+  const bars = [[{ type: 'melody', note: 'C4', durationSteps: 4 }, ...Array(15).fill(null)]];
+  const [phrase] = store.insertHumPhrases([{ trackId: 'melody', bars }], { projectId: store.current().id });
+  store.setDraft({ ...phrase, editingTemplateId: phrase.id });
+  const key = jamTemplateProjectsKey('pop', null);
+  const saved = JSON.parse(storage.getItem(key));
+  const { workspace } = saved.projects.find(project => project.id === saved.activeId);
+  workspace.timbres.melody = 'hum-sustain';
+  for (const old of [workspace.templates.melody[0], workspace.draft, workspace.draftsByTrack.melody]) old.timbreId = 'hum-sustain';
+  storage.setItem(key, JSON.stringify(saved));
+
+  const reopened = createJamTemplateProjects(storage, 'pop', null, 88).current().workspace;
+  const restored = reopened.templates.melody[0];
+  assert.equal(restored.id, phrase.id);
+  assert.equal(restored.timbreId, 'deep-autumn-melody');
+  assert.equal(reopened.draft.timbreId, restored.timbreId);
+  assert.equal(reopened.draftsByTrack.melody.timbreId, restored.timbreId);
+  assert.deepEqual(restored.bars, bars);
+  const adapter = createMatrixPlaybackAdapter(jamCombinationSnapshot(reopened, restored, true));
+  assert.deepEqual(adapter.getEventsForStep(0, 0).map(event => [event.note, event.timbreId, event.durationSteps]),
+    [['C4', 'deep-autumn-melody', 4]]);
+});
 test('a legacy single editor draft is adopted by its track without discarding its exact hits',()=>{
   const storage=memory(),store=createJamTemplateProjects(storage,'pop',null,100);
   store.patch({draft:draft()});

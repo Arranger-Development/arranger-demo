@@ -20,6 +20,8 @@ import { createProjectFileBlob } from '../export/projectFile.js';
 import { APP_COMMAND_TYPES } from '../input/appCommands.js';
 import useKeyboardCommands from '../input/useKeyboardCommands.js';
 import PerformanceMode from './components/PerformanceMode.jsx';
+import HumControls from '../preview/HumControls.jsx';
+import { arrangeHumBacking } from '../preview/humArrangement.js';
 import useLaunchpadXCommands from '../input/useLaunchpadXCommands.js';
 import useMusicStore from '../store/useMusicStore.js';
 import {
@@ -3469,6 +3471,8 @@ export default function App({
       initialBpm={bpm}
       onHome={onHome ? () => { handleStop(); onHome(); } : undefined}
       projectStore={jamTemplateStore}
+      humControl={HumControls}
+      arrangeMelody={arrangeHumBacking}
       onBack={() => {
         setPerformanceActive(false);
         window.requestAnimationFrame(() => document.querySelector('.performance-entry')?.focus());

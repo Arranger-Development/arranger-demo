@@ -19,6 +19,10 @@ export default class SampleBufferCache {
     return entry;
   }
 
+  getBuffer(url) {
+    return this.buffers.get(url)?.buffer;
+  }
+
   track(node, promise) {
     this.nodeLoads.set(node, promise);
     // Startup can create nodes before anyone awaits them. Readiness still

@@ -102,6 +102,45 @@ test('natural chord sample banks preserve tails and velocity even with authored 
   assert.deepEqual(calls,[['natural','C4',3,1],['natural','E4',4,.65]]);
 });
 
+test('sampled humming releases each repeated note independently and cancels queued tails on stop', () => {
+  const sources = [], gains = [];
+  const context = {
+    createBufferSource() {
+      const source = { playbackRate: {}, starts: [], stops: [],
+        start(time) { this.starts.push(time); }, stop(time) { this.stops.push(time); },
+        connect: node => node, disconnect() {} };
+      sources.push(source);
+      return source;
+    },
+    createGain() {
+      const scheduled = [];
+      const gain = { value: 1, setValueAtTime: (value, time) => scheduled.push([value, time]),
+        linearRampToValueAtTime: (value, time) => scheduled.push([value, time]), cancelAndHoldAtTime() {} };
+      gains.push(scheduled);
+      return { gain, connect: node => node, disconnect() {} };
+    },
+  };
+  const tone = { ...createFakeTone(), context: { rawContext: context }, Frequency: () => ({ toMidi: () => 60 }) };
+  const engine = new AudioEngine({ tone });
+  const bank = { ready: true };
+  engine.melodyTrackBanks.set('melody', new Map([['piano', bank]]));
+  engine.getMelodySampleUrls = () => ({ C4: 'sample' });
+  engine.sampleBufferCache.getBuffer = () => ({});
+  const hit = { trackId: 'melody', note: 'C4', timbreId: 'piano', playbackMode: 'gated', humMelodyTail: true,
+    durationSteps: 0.8, velocity: 0.8 };
+  assert.ok(engine.triggerMelodyBankEvent({ ...hit, nextAttackSteps: 1 }, 1, 120));
+  assert.ok(engine.triggerMelodyBankEvent({ ...hit, nextAttackSteps: 7 }, 1.125, 120));
+  assert.ok(engine.triggerMelodyBankEvent(hit, 2, 120));
+  assert.deepEqual(sources.map(source => source.starts), [[1], [1.125], [2]]);
+  assert.deepEqual(gains[1].slice(0, 2), [[0.8, 1], [0.8, 1.1]]);
+  assert.ok(Math.abs(sources[0].stops[0] - 1.175) < 1e-9);
+  assert.ok(Math.abs(sources[1].stops[0] - 1.475) < 1e-9);
+  engine.stopTrackVoices('melody', 1.13);
+  assert.ok(Math.abs(sources[0].stops.at(-1) - 1.138) < 1e-9);
+  assert.ok(Math.abs(sources[1].stops.at(-1) - 1.138) < 1e-9);
+  assert.equal(sources[2].stops.at(-1), 1.13);
+});
+
 test('live preview length changes keep absolute phase and progress waits for the audible boundary', async () => {
   const tone = createFakeTone();
   let clock = 0;

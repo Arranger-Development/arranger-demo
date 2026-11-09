@@ -241,6 +241,27 @@ function createMatrixPlaybackAdapter(matrixSource, options = {}) {
   const totalBars = options.totalBars ?? TOTAL_BARS;
   const stepsPerBar = options.stepsPerBar ?? STEPS_PER_BAR;
   const totalSteps = totalBars * stepsPerBar;
+  const melodyAttacks = new WeakMap();
+
+  function nextMelodyAttack(bars, length, position) {
+    let cached = melodyAttacks.get(bars);
+    if (cached?.length !== length) {
+      const attacks = bars.slice(0, length / stepsPerBar).flatMap((bar, index) => (bar ?? []).flatMap((cell, step) => {
+        const events = expandNotePerformances(extractMelodyEvents(cell, index, step), cell);
+        return events.map(event => index * stepsPerBar + step + (event.timingOffset ?? 0));
+      })).sort((a, b) => a - b);
+      cached = { length, attacks };
+      melodyAttacks.set(bars, cached);
+    }
+    const { attacks } = cached;
+    let low = 0, high = attacks.length;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if (attacks[mid] <= position + 1e-7) low = mid + 1;
+      else high = mid;
+    }
+    return (attacks[low] ?? attacks[0] + length) - position;
+  }
 
   function getPositionForFlatStep(flatStep) {
     const normalizedStep = ((flatStep % totalSteps) + totalSteps) % totalSteps;
@@ -269,7 +290,8 @@ function createMatrixPlaybackAdapter(matrixSource, options = {}) {
           const length = (Number.isInteger(phraseLength) && phraseLength > 0 ? phraseLength : totalBars) * stepsPerBar;
           const local = ((flatStep - (source?.trackStepOffsets?.[trackId] ?? 0)) % length + length) % length;
           const sourceBar = Math.floor(local / stepsPerBar), sourceStep = local % stepsPerBar;
-          const cell = matrix?.[trackId]?.[sourceBar]?.[sourceStep] ?? null;
+          const trackBars = matrix?.[trackId];
+          const cell = trackBars?.[sourceBar]?.[sourceStep] ?? null;
           let events = [];
           if (trackType === 'drums') {
             events = Array.isArray(cell?.drumHits) ? cell.drumHits.filter(hit => extractDrumsInstruments(cell).includes(hit.instrument)).map(hit => ({
@@ -300,11 +322,19 @@ function createMatrixPlaybackAdapter(matrixSource, options = {}) {
             events = extractMelodyEvents(cell, bar, step);
           }
 
-          return expandNotePerformances(events, cell).map((event) => withPerformanceTimbre(instanceAware ? {
+          const performances = expandNotePerformances(events, cell);
+          if (trackType === 'melody' && cell?.playbackMode === 'gated' && cell.notePerformances) {
+            performances.sort((a, b) => (a.timingOffset ?? 0) - (b.timingOffset ?? 0));
+          }
+          return performances.map(event => withPerformanceTimbre({
             ...event,
-            trackId,
-            trackType,
-          } : event, cell?.requestedTimbreId));
+            ...(instanceAware ? { trackId, trackType } : {}),
+            ...(cell?.playbackMode === 'gated' ? { playbackMode: 'gated' } : {}),
+            ...(trackType === 'melody' && cell?.humMelodyTail && {
+              humMelodyTail: true,
+              nextAttackSteps: nextMelodyAttack(trackBars, length, local + (event.timingOffset ?? 0)),
+            }),
+          }, cell?.requestedTimbreId));
         })
     ));
   }
