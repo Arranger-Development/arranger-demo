@@ -1,4 +1,4 @@
-import { withPerformanceTimbre } from '../data/performanceTimbres.js';
+import { HUM_SUSTAIN, withPerformanceTimbre } from '../data/performanceTimbres.js';
 import {
   CHORD_SPAN,
   STEPS_PER_BAR,
@@ -300,7 +300,11 @@ function createMatrixPlaybackAdapter(matrixSource, options = {}) {
             events = extractMelodyEvents(cell, bar, step);
           }
 
-          return expandNotePerformances(events, cell).map(event => withPerformanceTimbre({
+          const performances = expandNotePerformances(events, cell);
+          if (trackType === 'melody' && cell?.requestedTimbreId === HUM_SUSTAIN) {
+            performances.sort((a, b) => (a.timingOffset ?? 0) - (b.timingOffset ?? 0));
+          }
+          return performances.map(event => withPerformanceTimbre({
             ...event,
             ...(instanceAware ? { trackId, trackType } : {}),
             ...(cell?.playbackMode === 'gated' ? { playbackMode: 'gated' } : {}),

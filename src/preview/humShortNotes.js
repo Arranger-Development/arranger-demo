@@ -2,6 +2,9 @@ const sampleRate = 22050;
 const envelopeSize = 110;
 const minShortSeconds = 0.048;
 const maxShortSeconds = 0.19;
+const transitionNoteSeconds = 0.13;
+const maxGlideSeconds = 0.24;
+const pitchHop = Math.round(0.008 * sampleRate);
 const midiPeriod = midi => sampleRate / (440 * 2 ** ((midi - 69) / 12));
 const minLag = Math.floor(midiPeriod(89));
 const maxLag = Math.ceil(midiPeriod(35));
@@ -38,7 +41,7 @@ function voicedRegions(samples) {
     last = frame;
   }
   finish();
-  return regions;
+  return { regions, levels };
 }
 
 function correlation(samples, center, lag) {
@@ -86,33 +89,45 @@ function settledPitch(samples, { start, end }) {
 
 const overlap = (a, b) => Math.min(a.end, b.end) - Math.max(a.start, b.start);
 
-function connectedShortNotes(samples, region, notes) {
-  // Only revisit compact runs the model already heard as several short notes.
-  if (region.end - region.start > 1.25) return [];
-  const source = notes.filter(note => overlap(note, region) >= minShortSeconds);
-  if (source.length < 2 || source.some(note => note.end - note.start > maxShortSeconds + 0.025)) return [];
+function pitchTrace(samples, region, start, end, cache) {
+  const first = Math.max(Math.ceil(start * sampleRate), Math.ceil(region.start * sampleRate) + pitchMargin);
+  const last = Math.min(Math.floor(end * sampleRate), Math.floor(region.end * sampleRate) - pitchMargin);
+  const trace = [];
+  for (let frame = Math.ceil(first / pitchHop) * pitchHop; frame <= last; frame += pitchHop) {
+    if (!cache.has(frame)) cache.set(frame, pitchAt(samples, frame));
+    trace.push({ frame, center: cache.get(frame) });
+  }
+  return trace;
+}
 
-  const hop = Math.round(0.008 * sampleRate);
-  const first = Math.ceil(region.start * sampleRate) + pitchMargin;
-  const last = Math.floor(region.end * sampleRate) - pitchMargin;
+function stablePitchRuns(trace) {
   const runs = [];
-  for (let frame = first; frame <= last; frame += hop) {
-    const center = pitchAt(samples, frame);
+  for (const { frame, center } of trace) {
     const pitch = Math.round(center);
     if (center === null || pitch < 36 || pitch > 88 || Math.abs(center - pitch) > 0.29) continue;
     const run = runs.at(-1);
-    if (run?.pitch === pitch && frame === run.last + hop) {
+    if (run?.pitch === pitch && frame === run.last + pitchHop) {
       run.last = frame;
       run.count++;
       run.low = Math.min(run.low, center);
       run.high = Math.max(run.high, center);
     } else runs.push({ pitch, first: frame, last: frame, count: 1, low: center, high: center });
   }
-  const stable = runs.filter(run => run.count >= 4 && run.high - run.low <= 0.34);
+  return runs.filter(run => run.count >= 4 && run.high - run.low <= 0.34);
+}
+
+function connectedShortNotes(samples, region, notes, cache) {
+  // Only revisit compact runs the model already heard as several short notes.
+  if (region.end - region.start > 1.25) return [];
+  const source = notes.filter(note => overlap(note, region) >= minShortSeconds);
+  if (source.length < 2 || source.some(note => note.end - note.start > maxShortSeconds + 0.025)) return [];
+
+  const trace = pitchTrace(samples, region, region.start, region.end, cache);
+  const stable = stablePitchRuns(trace);
   // A glide spends most of its time between pitches, with no quick transition
   // between separate steady plateaus. Keep the model result when the run is unclear.
-  if (stable.length < 2 || (stable[0].first - first) / sampleRate > 0.024
-    || (last - stable.at(-1).last) / sampleRate > 0.024
+  if (stable.length < 2 || (stable[0].first - trace[0].frame) / sampleRate > 0.024
+    || (trace.at(-1).frame - stable.at(-1).last) / sampleRate > 0.024
     || stable.some((run, i) => i > 0 &&
       (run.pitch === stable[i - 1].pitch || (run.first - stable[i - 1].last) / sampleRate > 0.036))) return [];
 
@@ -126,15 +141,87 @@ function connectedShortNotes(samples, region, notes) {
   return recovered.every(note => note.end - note.start >= minShortSeconds) ? recovered : [];
 }
 
+function hasLocalAttack(levels, region, start) {
+  if (start <= region.start + 0.025) return true;
+  const frame = Math.round(start * sampleRate / envelopeSize);
+  const before = Math.max(0, ...levels.slice(Math.max(0, frame - 3), frame));
+  const after = Math.min(...levels.slice(frame, frame + 3));
+  return after > before * 1.75 + 0.005;
+}
+
+function followsGlide(trace, from, to) {
+  const measured = trace.filter(({ center }) => center !== null);
+  if (measured.length < Math.max(4, trace.length * 0.65)) return false;
+  const direction = Math.sign(to - from);
+  let edge = from * direction;
+  for (const { center } of measured) {
+    const pitch = center * direction;
+    if (pitch < edge - 0.32 || pitch > to * direction + 0.32) return false;
+    edge = Math.max(edge, pitch);
+  }
+  return true;
+}
+
+function refineShortTransitions(notes, samples, regions, levels, cache) {
+  const trace = (region, start, end) => pitchTrace(samples, region, start, end, cache);
+  const reviewed = notes.map(note => {
+    const middle = (note.start + note.end) / 2;
+    const region = regions.find(({ start, end }) => start <= middle && middle <= end);
+    if (!region || note.shortAttack || note.end - note.start > transitionNoteSeconds + 1e-6
+      || region.start > note.start + 0.012 || region.end < note.end - 0.012
+      || hasLocalAttack(levels, region, note.start)) return { note, region };
+    const frames = trace(region, note.start, note.end);
+    const stable = stablePitchRuns(frames);
+    if (stable.some(run => run.pitch === note.pitch)) return { note, region };
+    const supported = stable.find(run => run.count > frames.length / 2 && Math.abs(run.pitch - note.pitch) <= 2);
+    if (supported) return { region, note: { ...note, pitch: supported.pitch,
+      pitchCenter: (supported.low + supported.high) / 2, pitchRevised: true } };
+    // With too little voiced evidence, keep the model's result.
+    const unsettled = !stable.length && frames.filter(frame => frame.center !== null).length >= 4;
+    return { note, region, unsettled };
+  });
+
+  const result = [];
+  for (let i = 0; i < reviewed.length;) {
+    const { note, region, unsettled } = reviewed[i];
+    if (!unsettled) {
+      result.push(note);
+      i++;
+      continue;
+    }
+    let end = i + 1;
+    while (reviewed[end]?.unsettled && reviewed[end].region === region) end++;
+    const left = result.at(-1), right = reviewed[end]?.note;
+    if (left && right && left.pitch !== right.pitch && reviewed[i - 1]?.region === region
+      && reviewed[end].region === region && !hasLocalAttack(levels, region, right.start)) {
+      const low = Math.min(left.pitch, right.pitch), high = Math.max(left.pitch, right.pitch);
+      const between = reviewed.slice(i, end).every(({ note }) => note.pitch > low && note.pitch < high);
+      const from = stablePitchRuns(trace(region, Math.max(left.start, left.end - 0.11), note.start))
+        .findLast(run => run.pitch === left.pitch);
+      const to = stablePitchRuns(trace(region, right.start - 0.015, Math.min(right.end, right.start + 0.11)))
+        .find(run => run.pitch === right.pitch);
+      if (between && from && to && to.first > from.last && to.first - from.last <= maxGlideSeconds * sampleRate
+        && followsGlide(trace(region, from.last / sampleRate, to.first / sampleRate), left.pitch, right.pitch)) {
+        result[result.length - 1] = { ...left, end: right.start };
+        i = end;
+        continue;
+      }
+    }
+    for (; i < end; i++) result.push(reviewed[i].note);
+  }
+  return result;
+}
+
 export function recoverShortHumNotes(notes, samples) {
   if (!samples?.length) return notes;
-  const regions = voicedRegions(samples);
+  const { regions, levels } = voicedRegions(samples);
+  const cache = new Map();
   const recovered = new Map();
   for (const region of regions) {
     const length = region.end - region.start;
     if (length < minShortSeconds) continue;
     if (length > maxShortSeconds) {
-      const connected = connectedShortNotes(samples, region, notes);
+      const connected = connectedShortNotes(samples, region, notes, cache);
       if (connected.length) recovered.set(region, connected);
       continue;
     }
@@ -145,7 +232,7 @@ export function recoverShortHumNotes(notes, samples) {
     const model = notes.find(note => note.pitch === pitch && overlap(note, region) >= length / 2);
     recovered.set(region, [{ ...region, pitch, pitchCenter, amplitude: model?.amplitude ?? 0.7, shortAttack: true }]);
   }
-  if (!recovered.size) return notes;
+  if (!recovered.size) return refineShortTransitions(notes, samples, regions, levels, cache);
 
   const recoveredRegions = [...recovered.keys()];
   const remaining = notes.flatMap(note => {
@@ -161,5 +248,6 @@ export function recoverShortHumNotes(notes, samples) {
       return [{ ...note, start: Math.max(note.start, region.start), end: Math.min(note.end, region.end) }];
     });
   });
-  return [...remaining, ...[...recovered.values()].flat()].sort((a, b) => a.start - b.start);
+  const combined = remaining.concat(...recovered.values()).sort((a, b) => a.start - b.start);
+  return refineShortTransitions(combined, samples, regions, levels, cache);
 }

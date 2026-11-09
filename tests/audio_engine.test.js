@@ -11,6 +11,7 @@ import AudioEngine, {
 } from '../src/audio/AudioEngine.js';
 import createAudioEngine from '../src/audio/createAudioEngine.js';
 import { STEPS_PER_BAR, TOTAL_BARS } from '../src/domain/musicConstants.js';
+import { HUM_SUSTAIN } from '../src/data/performanceTimbres.js';
 import createInitialMatrix from '../src/store/createInitialMatrix.js';
 import useMusicStore from '../src/store/useMusicStore.js';
 import { dispatchCommand } from '../src/input/commandDispatcher.js';
@@ -100,6 +101,24 @@ test('natural chord sample banks preserve tails and velocity even with authored 
   engine.triggerMelodyBankEvent({trackId:'chord',note:'C4',timbreId:'piano',playbackMode:'natural',durationSteps:1},3,120);
   engine.triggerMelodyBankEvent({trackId:'chord',note:'E4',timbreId:'piano',playbackMode:'natural',durationSteps:1.5,gateDuration:true,velocity:.65},4,120);
   assert.deepEqual(calls,[['natural','C4',3,1],['natural','E4',4,.65]]);
+});
+
+test('humming sustain reserves its fade within the note duration', async () => {
+  const engine = new AudioEngine({ tone: createFakeTone() });
+  engine.startAudio = async () => AUDIO_STATUSES.READY;
+  let release;
+  const hits = [];
+  engine.createChordSynth = () => ({
+    volume: { value: 0 },
+    set: ({ envelope }) => { release = envelope.release; assert.equal(envelope.releaseCurve, 'linear'); },
+    triggerAttackRelease: (note, duration, time) => hits.push({ note, duration, time }),
+  });
+  assert.ok(await engine.prepareMelodyTimbre(HUM_SUSTAIN, 'melody', 'gated'));
+  const hit = { type: 'melody', timbreId: HUM_SUSTAIN, playbackMode: 'gated', durationSteps: 0.5 };
+  assert.ok(engine.triggerMelodyBankEvent({ ...hit, note: 'C4' }, 2, 120));
+  assert.ok(engine.triggerMelodyBankEvent({ ...hit, note: 'D4' }, 2.0625, 120));
+  assert.equal(release, 0.012);
+  assert.ok(Math.abs(hits[0].time + hits[0].duration + release - hits[1].time) < 1e-9);
 });
 
 test('live preview length changes keep absolute phase and progress waits for the audible boundary', async () => {

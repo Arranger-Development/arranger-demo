@@ -93,7 +93,7 @@ function shortNoteAudio(pitches, duration, interval, { scoop = 0, scoopTime = 0.
     const end = start + (index === pitches.length - 1 ? tail ?? duration : duration);
     for (let i = Math.ceil(start * rate); i < Math.ceil(end * rate); i++) {
       const time = i / rate;
-      const bend = scoop * Math.max(0, 1 - (time - start) / scoopTime);
+      const bend = (Array.isArray(scoop) ? scoop[index] : scoop) * Math.max(0, 1 - (time - start) / scoopTime);
       phase += 2 * Math.PI * 440 * 2 ** ((pitch - bend - 69) / 12) / rate;
       const level = legato ? 1 : Math.min(1, (time - start) / 0.01, (end - time) / 0.015);
       samples[i] = level * (0.23 * Math.sin(phase) + 0.12 * Math.sin(2 * phase) + 0.04 * Math.sin(3 * phase));
@@ -138,6 +138,39 @@ test('connected short notes are repaired when the audio supports distinct pitche
   const glide = shortNoteAudio([60], 0.45, 0.5, { scoop: 6, scoopTime: 0.32 });
   const glideModel = [event(0.186, 56, 0.093), event(0.29, 58, 0.093), event(0.406, 60, 0.165)];
   assert.deepEqual(cleanHumNotes(glideModel, 2, glide), cleanHumNotes(glideModel, 2));
+});
+
+test('short transition notes are removed from a continuous slide between held pitches', () => {
+  const model = [event(0.116, 60, 0.093), event(0.209, 61, 0.081), event(0.29, 63, 0.082), event(0.383, 65, 0.186)];
+  const glide = shortNoteAudio([60, 65], 0.08, 0.08, { tail: 0.35, scoop: [0, 5], scoopTime: 0.22, legato: true });
+  const notes = cleanHumNotes(model, 2, glide);
+  assert.deepEqual(notes.map(note => note.pitch), [60, 65]);
+  assert.equal(notes[0].end, notes[1].start);
+
+  const withRest = glide.slice();
+  withRest.fill(0, Math.round(0.275 * 22050), Math.round(0.32 * 22050));
+  const separated = cleanHumNotes(model, 2, withRest);
+  assert.ok(separated[0].end < separated.at(-1).start);
+});
+
+test('a steady short chromatic note in a longer voiced passage uses its measured pitch', () => {
+  const samples = shortNoteAudio([60, 64, 65], 0.082, 0.082, { tail: 0.32, legato: true });
+  const model = [event(0.12, 60, 0.082), event(0.202, 63, 0.082), event(0.284, 65, 0.32)];
+  assert.deepEqual(cleanHumNotes(model, 2, samples).map(note => note.pitch), [60, 64, 65]);
+});
+
+test('several humming pitches in one Jam step keep their original order and do not overlap', () => {
+  const store = makeStore(), projectId = store.current().id;
+  const { bars } = makeHumMelody([
+    { start: 0, end: 0.05, pitch: 60, amplitude: 0.8 },
+    { start: 0.05, end: 0.10, pitch: 62, amplitude: 0.8 },
+    { start: 0.10, end: 0.15, pitch: 60, amplitude: 0.8 },
+  ], 88);
+  const [phrase] = store.insertHumPhrases([{ trackId: 'melody', bars }], { projectId });
+  const adapter = createMatrixPlaybackAdapter(jamCombinationSnapshot(store.current().workspace, phrase, true));
+  const hits = adapter.getEventsForStep(0, 0).filter(hit => hit.type === 'melody');
+  assert.deepEqual(hits.map(hit => hit.note), ['C4', 'D4', 'C4']);
+  assert.ok(hits.slice(1).every((hit, i) => hit.timingOffset + 1e-9 >= hits[i].timingOffset + hits[i].durationSteps));
 });
 
 test('first empty column keeps existing selections and accompaniment publishes atomically', () => {

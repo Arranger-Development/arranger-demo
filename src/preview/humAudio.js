@@ -22,18 +22,22 @@ export async function decodeHumRecording(blob) {
 export function playHumNotes(notes) {
   const audio = new AudioContext();
   const start = audio.currentTime + 0.025;
-  for (const note of notes) {
-    const time = start + note.start, end = start + note.end;
+  for (const [index, note] of notes.entries()) {
+    const time = start + note.start;
+    const end = start + Math.min(note.end, notes[index + 1]?.start ?? Infinity);
+    const length = end - time;
+    if (length <= 0) continue;
+    const attack = Math.min(0.008, length / 3), release = Math.min(0.012, length / 3);
     const voice = audio.createOscillator(), envelope = audio.createGain();
     voice.type = 'triangle';
     voice.frequency.value = 440 * 2 ** ((note.pitch - 69) / 12);
     envelope.gain.setValueAtTime(0, time);
-    envelope.gain.linearRampToValueAtTime(0.18, time + 0.015);
-    envelope.gain.setValueAtTime(0.18, end - 0.025);
+    envelope.gain.linearRampToValueAtTime(0.18, time + attack);
+    envelope.gain.setValueAtTime(0.18, end - release);
     envelope.gain.linearRampToValueAtTime(0, end);
     voice.connect(envelope).connect(audio.destination);
     voice.start(time);
-    voice.stop(end + 0.01);
+    voice.stop(end);
   }
   const close = () => { if (audio.state !== 'closed') void audio.close(); };
   const timer = setTimeout(close, (notes.at(-1).end + 0.1) * 1000);

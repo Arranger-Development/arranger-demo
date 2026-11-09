@@ -92,7 +92,7 @@ export function cleanHumNotes(events, recordingSeconds, samples) {
   const valid = recoverShortHumNotes(notes.filter(note => note.end - note.start >= minNoteSeconds), samples);
   if (!valid.some(note => note.pitchCenter !== undefined)) return valid;
   const corrected = correctHumPitch(valid);
-  const pitchChanged = corrected.some((note, index) => note.pitch !== valid[index].pitch);
+  const pitchChanged = valid.some((note, index) => note.pitchRevised || note.pitch !== corrected[index].pitch);
   const joined = [];
   let previousShortAttack = false;
   for (const { shortAttack, ...note } of corrected) {
@@ -144,10 +144,11 @@ export function makeHumMelody(notes, bpm) {
   for (let i = 1; i < events.length; i++) events[i - 1].end = Math.min(events[i - 1].end, events[i].start);
   const steps = emptySteps(Math.max(1, Math.ceil(events.at(-1).end / stepsPerBar)) * stepsPerBar);
   for (const event of events) {
+    if (event.end <= event.start) continue;
     const step = Math.floor(event.start), note = noteName(event.pitch), cell = steps[step];
     const notePerformances = cell?.notePerformances ?? {};
     (notePerformances[note] ??= []).push({ offsetSteps: event.start - step,
-      durationSteps: Math.max(0.05, event.end - event.start), velocity: clamp(0.4 + event.amplitude * 0.45, 0.5, 0.86) });
+      durationSteps: event.end - event.start, velocity: clamp(0.4 + event.amplitude * 0.45, 0.5, 0.86) });
     steps[step] = createMelodyCellFromNotes(Object.keys(notePerformances), { notePerformances });
   }
   return { bars: toBars(steps), shift };

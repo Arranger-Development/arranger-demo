@@ -55,7 +55,8 @@ export function correctHumPitch(notes) {
   const anchors = new Set(notes.filter((_, index) => stable[index]).map(note => pitchClass(note.pitch)));
   const plausibleScales = anchors.size >= 3
     ? scales.filter(scale => [...anchors].every(tone => scale.includes(tone))) : [];
-  return notes.map(({ pitchCenter, ...note }, index) => {
+  return notes.map(({ pitchCenter, pitchRevised, ...note }, index) => {
+    if (pitchRevised) return note;
     const drift = pitchCenter - note.pitch;
     if (!Number.isFinite(drift) || Math.abs(drift) < 0.24 || Math.abs(drift) > 0.82) return note;
     const target = note.pitch + Math.sign(drift);

@@ -27,6 +27,7 @@ const DRUMS_SAMPLE_FILES = Object.freeze({
 });
 const SAMPLE_ASSET_VERSION = 'sample-refresh-20260608';
 const CHORD_SAMPLE_DURATION = '2s';
+const HUM_SUSTAIN_RELEASE_SECONDS = 0.012;
 const MAX_LIVE_INPUT_LATENCY_SECONDS = 0.25;
 const LAUNCHPAD_LIVE_INPUT_BIAS_SECONDS = 0.012;
 const DRUM_FADE_IN_SECONDS = 0.0005;
@@ -746,7 +747,9 @@ export default class AudioEngine {
     if (normalizedTimbreId === HUM_SUSTAIN) {
       const sampler = this.createChordSynth(trackId);
       if (!sampler) return false;
-      sampler.set?.({ oscillator: { type: 'triangle' }, envelope: { attack: 0.025, decay: 0.12, sustain: 0.75, release: 0.12 } });
+      sampler.set?.({ oscillator: { type: 'triangle' }, envelope: {
+        attack: 0.008, decay: 0.12, sustain: 0.75, release: HUM_SUSTAIN_RELEASE_SECONDS, releaseCurve: 'linear',
+      } });
       banks.set(bankKey, { timbreId: normalizedTimbreId, sampler, ready: true });
       return true;
     }
@@ -1244,7 +1247,10 @@ export default class AudioEngine {
     if (natural) {
       bank.sampler.triggerAttack(event.note, time, event.velocity ?? 1);
     } else {
-      const duration = eventDuration(event, bpm);
+      const nominalDuration = eventDuration(event, bpm);
+      const duration = event.timbreId === HUM_SUSTAIN && typeof nominalDuration === 'number'
+        ? nominalDuration - HUM_SUSTAIN_RELEASE_SECONDS : nominalDuration;
+      if (typeof duration === 'number' && duration <= 0) return false;
       bank.sampler.triggerAttackRelease(event.note, duration, time, event.velocity ?? 1);
     }
     return true;
