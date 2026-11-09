@@ -372,6 +372,26 @@ test('a sustained melody continues visibly across a bar with no attack until the
   assert.equal(adapter.getEventsForStep(2, 0, 32)[0].note, 'D4');
 });
 
+test('a humming tail follows the next actual attack within a cell and across the loop seam', () => {
+  const notes = [{ start: 0, end: 0.07, pitch: 60, amplitude: 1 },
+    { start: 0.08, end: 0.15, pitch: 60, amplitude: 1 },
+    { start: 1.9, end: 2, pitch: 62, amplitude: 1 }];
+  const { bars } = makeHumMelody(notes, 120, { quantize: false });
+  const store = makeStore();
+  const [phrase] = store.insertHumPhrases([{ trackId: 'melody', bars }], { projectId: store.current().id });
+  const snapshot = jamCombinationSnapshot(store.current().workspace, phrase, true);
+  const adapter = createMatrixPlaybackAdapter(snapshot, { totalBars: snapshot.totalBars });
+  const [first, repeat] = adapter.getEventsForFlatStep(0);
+  const [last] = adapter.getEventsForFlatStep(15);
+  assert.deepEqual([first.note, repeat.note, last.note], ['C4', 'C4', 'D4']);
+  assert.ok([first, repeat, last].every(hit => hit.humMelodyTail));
+  assert.equal(first.nextAttackSteps, 0.64);
+  assert.ok(Math.abs(repeat.nextAttackSteps - 14.56) < 1e-6);
+  assert.ok(Math.abs(last.nextAttackSteps - 0.8) < 1e-6);
+  assert.ok(Math.abs(eventDuration(last, 120) - 0.1) < 1e-6);
+  assert.equal(phrase.bars[0][0].humMelodyTail, undefined);
+});
+
 test('resizing a recorded melody tail keeps its original attacks and velocity', () => {
   const store = makeStore();
   const notes = [

@@ -1,3 +1,5 @@
+import { melodyReleaseSeconds, scheduleMelodyRelease } from '../audio/melodyRelease.js';
+
 const targetRate = 22050;
 export const maxHumSeconds = 10;
 
@@ -22,24 +24,31 @@ export async function decodeHumRecording(blob) {
 export function playHumNotes(notes) {
   const audio = new AudioContext();
   const start = audio.currentTime + 0.025;
+  const close = () => { if (audio.state !== 'closed') void audio.close(); };
+  let pending = 0;
   for (const [index, note] of notes.entries()) {
     const time = start + note.start;
-    const end = start + Math.min(note.end, notes[index + 1]?.start ?? Infinity);
+    const next = notes[index + 1]?.start ?? Infinity;
+    const end = start + Math.min(note.end, next);
     const length = end - time;
     if (length <= 0) continue;
-    const attack = Math.min(0.008, length / 3), release = Math.min(0.012, length / 3);
+    const attack = Math.min(0.008, length / 3), release = melodyReleaseSeconds(end - start, next);
     const voice = audio.createOscillator(), envelope = audio.createGain();
     voice.type = 'triangle';
     voice.frequency.value = 440 * 2 ** ((note.pitch - 69) / 12);
     envelope.gain.setValueAtTime(0, time);
     envelope.gain.linearRampToValueAtTime(0.18, time + attack);
-    envelope.gain.setValueAtTime(0.18, end - release);
-    envelope.gain.linearRampToValueAtTime(0, end);
+    scheduleMelodyRelease(envelope.gain, 0.18, end, release);
     voice.connect(envelope).connect(audio.destination);
+    pending++;
+    voice.onended = () => {
+      voice.disconnect();
+      envelope.disconnect();
+      if (--pending === 0) close();
+    };
     voice.start(time);
-    voice.stop(end);
+    voice.stop(end + release);
   }
-  const close = () => { if (audio.state !== 'closed') void audio.close(); };
-  const timer = setTimeout(close, (notes.at(-1).end + 0.1) * 1000);
-  return () => { clearTimeout(timer); close(); };
+  if (!pending) close();
+  return close;
 }

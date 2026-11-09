@@ -404,6 +404,7 @@ export function jamCombinationSnapshot(w, override = null, solo = false) {
   for (const t of TRACKS) for (const bar of matrix[t]) for (const cell of bar) if (cell) {
     const gated = (t === 'melody' || t === 'chord') && selected[t]?.sourcePresetId === HUM_SOURCE;
     setTemplateTimbre(cell, t, timbres[t], gated);
+    if (t === 'melody' && gated) cell.humMelodyTail = true;
   }
   return { id: 'jam-current-combination', matrix, totalBars, phraseBars: byTrack(t => selected[t]?.bars.length ?? 1), repeat: null, kind: 'main', timbres, phraseIds: byTrack(t => selected[t] ? selected[t].id ?? selected[t].editingTemplateId ?? 'draft' : null) };
 }

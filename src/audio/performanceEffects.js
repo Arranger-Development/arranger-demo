@@ -71,7 +71,10 @@ export async function createPerformanceEffects(engine) {
       engine.drumPlayers.forEach((n) => route(n, 'drums')); route(engine.fallbackSynth, 'drums');
       route(engine.bassSampler, 'bass'); route(engine.chordSampler, 'chord'); route(engine.chordSynth, 'chord');
       for (const key of ['melodySampler', 'melodyInputSampler', 'melodyOneShotSampler']) route(engine[key], 'melody');
-      engine.melodyTrackBanks.forEach((banks, track) => banks.forEach((bank) => route(bank.sampler, track)));
+      engine.melodyTrackBanks.forEach((banks, track) => banks.forEach(bank => {
+        route(bank.sampler, track);
+        route(bank.humOutput, track);
+      }));
     },
     connect(node, track) { route(node, track); },
     releaseTrack(track, time = context.currentTime) {
