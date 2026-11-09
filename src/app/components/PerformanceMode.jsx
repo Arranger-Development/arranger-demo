@@ -42,7 +42,7 @@ const BACKING_TRACKS = ['chord', 'bass', 'drums'];
 const ART = Object.fromEntries(TRACKS.map(t => [t, `${import.meta.env.BASE_URL}assets/jam-instruments/${t}-v1.png`]));
 const timbreLabel = id => PERFORMANCE_SAMPLE_BANKS[id]?.label ?? ({ 'soft-electronic-kit':'柔和电子鼓', 'warm-electric-piano':'温暖电钢琴', 'round-electric-bass':'圆润电贝司', 'airy-synth-lead':'空气感合成器' })[id] ?? id;
 const emptySelection = () => Object.fromEntries(TRACKS.map(t => [t, null]));
-export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack, onHome, controlsRef, hardwareInput, projectStore: providedStore, humControl, arrangeMelody }) {
+export default function PerformanceMode({ active, genreId, profileId = null, initialBpm, onBack, onHome, controlsRef, hardwareInput, projectStore: providedStore, humControl, arrangeMelody, transientProject = false }) {
   const [projectStore] = useState(() => providedStore ?? getJamTemplateProjects(genreId, profileId, initialBpm));
   const library = useSyncExternalStore(projectStore.subscribe, projectStore.getSnapshot);
   const project = library.projects.find(p => p.id === library.activeId), w = project.workspace;
@@ -539,11 +539,12 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       <button type="button" className="performance-connect" title="推子：收到初始值即同步音量、滤波、混响、弯音；两颗旋钮与当前编辑器左右顺序一致，转动直接接管，无需复位。" onClick={() => { void audio.startAudio(); void hardwareInput?.onConnect(); void midiInput.connect(); }}>{midiInput.status === 'connecting' ? '正在连接…' : <>{[hardwareInput?.status === 'connected' && 'Launchpad',midiInput.status === 'connected' && '旋钮推子'].filter(Boolean).join(' · ') || '连接控制器'}{hardwareInput?.status === 'connected' || midiInput.status === 'connected' ? ' 已连接' : ''}</>}</button>
     </header>
     <JamProjectControls project={project} projects={library.projects}
-      onNew={() => openProject(null)} onOpen={openProject} onRename={projectStore.rename} transient={Boolean(humControl)}/>
+      onNew={() => openProject(null)} onOpen={openProject} onRename={projectStore.rename} transient={transientProject}/>
     <div ref={workbench} className="template-jam-workbench studio-workbench">
       <main className="studio-main" aria-label="乐句工作台">
         {humControl ? createElement(humControl, {
           key: project.id, projectId: project.id, projectStore, jamPlaying: running,
+          active, enabled: active && draft?.trackId === 'melody',
           pauseJam: () => { if (audition.getTrack()) audition.pause(); else playback.stop(); },
           emptyMelodyId: draft?.trackId === 'melody' && !hasJamNotes(draft) ? draft.editingTemplateId : undefined,
           showRecording: phrase => {

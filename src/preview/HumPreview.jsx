@@ -15,6 +15,6 @@ projectStore.rename('哼唱预览');
 export default function HumPreview() {
   const controlsRef = useRef(null);
   const { connect, ...hardwareInput } = useLaunchpadXCommands({ performanceActive: true, performanceControlsRef: controlsRef });
-  return <PerformanceMode active genreId="pop" projectStore={projectStore} humControl={HumControls} arrangeMelody={arrangeHumBacking} controlsRef={controlsRef}
+  return <PerformanceMode active transientProject genreId="pop" projectStore={projectStore} humControl={HumControls} arrangeMelody={arrangeHumBacking} controlsRef={controlsRef}
     hardwareInput={{ ...hardwareInput, onConnect: connect }} />;
 }

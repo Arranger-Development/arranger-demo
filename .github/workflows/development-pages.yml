@@ -36,6 +36,7 @@ jobs:
           npm ci
           npm test
           npm run lint
+          python3 .github/scripts/test-pages-release.py
           npm run build
           python3 .github/scripts/check-pages-artifact.py dist arranger-demo
       - uses: actions/checkout@v4
