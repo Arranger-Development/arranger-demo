@@ -17,7 +17,8 @@ import {
 } from '../data/performanceTimbres.js';
 import { AUDIO_STATUSES } from './audioStatus.js';
 import { createMatrixPlaybackAdapter } from './matrixPlaybackAdapter.js';
-import { eventDuration, usesNaturalSampleTail } from '../domain/notePerformances.js';
+import { eventDuration, noteDurationSteps, usesNaturalSampleTail } from '../domain/notePerformances.js';
+import { melodyReleaseSeconds, playMelodySample } from './melodyRelease.js';
 
 const DRUMS_SAMPLE_FILES = Object.freeze({
   kick: 'samples/Drums/Kick_v0.22.wav',
@@ -546,7 +547,9 @@ export default class AudioEngine {
     }
     // Fixed-pitch chord clips use the same banks, on their own track channel.
     this.melodyTrackBanks.get(trackId)?.forEach((bank, bankTimbreId) => {
-      applyVolume(bank.sampler, getMelodyVolume(volume, bank.timbreId ?? bankTimbreId));
+      const bankVolume = getMelodyVolume(volume, bank.timbreId ?? bankTimbreId);
+      applyVolume(bank.sampler, bankVolume);
+      if (bank.humOutput) bank.humOutput.gain.value = 10 ** (bankVolume / 20);
     });
     if (volume === -Infinity) this.releaseMelodyBanks(this.now(), trackId);
     return volume;
@@ -1224,18 +1227,51 @@ export default class AudioEngine {
     return false;
   }
 
+  triggerHumSample(event, trackId, bank, time, bpm, volume) {
+    const context = this.getToneContext()?.rawContext;
+    if (!context?.createBufferSource || !this.tone?.Frequency) return false;
+    bank.humSamples ??= Object.entries(this.getMelodySampleUrls(event.timbreId)).flatMap(([note, url]) => {
+      const buffer = this.sampleBufferCache.getBuffer(url);
+      return buffer ? [{ midi: this.tone.Frequency(note).toMidi(), buffer }] : [];
+    }).sort((a, b) => b.midi - a.midi);
+    if (!bank.humSamples.length) return false;
+
+    const midi = this.tone.Frequency(event.note).toMidi();
+    // Match Tone.Sampler's closest-root selection, including higher roots on ties.
+    const sample = bank.humSamples.reduce((closest, candidate) =>
+      Math.abs(candidate.midi - midi) < Math.abs(closest.midi - midi) ? candidate : closest);
+    if (!bank.humOutput) {
+      bank.humOutput = this.connectToOutput(context.createGain(), trackId);
+      this.performanceEffects?.connect(bank.humOutput, trackId);
+      bank.humVoices = new Set();
+    }
+    const stepSeconds = 60 / bpm / 4;
+    const duration = noteDurationSteps(event) * stepSeconds;
+    const release = melodyReleaseSeconds(duration, (event.nextAttackSteps ?? Infinity) * stepSeconds);
+    const rate = 2 ** ((midi - sample.midi) / 12);
+    bank.humOutput.gain.value = 10 ** (volume / 20);
+    const level = event.velocity ?? 1;
+    const stop = playMelodySample(context, bank.humOutput, sample.buffer, rate, level, time, duration, release,
+      () => bank.humVoices.delete(stop));
+    bank.humVoices.add(stop);
+    return true;
+  }
+
   triggerMelodyBankEvent(event, time, bpm = DEFAULT_BPM) {
     const trackId = event.trackId ?? 'melody';
     const bank = this.getMelodyBank(event.timbreId, trackId, event.playbackMode);
     if (!bank?.ready) return false;
+    const volume = this.getMelodyTrackVolume(trackId, event.timbreId);
+    if (event.humMelodyTail && this.triggerHumSample(event, trackId, bank, time, bpm, volume)) return true;
     const natural = usesNaturalSampleTail({ ...event, trackId });
     const method = natural ? 'triggerAttack' : 'triggerAttackRelease';
     if (typeof bank.sampler?.[method] !== 'function') return false;
-    applyVolume(bank.sampler, this.getMelodyTrackVolume(trackId, event.timbreId));
+    applyVolume(bank.sampler, volume);
     if (natural) {
       bank.sampler.triggerAttack(event.note, time, event.velocity ?? 1);
     } else {
       const duration = eventDuration(event, bpm);
+      if (typeof duration === 'number' && duration <= 0) return false;
       bank.sampler.triggerAttackRelease(event.note, duration, time, event.velocity ?? 1);
     }
     return true;
@@ -1248,7 +1284,10 @@ export default class AudioEngine {
 
   releaseMelodyBanks(time = this.now(), trackId = null) {
     this.melodyTrackBanks.forEach((banks, id) => {
-      if (!trackId || id === trackId) banks.forEach((bank) => bank.sampler?.releaseAll?.(time));
+      if (!trackId || id === trackId) banks.forEach(bank => {
+        bank.sampler?.releaseAll?.(time);
+        bank.humVoices?.forEach(stop => stop(time));
+      });
     });
   }
 
@@ -1299,7 +1338,11 @@ export default class AudioEngine {
     this.melodyTrackRequestIds.set(trackId, (this.melodyTrackRequestIds.get(trackId) ?? 0) + 1);
     if (this.melodyPreviewSession?.trackId === trackId) this.stopMelodyPreview(time);
     const banks = this.melodyTrackBanks.get(trackId);
-    banks?.forEach((bank) => disposeAudioNode(bank.sampler, time));
+    banks?.forEach(bank => {
+      bank.humVoices?.forEach(stop => stop(time));
+      bank.humOutput?.disconnect();
+      disposeAudioNode(bank.sampler, time);
+    });
     banks?.clear();
     if (trackId !== 'melody') this.melodyTrackBanks.delete(trackId);
 
@@ -1885,7 +1928,7 @@ export default class AudioEngine {
       for (const cell of bars.flat()) {
         const bank = getPerformanceSampleBank(getTrackTypeFromInstanceId(trackId), cell?.requestedTimbreId ?? cell?.timbreId);
         if (bank?.track === 'drums') drumTimbres.set(`${trackId}:${bank.id}`, [trackId, bank.id]);
-        if (bank && bank.track !== 'drums') addTimbre(trackId, bank.id, 'natural');
+        if (bank && bank.track !== 'drums') addTimbre(trackId, bank.id, cell.playbackMode ?? 'natural');
         if (!bank && ['melody', 'note', 'notes'].includes(cell?.type) && cell.timbreId) {
           addTimbre(trackId, cell.timbreId, cell.playbackMode);
         }

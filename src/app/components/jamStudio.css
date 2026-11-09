@@ -68,7 +68,7 @@
 .jam-studio .rotary-knob { width:68px; height:68px; }
 .jam-studio .rotary-face { width:54px; height:54px; }
 .jam-studio .rotary-marker { height:13px; top:6px; width:3px; left:calc(50% - 1.5px); }
-.jam-studio .rotary-value { font-size:18px; line-height:20px; }
+.jam-studio .rotary-value { font-size:18px; line-height:20px; min-height:1lh; }
 .jam-studio .rotary-ticks { width:100px; font-size:8px; line-height:10px; }
 .jam-studio .studio-grid-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; color:var(--tj-muted); font-size:10px; }
 .jam-studio .studio-bar-pager,.jam-studio .studio-undo { display:flex; gap:4px; align-items:center; }

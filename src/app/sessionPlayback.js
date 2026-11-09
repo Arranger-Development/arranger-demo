@@ -3,7 +3,7 @@ import { loopRepeat } from './loopOrder.js';
 import { createJamTrackPlayback } from './jamTrackPlayback.js';
 
 // Read musical transitions before the scheduler reads events at the boundary.
-export function createSessionPlayback(audio, notify = () => {}, automation) {
+export function createSessionPlayback(audio, notify = () => {}, automation, { humPreview = false } = {}) {
   let generation = 0, current = null, pending = null, sequence = [], sourceSnapshot = null;
   let startStep = 0, lastStep = -1, cycle = 1, mode = 'stopped', loading = false, bpm = 100, audible = null;
   let recordingStopAt = null, previousRepeat = null;
@@ -107,6 +107,11 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
       await audio.preparePerformanceEffects?.();
       if (request !== generation) return;
       const banks = Object.values(PERFORMANCE_SAMPLE_BANKS);
+      const gatedHumTimbres = humPreview ? [
+        { trackId: 'melody', timbreId: 'piano', playbackMode: 'gated' },
+        { trackId: 'chord', timbreId: 'piano', playbackMode: 'gated' },
+        ...banks.filter(bank => ['melody', 'chord'].includes(bank.track)).map(bank => ({ trackId: bank.track, timbreId: bank.id, playbackMode: 'gated' })),
+      ] : [];
       const started = await audio.play({ bpm, bar: 0, step: 0, totalBars: current.snapshot.totalBars,
         matrixSource: () => current?.snapshot.matrix ?? targets[0].snapshot.matrix,
         playbackSource: (step, time) => request === generation ? source(step, time) : { done: true },
@@ -114,7 +119,7 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
         additionalDrumTimbres: banks.filter(bank => bank.track === 'drums').map(bank => ({ trackId: bank.track, timbreId: bank.id })),
         additionalTimbres: ['piano', 'yangqin', 'blues'].flatMap(timbreId => [
           { trackId: 'chord', timbreId, playbackMode: 'natural' }, { trackId: 'melody', timbreId, playbackMode: 'natural' },
-        ]).concat(banks.filter(bank => bank.track !== 'drums').map(bank => ({ trackId: bank.track, timbreId: bank.id, playbackMode: 'natural' }))),
+        ]).concat(banks.filter(bank => bank.track !== 'drums').map(bank => ({ trackId: bank.track, timbreId: bank.id, playbackMode: 'natural' })), gatedHumTimbres),
       });
       if (request !== generation) return;
       if (!started) throw new Error('音频未能启动，请重试。');
@@ -136,10 +141,10 @@ export function createSessionPlayback(audio, notify = () => {}, automation) {
       if (!jam || !isActive() || finishing || !snapshot) return;
       jam.updatePhrase(snapshot,trackId,id,lastStep+1,options);emit();
     },
-    toggleTrack(snapshot, trackId, tempo, { restart = false } = {}) {
+    toggleTrack(snapshot, trackId, tempo, { restart = false, alignWith } = {}) {
       if (automation?.isRecording() || !snapshot) return;
       if (!isActive() || !jam || finishing) { void start('jam', [targetFor(snapshot)], tempo); return; }
-      jam.toggle(snapshot, trackId, (Math.floor(lastStep / 16) + 1) * 16, lastStep + 1, restart);
+      jam.toggle(snapshot, trackId, (Math.floor(lastStep / 16) + 1) * 16, lastStep + 1, restart, alignWith);
       if (!jam.hasWork() && lastStep < 0) stop(); else emit();
     },
     removeTrack(trackId, id) {

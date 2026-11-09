@@ -2,3 +2,6 @@ export const hasJamPhraseNotes = phrase => Boolean(phrase?.bars?.some(bar => Arr
 
 // Older input adapters also accept catalog entries without an expanded matrix.
 export const isEmptyJamPhrase = phrase => Array.isArray(phrase?.bars) && phrase.bars.every(Array.isArray) && !hasJamPhraseNotes(phrase);
+
+export const canAdoptHumTempo = (workspace, emptyMelodyId) => Object.entries(workspace.templates).every(([track, row]) =>
+  row.every(phrase => track === 'melody' && phrase.id === emptyMelodyId && isEmptyJamPhrase(phrase)));
