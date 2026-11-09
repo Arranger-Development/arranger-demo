@@ -19,10 +19,10 @@ import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, performance
 import { blankJamDraft, hasJamNotes, applyJamTrackParameter } from '../jamDraftActions.js';
 import { jamTemplatePage, jamLauncherColumnCount } from '../jamTemplateSlots.js';
 import { JAM_PITCHED_PRESETS as DIAL_PITCHED_PRESETS } from '../jamPitchedPresets.js';
-import { getJamTemplateProjects, jamCombinationSnapshot, upgradeJamSlotLayout, defaultJamTimbres } from '../jamTemplateProjects.js';
+import { getJamTemplateProjects, jamCombinationSnapshot, upgradeJamSlotLayout, defaultJamTimbres, jamInstrumentTimbre } from '../jamTemplateProjects.js';
 import { snapshotSection } from '../performanceSession.js';
 import { getDialDrumPreset } from '../../data/dialDrumPresets.js';
-import { HUM_SUSTAIN, PERFORMANCE_SAMPLE_BANKS } from '../../data/performanceTimbres.js';
+import { PERFORMANCE_SAMPLE_BANKS } from '../../data/performanceTimbres.js';
 import { createJamEffects } from '../jamEffects.js';
 import { createSessionPlayback } from '../sessionPlayback.js';
 import createAudioEngine from '../../audio/createAudioEngine.js';
@@ -150,8 +150,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const pageCount = columnCount / 8;
   const effectivePage = Math.min(page, pageCount - 1);
   const templates = Object.fromEntries(TRACKS.map(t => [t, jamTemplatePage(w.templates[t], effectivePage)]));
-  const instrumentTimbre = t => w.timbres?.[t] ?? w.templates[t].find(p => p.id === w.selection[t])?.timbreId ?? w.draftsByTrack?.[t]?.timbreId
-    ?? (humControl && t === 'melody' && w.templates.melody.some(p => p.timbreId === HUM_SUSTAIN) ? HUM_SUSTAIN : defaultJamTimbres()[t]);
+  const instrumentTimbre = t => jamInstrumentTimbre(w, t);
   function sourceDraft(t, sourceId, timbreId) {
     const timbre = timbreId ?? instrumentTimbre(t);
     if (t === 'drums') {

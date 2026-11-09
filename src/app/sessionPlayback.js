@@ -1,4 +1,4 @@
-import { HUM_SUSTAIN, PERFORMANCE_SAMPLE_BANKS } from '../data/performanceTimbres.js';
+import { PERFORMANCE_SAMPLE_BANKS } from '../data/performanceTimbres.js';
 import { loopRepeat } from './loopOrder.js';
 import { createJamTrackPlayback } from './jamTrackPlayback.js';
 
@@ -106,9 +106,9 @@ export function createSessionPlayback(audio, notify = () => {}, automation, { hu
     try {
       await audio.preparePerformanceEffects?.();
       if (request !== generation) return;
-      const banks = Object.values(PERFORMANCE_SAMPLE_BANKS).filter(bank => bank.id !== HUM_SUSTAIN);
+      const banks = Object.values(PERFORMANCE_SAMPLE_BANKS);
       const gatedHumTimbres = humPreview ? [
-        { trackId: 'melody', timbreId: HUM_SUSTAIN, playbackMode: 'gated' },
+        { trackId: 'melody', timbreId: 'piano', playbackMode: 'gated' },
         { trackId: 'chord', timbreId: 'piano', playbackMode: 'gated' },
         ...banks.filter(bank => ['melody', 'chord'].includes(bank.track)).map(bank => ({ trackId: bank.track, timbreId: bank.id, playbackMode: 'gated' })),
       ] : [];

@@ -1,7 +1,7 @@
 import { PERFORMANCE_TRACKS as TRACKS } from './performanceModel.js';
 import { createJamProjects } from './jamProjects.js';
 import { snapshotSection, TIMBRE_OPTIONS } from './performanceSession.js';
-import { DEEP_AUTUMN_DRUMS, DEEP_AUTUMN_CHORD, DEEP_AUTUMN_BASS, DEEP_AUTUMN_MELODY, HUM_SUSTAIN, withPerformanceTimbre } from '../data/performanceTimbres.js';
+import { DEEP_AUTUMN_DRUMS, DEEP_AUTUMN_CHORD, DEEP_AUTUMN_BASS, DEEP_AUTUMN_MELODY, withPerformanceTimbre } from '../data/performanceTimbres.js';
 import { normalizeBpm } from '../domain/bpm.js';
 import { createClipRecord } from '../domain/clipHelpers.js';
 import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
@@ -15,6 +15,10 @@ const uid = () => globalThis.crypto.randomUUID();
 const byTrack = make => Object.fromEntries(TRACKS.map(t => [t, make(t)]));
 export const defaultJamTimbres = () => ({ drums: DEEP_AUTUMN_DRUMS, chord: DEEP_AUTUMN_CHORD,
   bass: DEEP_AUTUMN_BASS, melody: DEEP_AUTUMN_MELODY });
+export function jamInstrumentTimbre(w, track) {
+  return w.timbres?.[track] ?? w.templates[track].find(phrase => phrase.id === w.selection[track])?.timbreId
+    ?? w.draftsByTrack?.[track]?.timbreId ?? defaultJamTimbres()[track];
+}
 function reconcileDraftLocation(draft, templates) {
   if (!draft || !templates[draft.trackId]) return draft;
   const row = templates[draft.trackId];
@@ -120,11 +124,16 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
           p.workspace.templates[t] = normalizeJamSlots(p.workspace.templates[t]);
         }
         p.workspace = { ...workspace(bpm), ...p.workspace, slotLayoutVersion: p.workspace.slotLayoutVersion ?? 0, bpm: normalizeBpm(p.workspace.bpm) };
-        p.workspace.timbres = byTrack(t => TIMBRE_OPTIONS[t].includes(p.workspace.timbres?.[t]) || (t === 'melody' && p.workspace.timbres?.[t] === HUM_SUSTAIN) ? p.workspace.timbres[t] : null);
+        p.workspace.timbres = byTrack(t => TIMBRE_OPTIONS[t].includes(p.workspace.timbres?.[t]) ? p.workspace.timbres[t] : null);
         p.workspace.draftsByTrack ??= {};
         if (TRACKS.includes(p.workspace.draft?.trackId) && !p.workspace.draftsByTrack[p.workspace.draft.trackId]) {
           p.workspace.draftsByTrack = { ...p.workspace.draftsByTrack, [p.workspace.draft.trackId]: p.workspace.draft };
         }
+        const replaceLegacyTimbre = phrase => phrase?.timbreId === 'hum-sustain'
+          ? { ...phrase, timbreId: p.workspace.timbres.melody ?? DEEP_AUTUMN_MELODY } : phrase;
+        p.workspace.templates.melody = p.workspace.templates.melody.map(replaceLegacyTimbre);
+        if (p.workspace.draft?.trackId === 'melody') p.workspace.draft = replaceLegacyTimbre(p.workspace.draft);
+        if (p.workspace.draftsByTrack.melody) p.workspace.draftsByTrack.melody = replaceLegacyTimbre(p.workspace.draftsByTrack.melody);
         for (const t of TRACKS) if (!p.workspace.templates[t].some(x => x.id === p.workspace.selection[t])) p.workspace.selection[t] = null;
         p.workspace = upgradeJamSlotLayout(p.workspace);
       }
@@ -254,7 +263,7 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
         }
         const draft = { ...phrase, ...(existing ? { id: existing.id, name: replaceEmptyRecording ? phrase.name : existing.name, timbreId: existing.timbreId, params: existing.params } : {}),
           ...(melody && { humBackingMelodyId: melody.id }),
-          ...(phrase.trackId === 'melody' ? { timbreId: HUM_SUSTAIN } : {}), sourcePresetId: HUM_SOURCE };
+          ...(phrase.trackId === 'melody' ? { timbreId: jamInstrumentTimbre(w, 'melody') } : {}), sourcePresetId: HUM_SOURCE };
         const entry = phraseEdit(next, draft, { create: !existing, slotIndex });
         if (!entry) return null;
         next = entry.workspace;
@@ -287,7 +296,7 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
         ? { ...item, workspace: { ...w, draftsByTrack, draft: w.draft?.trackId === t ? null : w.draft } } : item) }, false);
     },
     setTimbre(t, timbreId) {
-      if (!TIMBRE_OPTIONS[t]?.includes(timbreId) && !(t === 'melody' && timbreId === HUM_SUSTAIN)) return false;
+      if (!TIMBRE_OPTIONS[t]?.includes(timbreId)) return false;
       return patch({timbres:{...current().workspace.timbres,[t]:timbreId}});
     },
     saveTemplate(draft, name, id = null, { slotIndex } = {}) {
