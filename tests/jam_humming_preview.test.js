@@ -46,7 +46,7 @@ test('fits a reliable 120 BPM pickup into the existing 88 BPM clock and falls ba
   assert.deepEqual(hits.map(hit => hit.at), [2, 4, 8, 12]);
   assert.ok(Math.abs(hits[1].length * 15 / 88 - 0.30 * 120 / 88) < 1e-8);
   assert.ok(Math.abs((hits[2].at - hits[1].at - hits[1].length) * 15 / 88 - 0.20 * 120 / 88) < 1e-8);
-  assert.equal(fitHumTiming(notes, 118).sourceBpm, 118);
+  assert.equal(fitHumTiming(notes, 118).sourceBpm, 120);
 
   const irregular = cleanHumNotes([0, 0.19, 0.47, 0.61, 1.06, 1.89, 2.02, 2.4, 3.16].map((start, i) => event(start, 60 + i, 0.07)), 4);
   const fallback = fitHumTiming(irregular, 88, { emptyProject: true });
@@ -65,6 +65,58 @@ test('light quantization caps onset movement and trims only a small tail across 
   assert.equal(performanceOnsets(bars).at(-1).at + performanceOnsets(bars).at(-1).length, 16);
   const continued = cleanHumNotes([...notes.map(note => event(note.start, note.pitch, note.end - note.start)), event(2.75, 65, 0.18)], 3);
   assert.equal(makeHumMelody(continued, 88).bars.length, 2);
+});
+
+test('a breath cannot drag the tempo down, and a supported reentry keeps its local timing', () => {
+  const take = later => cleanHumNotes([0, 0.5, 1, 1.5, ...later].map((start, index) => event(start, 60 + index, 0.18)), 10);
+  const notes = take([4.13, 4.63, 5.13, 5.63]);
+  const fit = fitHumTiming(notes, 88);
+  assert.equal(estimateHumBpm(notes), 120);
+  assert.equal(fit.bpm, 88);
+  assert.equal(fitHumTiming(notes, 88, { emptyProject: true }).bpm, 120);
+  const onsets = (notes, timing = fitHumTiming(notes, 88)) => performanceOnsets(makeHumMelody(notes, timing.bpm, timing).bars);
+  const hits = onsets(notes, fit);
+  assert.deepEqual(hits.map(hit => hit.at), [0, 4, 8, 12, 32, 36, 40, 44]);
+  assert.ok(Math.abs(hits[4].length * 15 / 88 - 0.18 * 120 / 88) < 1e-6);
+
+  const offbeat = take([4.26, 4.76, 5.385, 5.76]);
+  assert.deepEqual(onsets(offbeat).slice(4).map(hit => hit.at), [34, 38, 43, 46]);
+  assert.equal(onsets(take([4.13])).at(-1).at, 33.04);
+  assert.deepEqual(onsets(take([2.49, 2.99, 3.49, 3.99])).slice(4).map(hit => hit.at), [20, 24, 28, 32]);
+});
+
+test('the last performed note sets the same loop boundary for all four tracks after a breath', () => {
+  const store = makeStore();
+  const projectId = store.current().id;
+  const notes = cleanHumNotes([0, 0.5, 1, 1.5, 4.13, 4.63, 5.13, 5.63].map((start, i) => event(start, 60 + i, 0.18)), 10);
+  const fit = fitHumTiming(notes, 88);
+  const { bars } = makeHumMelody(notes, fit.bpm, fit);
+  assert.equal(bars.length, 3);
+  const [lead] = store.insertHumPhrases([{ trackId: 'melody', bars }], { projectId, bpm: fit.bpm });
+  const backing = store.insertHumPhrases(backingPhrases(bars), { projectId, melodyId: lead.id });
+  const tracks = [lead, ...backing];
+  assert.ok(tracks.every(phrase => phrase.bars.length === 3 && phrase.bars[1].every(cell => cell === null)));
+  const selection = Object.fromEntries(tracks.map(phrase => [phrase.trackId, phrase.id]));
+  const snapshot = jamCombinationSnapshot({ ...store.current().workspace, selection });
+  const adapter = createMatrixPlaybackAdapter(snapshot, { totalBars: snapshot.totalBars });
+  assert.equal(adapter.totalSteps, 48);
+  for (const reentry of [32, 80]) {
+    const hits = adapter.getEventsForFlatStep(reentry);
+    assert.deepEqual(new Set(hits.filter(hit => hit.type !== 'drums' || hit.instrument === 'kick').map(hit => hit.type)),
+      new Set(['melody', 'chord', 'bass', 'drums']));
+    assert.ok(hits.every(hit => !hit.timingOffset));
+  }
+  for (let step = 16; step < 32; step++) assert.deepEqual(adapter.getEventsForFlatStep(step), []);
+  for (const [lastStart, lastEnd, barCount] of [[5.85, 6.04, 3], [6.01, 6.12, 4]]) {
+    const withTail = [...notes.slice(0, -1), { ...notes.at(-1), start: lastStart, end: lastEnd }];
+    const take = makeHumMelody(withTail, 120, { quantize: false });
+    assert.equal(take.bars.length, barCount);
+    assert.ok(backingPhrases(take.bars).every(phrase => phrase.bars.length === barCount));
+    if (barCount === 3) {
+      const tail = performanceOnsets(take.bars).at(-1);
+      assert.equal(tail.at + tail.length, 48);
+    } else assert.ok(take.bars[3][0]);
+  }
 });
 
 test('removes a short continuous tail while keeping a fresh attack on the same pitch', () => {

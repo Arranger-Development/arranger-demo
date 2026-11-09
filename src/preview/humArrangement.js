@@ -109,21 +109,42 @@ export function cleanHumNotes(events, recordingSeconds, samples) {
   return joined;
 }
 
-export function estimateHumBpm(notes) {
-  const gaps = notes.slice(1).map((note, i) => note.start - notes[i].start).filter(gap => gap > 0);
+const subdivisions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
+const onsetGaps = notes => notes.slice(1).map((note, i) => note.start - notes[i].start);
+const beatDistance = (gap, bpm) => Math.min(...subdivisions.map(beats => Math.abs(gap * bpm / 60 - beats)));
+const supportsGap = distance => distance <= 0.06;
+
+function humSections(notes) {
+  if (!notes.length) return [];
+  const gaps = onsetGaps(notes);
+  const starts = [0];
+  for (const [index, gap] of gaps.entries()) {
+    const silence = notes[index + 1].start - notes[index].end;
+    if (silence < 0.45 - 1e-6) continue;
+    const nearby = [...gaps.slice(Math.max(0, index - 2), index), ...gaps.slice(index + 1, index + 3)].filter(gap => gap > 0);
+    if (silence >= 1.25 - 1e-6 || (nearby.length && gap >= 1.75 * median(nearby) - 1e-6)) starts.push(index + 1);
+  }
+  return starts.map((start, index) => {
+    const section = notes.slice(start, starts[index + 1]);
+    return { start, notes: section, gaps: onsetGaps(section).filter(gap => gap > 0) };
+  });
+}
+
+function estimateSectionBpm(sections) {
+  const gaps = sections.flatMap(section => section.gaps);
   if (gaps.length < 3) return null;
-  const subdivisions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
   const candidates = [];
   const typicalGap = median(gaps);
+  const pacedSections = sections.filter(section => section.gaps.length);
+  const noteCount = pacedSections.reduce((count, section) => count + section.notes.length, 0);
   for (let bpm = 65; bpm <= 155; bpm++) {
     const beat = 60 / bpm;
-    const distances = gaps.map(gap => Math.min(...subdivisions.map(beats => Math.abs(gap / beat - beats))));
-    const coverage = distances.filter(distance => distance <= 0.06).length / gaps.length;
+    const bySection = pacedSections.map(section => section.gaps.map(gap => beatDistance(gap, bpm)));
+    if (bySection.some(distances => distances.length >= 2 && distances.filter(supportsGap).length < 0.75 * distances.length)) continue;
+    const distances = bySection.flat();
+    const coverage = distances.filter(supportsGap).length / gaps.length;
     const pulseCoverage = gaps.filter(gap => Math.abs(gap / beat * 2 - Math.round(gap / beat * 2)) <= 0.12).length / gaps.length;
-    const phaseCoverage = notes.filter(note => {
-      const steps = (note.start - notes[0].start) * bpm / 15;
-      return Math.abs(steps - Math.round(steps)) <= 0.25;
-    }).length / notes.length;
+    const phaseCoverage = pacedSections.reduce((count, section) => count + localPhaseHits(section.notes, bpm), 0) / noteCount;
     const meanError = distances.reduce((sum, distance) => sum + distance, 0) / gaps.length;
     const score = coverage * 0.7 + phaseCoverage * 0.3 + pulseCoverage * 0.12 - meanError
       - 0.12 * Math.abs(Math.log2(typicalGap / beat));
@@ -131,13 +152,26 @@ export function estimateHumBpm(notes) {
   }
   candidates.sort((a, b) => b.score - a.score);
   const [best] = candidates;
+  if (!best) return null;
   const alternative = candidates.find(candidate => Math.abs(candidate.bpm - best.bpm) >= 0.08 * best.bpm);
   if (best.coverage < 0.75 || best.phaseCoverage < 0.75 || best.meanError > 0.05
     || best.score < 0.62 || alternative && best.score - alternative.score < 0.045) return null;
   return best.bpm;
 }
 
+function localPhaseHits(notes, bpm) {
+  return notes.filter(note => {
+    const steps = (note.start - notes[0].start) * bpm / 15;
+    return Math.abs(steps - Math.round(steps)) <= 0.25;
+  }).length;
+}
+
+export function estimateHumBpm(notes) {
+  return estimateSectionBpm(humSections(notes));
+}
+
 function pickupStepsFor(notes, bpm) {
+  if (notes.length < 3) return 0;
   const stepRate = bpm / 15;
   const accents = notes.map(note => ({
     step: (note.start - notes[0].start) * stepRate,
@@ -160,17 +194,54 @@ function pickupStepsFor(notes, bpm) {
 }
 
 export function fitHumTiming(notes, projectBpm, { emptyProject = false } = {}) {
-  const estimate = estimateHumBpm(notes);
+  const sections = humSections(notes);
+  const estimate = estimateSectionBpm(sections);
   const bpm = emptyProject && estimate ? estimate : projectBpm;
+  const pickupSteps = estimate ? pickupStepsFor(sections[0].notes, estimate) : 0;
   return {
     bpm,
-    sourceBpm: estimate && Math.abs(estimate - bpm) >= 0.05 * bpm ? estimate : bpm,
-    pickupSteps: estimate ? pickupStepsFor(notes, estimate) : 0,
+    sourceBpm: estimate ?? bpm,
+    pickupSteps,
     quantize: estimate !== null,
+    ...(estimate && sections.length > 1 && { reentries: humReentries(notes, sections, estimate, bpm, pickupSteps) }),
   };
 }
 
-export function makeHumMelody(notes, bpm, { sourceBpm = bpm, pickupSteps = 0, quantize = true } = {}) {
+function gridNudge(step, bpm) {
+  const distance = Math.round(step) - step;
+  const limit = 0.025 * bpm / 15;
+  return Math.abs(distance) <= 0.35 ? clamp(distance / 2, -limit, limit) : 0;
+}
+
+function humReentries(notes, sections, sourceBpm, projectBpm, pickupSteps) {
+  const rate = sourceBpm / 15;
+  const position = seconds => (seconds - notes[0].start) * rate + pickupSteps;
+  let previousShift = 0;
+  return sections.slice(1).map((section, index) => {
+    const { start, notes: local, gaps } = section;
+    let shift = 0;
+    if (gaps.length >= 2 && gaps.filter(gap => supportsGap(beatDistance(gap, sourceBpm))).length >= 0.75 * gaps.length
+      && localPhaseHits(local, sourceBpm) >= 0.75 * local.length) {
+      const entrance = position(local[0].start);
+      const reference = entrance - pickupStepsFor(local, sourceBpm);
+      const eighth = Math.round(reference / 2) * 2;
+      const quarter = Math.round(reference / 4) * 4;
+      // Keep an established offbeat. In between, prefer the beat only when both choices are close.
+      const target = Math.abs(reference - eighth) <= 0.25 || Math.abs(reference - eighth) + 0.125 < Math.abs(reference - quarter)
+        ? eighth : quarter;
+      const proposed = target - reference;
+      const previous = notes[start - 1];
+      const rawGap = entrance - position(previous.end);
+      const previousAdjustment = index ? previousShift : gridNudge(position(previous.start), projectBpm);
+      const minGap = rawGap >= 4 ? 4 : rawGap >= 2.5 ? 2.5 : 0;
+      if (Math.abs(proposed) <= 1.125 && rawGap + proposed - previousAdjustment >= minGap) shift = proposed;
+    }
+    previousShift = shift;
+    return { start, shift };
+  });
+}
+
+export function makeHumMelody(notes, bpm, { sourceBpm = bpm, pickupSteps = 0, quantize = true, reentries = [] } = {}) {
   if (!notes.length) return null;
   // The existing Jam editor supports C3–B5. Move the whole phrase by an octave if needed.
   const shift = [0, 12, -12, 24, -24].find(offset => notes.every(note => note.pitch + offset >= 48 && note.pitch + offset <= 83));
@@ -179,12 +250,17 @@ export function makeHumMelody(notes, bpm, { sourceBpm = bpm, pickupSteps = 0, qu
   // At playback the project BPM converts these source-beat positions back to
   // seconds. This scales onsets, rests and lengths together.
   const stepRate = sourceBpm / 15;
-  const maxNudgeSteps = 0.025 * bpm / 15;
-  const events = notes.map(note => {
+  let nextReentry = 0, sectionShift = 0;
+  const events = notes.map((note, index) => {
+    const reentry = reentries[nextReentry];
+    if (reentry?.start === index) {
+      sectionShift = reentry.shift;
+      nextReentry++;
+    }
     const rawStart = (note.start - origin) * stepRate + pickupSteps;
-    const distance = Math.round(rawStart) - rawStart;
-    const nudge = quantize && Math.abs(distance) <= 0.35 ? clamp(distance / 2, -maxNudgeSteps, maxNudgeSteps) : 0;
-    const start = rawStart + nudge;
+    // Reentries move as a unit so the timing inside them stays intact.
+    const nudge = quantize && nextReentry === 0 ? gridNudge(rawStart, bpm) : 0;
+    const start = rawStart + nudge + sectionShift;
     const length = (note.end - note.start) * stepRate;
     return { start: preciseStep(start), end: preciseStep(start + length), pitch: note.pitch + shift, amplitude: note.amplitude };
   });

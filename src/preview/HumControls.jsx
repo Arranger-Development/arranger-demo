@@ -201,7 +201,10 @@ export default function HumControls({ projectStore, projectId, pauseJam, showRec
     {createElement(recording ? Square : Mic, { size: 12 })}{recording ? '停止' : '哼唱'}
   </button>;
   const octaveNotice = take?.shift ? `Jam 旋律${take.shift > 0 ? '升高' : '降低'} ${Math.abs(take.shift / 12)} 个八度` : '';
-  const feedbackText = [status.text, octaveNotice].filter(Boolean).join(' · ');
+  const { workspace } = projectStore.current();
+  const recordedPhrase = take?.melodyId && workspace.templates.melody.find(phrase => phrase.id === take.melodyId);
+  const loopNotice = recordedPhrase ? `${workspace.bpm} BPM · ${recordedPhrase.bars.length} 小节` : '';
+  const feedbackText = [status.text, loopNotice, octaveNotice].filter(Boolean).join(' · ');
   const feedback = (status.text || take) && <div className="jam-hum-feedback" role="group" aria-label="哼唱结果">
     {feedbackText && <span role="status">{feedbackText}</span>}
     {take?.url && <button type="button" disabled={recording} onClick={() => {
