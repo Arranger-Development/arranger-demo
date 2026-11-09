@@ -1,9 +1,9 @@
 import { createDrumsCell, getDrumsCellInstruments, getDrumsCellVelocity, getDrumsCellTimingOffset } from '../domain/drumsCells.js';
 
-function drumRhythm(bar, level, edited) {
+function drumRhythm(bar, level, edited, rest) {
   const keepBaseHats = level >= 75;
   return bar.map((cell, step) => {
-    if (edited(step)) return cell;
+    if (edited(step) || rest(step)) return cell;
     const instruments = getDrumsCellInstruments(cell);
     const hits = cell?.drumHits ?? instruments.map(instrument => ({ instrument, offsetSteps: getDrumsCellTimingOffset(cell, instrument),
       durationSteps: 1, velocity: getDrumsCellVelocity(cell, instrument) }));
@@ -20,8 +20,13 @@ function drumRhythm(bar, level, edited) {
   });
 }
 
-function pitchedCell(cell, duration, notes = cell.notes ?? [cell.note], gain = 1) {
-  const notePerformances = Object.fromEntries(notes.map(note => [note, [{ offsetSteps: 0, durationSteps: duration,
+function onsetOffset(cell) {
+  const first = Object.values(cell?.notePerformances ?? {})[0]?.[0];
+  return first?.offsetSteps ?? cell?.timingOffset ?? 0;
+}
+
+function pitchedCell(cell, duration, notes = cell.notes ?? [cell.note], gain = 1, offsetSteps = 0) {
+  const notePerformances = Object.fromEntries(notes.map(note => [note, [{ offsetSteps, durationSteps: duration,
     velocity: (cell.notePerformances?.[note]?.[0]?.velocity ?? cell.velocity ?? 0.65) * gain }]]));
   return { ...cell, ...(cell.notes ? { notes } : {}), durationSteps: duration, notePerformances };
 }
@@ -29,7 +34,7 @@ function pitchedCell(cell, duration, notes = cell.notes ?? [cell.note], gain = 1
 function pitchedRhythm(bar, track, level, edited) {
   const next = [...bar];
   for (const start of [0, 8]) {
-    const first = track === 'chord' ? bar.slice(start, start + 8).findIndex(cell => cell?.notes?.length) : 0;
+    const first = bar.slice(start, start + 8).findIndex(cell => track === 'chord' ? cell?.notes?.length : cell?.note);
     const onset = start + first;
     const root = first < 0 ? null : bar[onset];
     // Keep hand-authored material in its harmonic window intact, including removed steps.
@@ -37,21 +42,35 @@ function pitchedRhythm(bar, track, level, edited) {
     const crossesFromFirstHalf = start === 8 && bar.slice(0, 8).some((cell, step) => edited(step) && cell &&
       step + Math.max(cell.durationSteps ?? 0, ...Object.values(cell.notePerformances ?? {}).flat().map(hit => hit.offsetSteps + hit.durationSteps)) > 8);
     if (!root || touched || crossesFromFirstHalf) continue;
+    const offset = onsetOffset(root);
     if (track === 'bass') {
       // A fixed chord phrase can change root inside this half-bar.
       if (bar.slice(start + 1, start + 8).some(cell => cell?.harmonyAnchor)) continue;
-      const accents = level === 0 ? [] : level === 25 ? [6].filter(offset => bar[start + offset]) : level === 75 ? [6] : [3, 6];
-      for (let i = 1; i < 8; i++) next[start + i] = null;
-      [0, ...accents].forEach((offset, index) => {
-        const end = accents[index] ?? 8;
-        const length = index ? Math.min(1.6, end - offset - 0.15) : Math.min(level === 25 ? 5 : 7.8, end - 0.2);
-        const cell = bar[start + offset]?.harmonyLink ? bar[start + offset] : root;
-        next[start + offset] = pitchedCell(cell, length, [cell.note], index && cell === root ? 0.78 : 1);
+      const saved = bar.slice(start, start + 8).flatMap((cell, i) => cell?.note && i > first ? [i] : []);
+      const late = root.humRhythmEntry && saved.length ? saved : [6];
+      const accents = level === 0 ? [] : level === 25 ? late.filter(i => bar[start + i]) : level === 75 ? late : [3, ...late];
+      const windowEnd = root.humRhythmEntry ? Math.min(start + 8, Math.max(...[first, ...saved].map(i => {
+        const cell = bar[start + i];
+        return start + i + onsetOffset(cell) + cell.durationSteps + 0.2;
+      }))) : start + 8;
+      const positions = [...new Set([first, ...accents.filter(i => i > first && start + i + onsetOffset(bar[start + i]) < windowEnd - 0.15)])]
+        .sort((a, b) => a - b).map(i => ({ step: start + i, offset: onsetOffset(bar[start + i]) }));
+      for (let i = onset; i < start + 8; i++) next[i] = null;
+      positions.forEach(({ step, offset }, index) => {
+        const nextHit = positions[index + 1];
+        const end = nextHit ? nextHit.step + nextHit.offset : windowEnd;
+        const room = end - step - offset;
+        const length = Math.min(index ? 1.6 : level === 25 ? 5 : 7.8, room - Math.min(0.2, room * 0.15));
+        const cell = bar[step]?.harmonyLink ? bar[step] : root;
+        next[step] = pitchedCell(cell, length, [cell.note], index && cell === root ? 0.78 : 1, offset);
       });
     } else if (root.notes?.length) {
-      const room = start + 8 - onset;
+      const windowEnd = root.humRhythmEntry ? Math.min(start + 8, onset + offset + root.durationSteps) : start + 8 - 0.2;
+      const room = Math.max(1, Math.ceil(windowEnd - onset));
       const place = (step, duration, notes = root.notes, gain = 1) => {
-        next[step] = pitchedCell(root, Math.min(duration, start + 8 - step - 0.2), notes, gain);
+        const hitOffset = step === onset ? offset : 0;
+        const length = Math.min(duration, windowEnd - step - hitOffset);
+        if (length > 0) next[step] = pitchedCell(root, length, notes, gain, hitOffset);
       };
       if (level === 0 || level === 25) place(onset, level === 0 ? 7.8 : 3.1);
       if (level === 75) {
@@ -76,8 +95,9 @@ function pitchedRhythm(bar, track, level, edited) {
 export function humRhythmBars(phrase, level) {
   if (level === 50 || phrase.trackId === 'melody') return phrase.bars;
   const touched = new Set(phrase.humEditedSteps);
+  const rests = new Set(phrase.humDrumRestSteps);
   return phrase.bars.map((bar, index) => {
     const edited = step => touched.has(index * 16 + step);
-    return phrase.trackId === 'drums' ? drumRhythm(bar, level, edited) : pitchedRhythm(bar, phrase.trackId, level, edited);
+    return phrase.trackId === 'drums' ? drumRhythm(bar, level, edited, step => rests.has(index * 16 + step)) : pitchedRhythm(bar, phrase.trackId, level, edited);
   });
 }

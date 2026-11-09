@@ -51,7 +51,7 @@ function melodyEvents(bars, timbreId) {
       const midi = (Number(event.note.at(-1)) + 1) * 12 + pitch + octaveOffset;
       const start = Math.max(0, index * stepsPerBar + step + (event.timingOffset ?? 0));
       const duration = Math.min(noteDurationSteps(event), length - start);
-      return pitch < 0 || duration <= 0 ? [] : [{ pitch, midi, start, duration }];
+      return pitch < 0 || duration <= 0 ? [] : [{ pitch, midi, start, duration, velocity: event.velocity ?? 0.6 }];
     })
   ))).sort((a, b) => a.start - b.start);
   return events.map((event, i) => {
@@ -206,13 +206,18 @@ function colorHarmony(path, windows, key, bassHints) {
 function chordTiming(window, index) {
   const base = index * 8;
   if (!window.length) return { offset: 0, duration: 6.8 };
-  const first = Math.floor(window[0].from - base);
+  const first = window[0].from;
   let end = window[0].to;
-  for (const note of window) {
+  let accent = null, best = 0;
+  for (const note of window.slice(1)) {
     if (note.from - end >= 2.5) break;
     end = Math.max(end, note.to);
+    if (note.start - first < 2 || note.from !== note.start || note.to - note.start < 0.4
+      || (note.duration < 1.25 && note.velocity < 0.72)) continue;
+    const score = Math.min(note.duration, 4) + note.velocity + (isBeat(note) ? 0.3 : 0);
+    if (score > best) { accent = note.start - base; best = score; }
   }
-  return { offset: first, duration: Math.min(6.8, 7.8 - first, end - base - first + 0.4) };
+  return { offset: first - base, duration: Math.min(6.8, end - first), accent };
 }
 
 function voicingOptions(chord) {

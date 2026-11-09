@@ -109,40 +109,89 @@ export function cleanHumNotes(events, recordingSeconds, samples) {
 }
 
 export function estimateHumBpm(notes) {
-  const gaps = notes.slice(1).map((note, i) => note.start - notes[i].start).filter(gap => gap >= 0.18 && gap <= 1.8);
+  const gaps = notes.slice(1).map((note, i) => note.start - notes[i].start).filter(gap => gap > 0);
   if (gaps.length < 3) return null;
-  let best = { score: -Infinity, bpm: null, coverage: 0 };
+  const subdivisions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
+  const candidates = [];
   const typicalGap = median(gaps);
   for (let bpm = 65; bpm <= 155; bpm++) {
     const beat = 60 / bpm;
-    const distances = gaps.map(gap => Math.min(...[0.5, 1, 1.5, 2, 3].map(beats => Math.abs(gap / beat - beats))));
-    const coverage = distances.filter(distance => distance <= 0.12).length / gaps.length;
-    const score = coverage - distances.reduce((sum, distance) => sum + distance, 0) / gaps.length
+    const distances = gaps.map(gap => Math.min(...subdivisions.map(beats => Math.abs(gap / beat - beats))));
+    const coverage = distances.filter(distance => distance <= 0.06).length / gaps.length;
+    const pulseCoverage = gaps.filter(gap => Math.abs(gap / beat * 2 - Math.round(gap / beat * 2)) <= 0.12).length / gaps.length;
+    const phaseCoverage = notes.filter(note => {
+      const steps = (note.start - notes[0].start) * bpm / 15;
+      return Math.abs(steps - Math.round(steps)) <= 0.25;
+    }).length / notes.length;
+    const meanError = distances.reduce((sum, distance) => sum + distance, 0) / gaps.length;
+    const score = coverage * 0.7 + phaseCoverage * 0.3 + pulseCoverage * 0.12 - meanError
       - 0.12 * Math.abs(Math.log2(typicalGap / beat));
-    if (score > best.score) best = { bpm, score, coverage };
+    candidates.push({ bpm, score, coverage, phaseCoverage, meanError });
   }
-  return best.coverage >= 0.75 && best.score >= 0.62 ? best.bpm : null;
+  candidates.sort((a, b) => b.score - a.score);
+  const [best] = candidates;
+  const alternative = candidates.find(candidate => Math.abs(candidate.bpm - best.bpm) >= 0.08 * best.bpm);
+  if (best.coverage < 0.75 || best.phaseCoverage < 0.75 || best.meanError > 0.05
+    || best.score < 0.62 || alternative && best.score - alternative.score < 0.045) return null;
+  return best.bpm;
 }
 
-export function makeHumMelody(notes, bpm) {
+function pickupStepsFor(notes, bpm) {
+  const stepRate = bpm / 15;
+  const accents = notes.map(note => ({
+    step: (note.start - notes[0].start) * stepRate,
+    weight: Math.min(4, (note.end - note.start) * stepRate) * clamp(note.amplitude, 0.25, 1),
+  }));
+  const weight = accents.reduce((sum, accent) => sum + accent.weight, 0);
+  if (accents[0].weight >= 0.8 * (weight - accents[0].weight) / (accents.length - 1)) return 0;
+  const phases = [0, 1, 2, 3].map(offset => {
+    const beats = new Set();
+    const score = accents.reduce((sum, accent) => {
+      const step = accent.step + offset, beat = Math.round(step / 4);
+      const fit = Math.max(0, 1 - Math.abs(step - beat * 4) / 0.75);
+      if (fit > 0.5) beats.add(beat);
+      return sum + accent.weight * fit * (beat % 4 === 0 ? 1 : beat % 2 === 0 ? 0.9 : 0.75);
+    }, 0);
+    return { offset, score, beats: beats.size };
+  });
+  const best = phases.toSorted((a, b) => b.score - a.score)[0];
+  return best.beats >= 2 && best.score > phases[0].score + 0.15 * weight ? best.offset : 0;
+}
+
+export function fitHumTiming(notes, projectBpm, { emptyProject = false } = {}) {
+  const estimate = estimateHumBpm(notes);
+  const bpm = emptyProject && estimate ? estimate : projectBpm;
+  return {
+    bpm,
+    sourceBpm: estimate && Math.abs(estimate - bpm) >= 0.05 * bpm ? estimate : bpm,
+    pickupSteps: estimate ? pickupStepsFor(notes, estimate) : 0,
+    quantize: estimate !== null,
+  };
+}
+
+export function makeHumMelody(notes, bpm, { sourceBpm = bpm, pickupSteps = 0, quantize = true } = {}) {
   if (!notes.length) return null;
   // The existing Jam editor supports C3–B5. Move the whole phrase by an octave if needed.
   const shift = [0, 12, -12, 24, -24].find(offset => notes.every(note => note.pitch + offset >= 48 && note.pitch + offset <= 83));
   if (shift === undefined) return null;
   const origin = notes[0].start;
-  const stepRate = bpm / 15;
+  // At playback the project BPM converts these source-beat positions back to
+  // seconds. This scales onsets, rests and lengths together.
+  const stepRate = sourceBpm / 15;
+  const maxNudgeSteps = 0.025 * bpm / 15;
   const events = notes.map(note => {
-    const rawStart = (note.start - origin) * stepRate;
-    const closest = Math.round(rawStart);
-    const start = Math.abs(closest - rawStart) <= 0.35 ? rawStart + (closest - rawStart) * 0.25 : rawStart;
-    const measuredLength = (note.end - note.start) * stepRate;
-    const gridLength = Math.floor(preciseStep(measuredLength));
-    // A small detected tail should not light another grid cell or consume a rest.
-    const length = gridLength >= 1 && measuredLength - gridLength <= 0.35 ? gridLength : measuredLength;
+    const rawStart = (note.start - origin) * stepRate + pickupSteps;
+    const distance = Math.round(rawStart) - rawStart;
+    const nudge = quantize && Math.abs(distance) <= 0.35 ? clamp(distance / 2, -maxNudgeSteps, maxNudgeSteps) : 0;
+    const start = rawStart + nudge;
+    const length = (note.end - note.start) * stepRate;
     return { start: preciseStep(start), end: preciseStep(start + length), pitch: note.pitch + shift, amplitude: note.amplitude };
   });
   for (let i = 1; i < events.length; i++) events[i - 1].end = Math.min(events[i - 1].end, events[i].start);
-  const steps = emptySteps(Math.max(1, Math.ceil(events.at(-1).end / stepsPerBar)) * stepsPerBar);
+  const last = events.at(-1);
+  const lastBarEnd = (Math.floor(last.start / stepsPerBar) + 1) * stepsPerBar;
+  if (last.end > lastBarEnd && last.end - lastBarEnd < 0.5) last.end = lastBarEnd;
+  const steps = emptySteps(Math.max(1, Math.ceil(last.end / stepsPerBar)) * stepsPerBar);
   for (const event of events) {
     if (event.end <= event.start) continue;
     const step = Math.floor(event.start), note = noteName(event.pitch), cell = steps[step];
@@ -165,6 +214,46 @@ function bassConnection(current, next, lead, step) {
   return [to - 1, to + 1, to - 2, to + 2].find(note => options.includes(note % 12) && Math.abs(note - from) <= 5) ?? null;
 }
 
+function arrangeHumDrums(events, windows, length) {
+  const preset = getDialDrumPreset(50, 50).bars;
+  const onsetCounts = Array(length / stepsPerBar).fill(0);
+  for (const event of events) onsetCounts[Math.floor(event.start / stepsPerBar)]++;
+  const rests = [];
+  let end = events[0].start;
+  if (end > 0) rests.push([0, end]);
+  for (const event of events) {
+    if (event.start - end >= 4) rests.push([end, event.start]);
+    end = Math.max(end, event.start + event.duration);
+  }
+  if (length - end >= 4) rests.push([end, length]);
+  const isRest = step => rests.some(([from, to]) => step >= from && step < to);
+  const kicks = new Map();
+  const addKick = (start, velocity) => {
+    if (isRest(start)) return;
+    const step = Math.floor(start);
+    kicks.set(step, { instrument: 'kick', offsetSteps: start - step, durationSteps: 1, velocity });
+  };
+  for (const [index, window] of windows.slice(0, length / 8).entries()) {
+    if (!window.active) continue;
+    addKick(index * 8 + window.offset, index % 2 ? 0.63 : 0.76);
+    if (window.accent != null) addKick(index * 8 + window.accent, 0.51);
+  }
+  const drums = Array.from({ length }, (_, step) => {
+    const bar = Math.floor(step / stepsPerBar), position = step % stepsPerBar;
+    const cell = preset[bar % preset.length][position];
+    const hits = (cell?.drumHits ?? []).filter(hit => hit.instrument === 'hihat'
+      && !isRest(step + hit.offsetSteps) && (onsetCounts[bar] < 6 || position % 4 === 0 && hit.offsetSteps === 0));
+    if ((position === 4 || position === 12) && !isRest(step)) {
+      const snare = cell?.drumHits?.find(hit => hit.instrument === 'snare');
+      hits.push(snare ? { ...snare, offsetSteps: 0 } : { instrument: 'snare', offsetSteps: 0, durationSteps: 1, velocity: 0.74 });
+    }
+    if (kicks.has(step)) hits.push(kicks.get(step));
+    return createDrumsCell(hits.map(hit => hit.instrument), { drumHits: hits });
+  });
+  const humDrumRestSteps = drums.flatMap((_, step) => isRest(step) ? [step] : []);
+  return { drums: toBars(drums), humDrumRestSteps };
+}
+
 const gcd = (a, b) => b ? gcd(b, a % b) : a;
 export function arrangeHumMelody(bars, timbreId, anchors = {}) {
   const bassBarCount = anchors.bassBars?.length;
@@ -174,52 +263,51 @@ export function arrangeHumMelody(bars, timbreId, anchors = {}) {
   const { events, windows } = planHumHarmony(bars, timbreId, { ...anchors, chordBarCount });
   const length = bars.length * stepsPerBar;
   const bassLength = anchors.chordBars?.length ? anchors.chordBars.length * stepsPerBar : length;
-  const chord = emptySteps(chordBarCount * stepsPerBar), drums = emptySteps(length), bass = emptySteps(bassLength);
+  const chord = emptySteps(chordBarCount * stepsPerBar), bass = emptySteps(bassLength);
   for (const [index, window] of windows.entries()) {
     if (!window.active) continue;
     const notes = window.voicing.map(noteName);
     const durationSteps = window.duration;
     const unchanged = window.root === windows[index - 1]?.root && windows[index - 1]?.active;
     const velocity = unchanged && index % 2 ? 0.38 : 0.48;
-    chord[index * 8 + window.offset] = { type: 'notes', notes, label: notes.join('/'), durationSteps,
-      notePerformances: Object.fromEntries(notes.map(note => [note, [{ offsetSteps: 0, durationSteps, velocity }]])) };
-  }
-  const drumPreset = getDialDrumPreset(50, 50).bars;
-  const onsetCounts = Array(bars.length).fill(0);
-  for (const event of events) onsetCounts[Math.floor(event.start / stepsPerBar)]++;
-  for (let step = 0; step < length; step++) {
-    const bar = Math.floor(step / stepsPerBar), position = step % stepsPerBar;
-    const cell = drumPreset[bar % drumPreset.length][position];
-    let hits = (cell?.drumHits ?? []).filter(hit => onsetCounts[bar] < 6 ||
-      (hit.instrument === 'hihat' ? position % 4 === 0 && hit.offsetSteps === 0 : position % 2 === 0));
-    // Keep a pulse and backbeat even when a dense vocal thins the source groove.
-    const anchor = position === 0 ? 'kick' : position === 4 || position === 12 ? 'snare' : null;
-    if (anchor && !hits.some(hit => hit.instrument === anchor)) hits = [...hits, { instrument: anchor, offsetSteps: 0, durationSteps: 1, velocity: 0.74 }];
-    if (step === length - 2 && events.every(event => event.start + event.duration <= length - 4) && !hits.some(hit => hit.instrument === 'snare')) {
-      hits = [...hits, { instrument: 'snare', offsetSteps: 0, durationSteps: 1, velocity: 0.45 }];
-    }
-    drums[step] = createDrumsCell(hits.map(hit => hit.instrument), { drumHits: hits });
+    const step = Math.floor(window.offset);
+    chord[index * 8 + step] = { type: 'notes', notes, label: notes.join('/'), durationSteps, humRhythmEntry: true,
+      notePerformances: Object.fromEntries(notes.map(note => [note, [{ offsetSteps: window.offset - step, durationSteps, velocity }]])) };
   }
   const authored = authoredChordAnchors(anchors.chordBars, bassLength);
-  const bassSteps = authored ? [...authored.keys()] : [];
-  const links = new Map();
-  if (!authored) for (let step = 0; step < length; step++) {
-    const index = Math.floor(step / 8), current = windows[index];
-    if (!current.active) continue;
-    if (step % 8 === 6) {
-      const next = windows[(index + 1) % (length / 8)];
-      const link = bassConnection(current, next, events, step);
-      if (link != null) links.set(step, link);
-    }
-    if (step % 8 === 0 || links.has(step) || (step % 4 === 2 && drums[step]?.instruments.includes('kick'))) bassSteps.push(step);
-  }
-  for (const [index, step] of bassSteps.entries()) {
-    const boundary = (Math.floor(step / 8) + 1) * 8;
-    const durationSteps = Math.min(bassSteps[index + 1] ?? bassLength, boundary, step + 7.8) - step - 0.2;
-    const root = authored?.get(step) ?? windows[Math.floor(step / 8)].root;
-    const note = noteName(links.get(step) ?? 36 + root), velocity = authored || step % 8 === 0 ? 0.68 : 0.48;
+  function addBass(start, end, pitch, velocity, markers) {
+    if (end <= start) return;
+    const step = Math.floor(start);
+    const durationSteps = end - start - Math.min(0.2, (end - start) * 0.15);
+    const note = noteName(pitch);
     bass[step] = { type: 'bass', note, durationSteps, velocity,
-      ...(authored ? { harmonyAnchor: true } : {}), ...(links.has(step) ? { harmonyLink: true } : {}), notePerformances: { [note]: [{ offsetSteps: 0, durationSteps, velocity }] } };
+      ...markers, notePerformances: { [note]: [{ offsetSteps: start - step, durationSteps, velocity }] } };
   }
-  return { chord: toBars(chord), bass: toBars(bass), drums: toBars(drums) };
+  if (authored) {
+    const steps = [...authored.keys()];
+    for (const [index, step] of steps.entries()) {
+      const end = Math.min(steps[index + 1] ?? bassLength, (Math.floor(step / 8) + 1) * 8, step + 7.8);
+      addBass(step, end, 36 + authored.get(step), 0.68, { harmonyAnchor: true });
+    }
+  } else {
+    for (const [index, window] of windows.slice(0, bassLength / 8).entries()) {
+      if (!window.active) continue;
+      const start = index * 8 + window.offset, end = start + window.duration;
+      const accent = window.accent != null && index * 8 + window.accent < end - 0.25
+        ? index * 8 + window.accent : null;
+      addBass(start, accent ?? end, 36 + window.root, 0.68, { humRhythmEntry: true });
+      if (accent != null) {
+        const next = windows[(index + 1) % windows.length];
+        const link = window.accent >= 4 ? bassConnection(window, next, events, accent) : null;
+        addBass(accent, end, link ?? 36 + window.root, 0.48, link != null ? { harmonyLink: true } : {});
+      }
+    }
+  }
+  return { chord: toBars(chord), bass: toBars(bass), ...arrangeHumDrums(events, windows, length) };
+}
+
+export function arrangeHumBacking(bars, timbreId, anchors) {
+  const { chord, bass, drums, humDrumRestSteps } = arrangeHumMelody(bars, timbreId, anchors);
+  return [{ trackId: 'chord', bars: chord }, { trackId: 'bass', bars: bass },
+    { trackId: 'drums', bars: drums, humDrumRestSteps }];
 }

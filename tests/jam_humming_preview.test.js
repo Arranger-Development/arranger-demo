@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { arrangeHumMelody, cleanHumNotes, estimateHumBpm, makeHumMelody } from '../src/preview/humArrangement.js';
+import { arrangeHumBacking, arrangeHumMelody, cleanHumNotes, estimateHumBpm, fitHumTiming, makeHumMelody } from '../src/preview/humArrangement.js';
 import { planHumHarmony } from '../src/preview/humHarmony.js';
 import { humPitchCenter } from '../src/preview/humPitchCorrection.js';
 import { createJamTemplateProjects, jamCombinationSnapshot } from '../src/app/jamTemplateProjects.js';
@@ -18,7 +18,7 @@ function makeStore() {
 
 const event = (startTimeSeconds, pitchMidi, durationSeconds = 0.43, amplitude = 0.8) => ({ startTimeSeconds, pitchMidi, durationSeconds, amplitude });
 const melody = (pitches, interval = 0.6) => makeHumMelody(cleanHumNotes(pitches.map((pitch, i) => event(i * interval, pitch, interval * 0.75)), 10), 100).bars;
-const backingPhrases = bars => Object.entries(arrangeHumMelody(bars)).map(([trackId, bars]) => ({ trackId, bars }));
+const backingPhrases = bars => arrangeHumBacking(bars);
 
 test('cleans harmonics and noise without joining same-pitch attacks or removing a rest', () => {
   const events = [event(0.1, 60, 0.10), event(0.10, 72, 0.10, 0.3), event(0.21, 60, 0.09), event(0.38, 58, 0.015), event(0.68, 64)];
@@ -30,6 +30,41 @@ test('cleans harmonics and noise without joining same-pitch attacks or removing 
   assert.ok(repeats[1].offsetSteps > repeats[0].durationSteps);
   assert.equal(bars[0][1], null);
   assert.equal(estimateHumBpm(cleanHumNotes([0, 0.6, 1.2, 1.8].map(start => event(start, 64)), 3)), 100);
+});
+
+const performanceOnsets = bars => bars.flatMap((bar, index) => bar.flatMap((cell, step) =>
+  Object.values(cell?.notePerformances ?? {}).flat().map(hit => ({ at: index * 16 + step + hit.offsetSteps, length: hit.durationSteps }))));
+
+test('fits a reliable 120 BPM pickup into the existing 88 BPM clock and falls back for an irregular rhythm', () => {
+  const notes = cleanHumNotes([event(0.15, 60, 0.08, 0.32), event(0.40, 62, 0.30), event(0.90, 64, 0.28), event(1.40, 67, 0.32)], 2);
+  const fit = fitHumTiming(notes, 88);
+  assert.deepEqual(fit, { bpm: 88, sourceBpm: 120, pickupSteps: 2, quantize: true });
+  assert.equal(fitHumTiming(notes, 88, { emptyProject: true }).bpm, 120);
+  const { bars } = makeHumMelody(notes, fit.bpm, fit);
+  const hits = performanceOnsets(bars);
+  assert.equal(bars.length, 1);
+  assert.deepEqual(hits.map(hit => hit.at), [2, 4, 8, 12]);
+  assert.ok(Math.abs(hits[1].length * 15 / 88 - 0.30 * 120 / 88) < 1e-8);
+  assert.ok(Math.abs((hits[2].at - hits[1].at - hits[1].length) * 15 / 88 - 0.20 * 120 / 88) < 1e-8);
+  assert.equal(fitHumTiming(notes, 118).sourceBpm, 118);
+
+  const irregular = cleanHumNotes([0, 0.19, 0.47, 0.61, 1.06, 1.89, 2.02, 2.4, 3.16].map((start, i) => event(start, 60 + i, 0.07)), 4);
+  const fallback = fitHumTiming(irregular, 88, { emptyProject: true });
+  assert.deepEqual(fallback, { bpm: 88, sourceBpm: 88, pickupSteps: 0, quantize: false });
+  assert.ok(Math.abs(performanceOnsets(makeHumMelody(irregular, 88, fallback).bars)[1].at * 15 / 88 - 0.19) < 1e-6);
+  assert.equal(estimateHumBpm(notes.slice(0, 3)), null);
+});
+
+test('light quantization caps onset movement and trims only a small tail across the bar line', () => {
+  const notes = cleanHumNotes([event(0, 60, 0.3), event(0.736, 64, 0.18), event(2.4, 67, 0.38)], 3);
+  const { bars } = makeHumMelody(notes, 88, { sourceBpm: 88 });
+  const [first, nudged] = performanceOnsets(bars);
+  assert.equal(first.at, 0);
+  assert.ok(Math.abs(nudged.at * 15 / 88 - 0.711) < 1e-6);
+  assert.equal(bars.length, 1);
+  assert.equal(performanceOnsets(bars).at(-1).at + performanceOnsets(bars).at(-1).length, 16);
+  const continued = cleanHumNotes([...notes.map(note => event(note.start, note.pitch, note.end - note.start)), event(2.75, 65, 0.18)], 3);
+  assert.equal(makeHumMelody(continued, 88).bars.length, 2);
 });
 
 test('removes a short continuous tail while keeping a fresh attack on the same pitch', () => {
@@ -258,7 +293,8 @@ test('a fragmented sustained quarter note schedules once, but four articulated s
   assert.equal(eventDuration(attack, 100), 0.6);
   const slightlyLong = makeHumMelody([{ ...sustained[0], end: sustained[0].start + 0.65 }], 100).bars;
   assert.equal(jamMelodyRenderState(slightlyLong, 0, 3, 'C4').active, true);
-  assert.equal(jamMelodyRenderState(slightlyLong, 0, 4, 'C4').active, false);
+  assert.equal(jamMelodyRenderState(slightlyLong, 0, 4, 'C4').active, true);
+  assert.equal(jamMelodyRenderState(slightlyLong, 0, 4, 'C4').start, false);
   for (const step of [1, 2, 3]) {
     assert.deepEqual(adapter().getEventsForStep(0, step), []);
     assert.equal(jamMelodyRenderState(phrase.bars, 0, step, 'C4').start, false);
@@ -437,14 +473,15 @@ test('editing a visible bass or chord variant keeps that half bar and its edited
   for (const track of backing.filter(phrase => phrase.trackId !== 'drums')) {
     const high = applyJamTrackParameter(track, 'strength', 100);
     const step = track.trackId === 'bass' ? 3 : 2;
-    const visible = humPlaybackBars(high)[0][step];
+    const highBar = humPlaybackBars(high)[0];
+    const visible = highBar[step];
     const note = visible.note ?? visible.notes[0];
     const edited = editJamSequencerStep(high, 0, step, bar => setJamPitchedNote(bar, step, note, 2, false, track.trackId));
     const low = applyJamTrackParameter(edited, 'strength', 0);
     const lowBar = humPlaybackBars(low)[0];
     assert.equal(lowBar[step].notePerformances[note][0].durationSteps, 2);
-    assert.ok(lowBar[track.trackId === 'bass' ? 6 : 4]);
-    assert.notDeepEqual(lowBar.slice(8), humPlaybackBars(high)[0].slice(8));
+    assert.deepEqual(lowBar.slice(0, 8).map(Boolean), highBar.slice(0, 8).map(Boolean));
+    assert.notDeepEqual(lowBar.slice(8), highBar.slice(8));
     assert.deepEqual(edited.bars[0].slice(8), track.bars[0].slice(8));
   }
 });
@@ -607,10 +644,36 @@ test('strong melody evidence colors a dominant before resolution and bass connec
   assert.deepEqual(classes(chord[2][0]), ['B', 'D', 'G']);
   assert.deepEqual(classes(chord[2][8]), ['B', 'F', 'G']);
   assert.deepEqual(classes(chord[3][0]), ['C', 'E', 'G']);
-  assert.equal(bass[0][14].note, 'E2');
+  assert.equal(bass[0][12].note, 'E2');
+  assert.equal(bass[0][14], null);
   assert.equal(bass[1][0].note, 'F2');
   const high = humPlaybackBars({ trackId: 'bass', sourcePresetId: 'hum-generated', bars: bass, params: { strength: 100, groove: 50 } });
-  assert.equal(high[0][14].note, 'E2');
+  assert.equal(high[0][12].note, 'E2');
+});
+
+test('the playback adapter shares fractional entrances with bass, chord and kick and leaves a long rest', () => {
+  const store = makeStore(), projectId = store.current().id;
+  const lead = makeHumMelody(cleanHumNotes([event(0, 60, 0.16), event(1.0125, 64, 0.34)], 2), 120,
+    { pickupSteps: 2.2, quantize: false }).bars;
+  const [phrase] = store.insertHumPhrases([{ trackId: 'melody', bars: lead }], { projectId });
+  const tracks = store.insertHumPhrases(backingPhrases(lead), { projectId, melodyId: phrase.id });
+  const workspace = store.current().workspace;
+  for (const level of [0, 25, 50, 75, 100]) {
+    const templates = { ...workspace.templates };
+    for (const backing of tracks) templates[backing.trackId] = [applyJamTrackParameter(backing, backing.trackId === 'drums' ? 'groove' : 'strength', level)];
+    const selection = Object.fromEntries([phrase, ...tracks].map(track => [track.trackId, track.id]));
+    const snapshot = jamCombinationSnapshot({ ...workspace, templates, selection });
+    const adapter = createMatrixPlaybackAdapter(snapshot);
+    for (const [step, offset] of [[2, 0.2], [10, 0.3]]) {
+      const hits = adapter.getEventsForStep(0, step);
+      for (const type of ['melody', 'chord', 'bass', 'drums']) {
+        const hit = hits.find(hit => hit.type === type && (type !== 'drums' || hit.instrument === 'kick'));
+        assert.ok(hit, `${type} absent at level ${level}`);
+        assert.ok(Math.abs(hit.timingOffset - offset) < 1e-6, `${type} timing differs at level ${level}`);
+      }
+    }
+    for (const step of [4, 5, 6, 7, 8, 9]) assert.deepEqual(adapter.getEventsForStep(0, step), []);
+  }
 });
 
 test('chord attacks follow delayed melody entries and rhythm knobs preserve the pickup position', () => {
@@ -623,7 +686,7 @@ test('chord attacks follow delayed melody entries and rhythm knobs preserve the 
   assert.deepEqual(onsets(chord[0]), [4, 15]);
   assert.ok(chord[0][4].durationSteps < 3);
   const high = humPlaybackBars(applyJamTrackParameter(phrase, 'strength', 100))[0];
-  assert.deepEqual(onsets(high), [4, 5, 6, 15]);
+  assert.deepEqual(onsets(high), [4, 5, 15]);
   assert.deepEqual(high[15].notes, chord[0][15].notes);
   assert.ok(15 + high[15].durationSteps <= 16);
 });

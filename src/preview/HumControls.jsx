@@ -1,6 +1,7 @@
 import { createElement, useEffect, useRef, useState } from 'react';
 import { Mic, Square } from 'lucide-react';
-import { arrangeHumMelody, estimateHumBpm, makeHumMelody } from './humArrangement.js';
+import { arrangeHumBacking, fitHumTiming, makeHumMelody } from './humArrangement.js';
+import { canAdoptHumTempo } from '../app/jamPhraseContent.js';
 import { decodeHumRecording, maxHumSeconds, playHumNotes } from './humAudio.js';
 import './humPreview.css';
 
@@ -82,7 +83,7 @@ export default function HumControls({ projectStore, projectId, pauseJam, showRec
   function addBacking(currentTake) {
     const melody = projectStore.current().workspace.templates.melody.find(phrase => phrase.id === currentTake.melodyId);
     if (!melody) throw new Error('旋律格已移除');
-    const backing = Object.entries(arrangeHumMelody(melody.bars, projectStore.current().workspace.timbres?.melody ?? melody.timbreId)).map(([trackId, bars]) => ({ trackId, bars }));
+    const backing = arrangeHumBacking(melody.bars, projectStore.current().workspace.timbres?.melody ?? melody.timbreId);
     if (!projectStore.insertHumPhrases(backing, { projectId, melodyId: melody.id })) throw new Error('伴奏位置已被占用');
     setTake({ ...currentTake, backingReady: true });
     setStatus(initial);
@@ -111,8 +112,9 @@ export default function HumControls({ projectStore, projectId, pauseJam, showRec
       return;
     }
     const { workspace } = projectStore.current();
-    const estimate = Object.values(workspace.templates).every(row => !row.length) ? estimateHumBpm(notes) : null;
-    const melody = makeHumMelody(notes, estimate ?? workspace.bpm);
+    const emptyProject = canAdoptHumTempo(workspace, emptyMelodyId);
+    const timing = fitHumTiming(notes, workspace.bpm, { emptyProject });
+    const melody = makeHumMelody(notes, timing.bpm, timing);
     if (!melody) {
       setTake({ ...original, notes });
       setStatus({ phase: 'idle', text: '这段旋律的音域超出 Jam 范围。可以试听识别结果，或再哼一次。' });
@@ -120,7 +122,7 @@ export default function HumControls({ projectStore, projectId, pauseJam, showRec
     }
     let number = 1;
     while (workspace.templates.melody.some(phrase => phrase.name === `哼唱 ${number}`)) number++;
-    const [phrase] = projectStore.insertHumPhrases([{ trackId: 'melody', name: `哼唱 ${number}`, bars: melody.bars }], { projectId, emptyMelodyId, bpm: estimate }) ?? [];
+    const [phrase] = projectStore.insertHumPhrases([{ trackId: 'melody', name: `哼唱 ${number}`, bars: melody.bars }], { projectId, emptyMelodyId, bpm: timing.bpm }) ?? [];
     if (!phrase) {
       setStatus({ phase: 'idle', text: '旋律未能加入当前项目，请重试。' });
       return;

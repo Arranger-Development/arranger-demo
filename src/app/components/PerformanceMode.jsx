@@ -304,10 +304,9 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     const canRefresh = followMelody ? phrase => canFollowJamMelody(phrase, melody.id) : canRefreshHumHarmony;
     const fixedBars = phrase => hasJamNotes(phrase) && !canRefresh(phrase) ? humPlaybackBars(phrase) : undefined;
     try {
-      const arrangement = hasJamNotes(melody) ? arrangeMelody(melody.bars, workspace.timbres?.melody ?? melody.timbreId, {
+      const phrases = hasJamNotes(melody) ? arrangeMelody(melody.bars, workspace.timbres?.melody ?? melody.timbreId, {
         chordBars: fixedBars(chord), bassBars: fixedBars(bass),
-      }) : null;
-      const phrases = arrangement ? BACKING_TRACKS.map(trackId => ({ trackId, bars: arrangement[trackId] })) : [];
+      }) : [];
       const inserted = projectStore.insertHumPhrases(phrases, { projectId: id, melodyId: melody.id,
         fillEmpty: true, refreshHarmony: true, followMelody });
       if (inserted?.length && playback.isActive()) {

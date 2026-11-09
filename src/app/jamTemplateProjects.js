@@ -6,7 +6,7 @@ import { normalizeBpm } from '../domain/bpm.js';
 import { createClipRecord } from '../domain/clipHelpers.js';
 import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
 import { normalizeJamSlots, firstEmptyJamSlot, removeJamSlot, moveJamSlots, relocateJamDraft, jamLauncherColumnCount } from './jamTemplateSlots.js';
-import { hasJamPhraseNotes, isEmptyJamPhrase } from './jamPhraseContent.js';
+import { canAdoptHumTempo, hasJamPhraseNotes, isEmptyJamPhrase } from './jamPhraseContent.js';
 import { jamTrackParameters } from './jamPerformanceState.js';
 import { canFollowJamMelody, canRefreshHumHarmony, HUM_SOURCE, humPlaybackBars } from './jamHumExpression.js';
 
@@ -249,7 +249,8 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
           const canRefresh = followMelody ? canFollowJamMelody(existing, melodyId) : refreshHarmony && canRefreshHumHarmony(existing);
           if (hasJamPhraseNotes(existing) && !canRefresh) continue;
           if (followMelody && canRefresh && existing.humBackingMelodyId === melodyId
-            && JSON.stringify(existing.bars) === JSON.stringify(phrase.bars)) continue;
+            && JSON.stringify(existing.bars) === JSON.stringify(phrase.bars)
+            && JSON.stringify(existing.humDrumRestSteps) === JSON.stringify(phrase.humDrumRestSteps)) continue;
         }
         const draft = { ...phrase, ...(existing ? { id: existing.id, name: replaceEmptyRecording ? phrase.name : existing.name, timbreId: existing.timbreId, params: existing.params } : {}),
           ...(melody && { humBackingMelodyId: melody.id }),
@@ -260,7 +261,7 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
         inserted.push(entry.phrase);
       }
       if (!inserted.length) return fillEmpty ? [] : null;
-      const tempo = bpm != null && TRACKS.every(track => w.templates[track].length === 0) ? normalizeBpm(bpm, w.bpm) : w.bpm;
+      const tempo = bpm != null && canAdoptHumTempo(w, emptyMelodyId) ? normalizeBpm(bpm, w.bpm) : w.bpm;
       const updated = draft => {
         const phrase = inserted.find(item => item.id === draft?.editingTemplateId);
         return phrase ? { ...copy(phrase), editingTemplateId: phrase.id, dirty: false } : draft;
