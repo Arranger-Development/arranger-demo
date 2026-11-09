@@ -85,6 +85,47 @@ test('pitch changes harmony and bass, and dense starts thin the drums', () => {
   assert.ok(countHats(dense) < countHats(first));
 });
 
+function shortNoteAudio(pitches, duration, interval, { scoop = 0, scoopTime = 0.027, tail, legato = false } = {}) {
+  const rate = 22050, samples = new Float32Array(rate * 2);
+  let phase = 0;
+  pitches.forEach((pitch, index) => {
+    const start = 0.12 + index * interval;
+    const end = start + (index === pitches.length - 1 ? tail ?? duration : duration);
+    for (let i = Math.ceil(start * rate); i < Math.ceil(end * rate); i++) {
+      const time = i / rate;
+      const bend = scoop * Math.max(0, 1 - (time - start) / scoopTime);
+      phase += 2 * Math.PI * 440 * 2 ** ((pitch - bend - 69) / 12) / rate;
+      const level = legato ? 1 : Math.min(1, (time - start) / 0.01, (end - time) / 0.015);
+      samples[i] = level * (0.23 * Math.sin(phase) + 0.12 * Math.sin(2 * phase) + 0.04 * Math.sin(3 * phase));
+    }
+  });
+  return samples;
+}
+
+test('short syllables recover a missed reattack and correct the pitch after a scooped onset', () => {
+  const target = [60, 60, 61, 62, 63, 67];
+  const samples = shortNoteAudio(target, 0.065, 0.103, { scoop: 2, tail: 0.42 });
+  const model = [event(0.12, 60, 0.18), event(0.32, 62, 0.08), event(0.43, 62, 0.08),
+    event(0.53, 63, 0.08), event(0.635, 67, 0.42)];
+  const notes = cleanHumNotes(model, 2, samples);
+  assert.deepEqual(notes.map(note => note.pitch), target);
+  assert.ok(notes.slice(0, -1).every(note => note.end - note.start < 0.085));
+  assert.ok(notes[1].start - notes[0].end > 0.025);
+  assert.deepEqual(notes.at(-1), { start: 0.635, end: 1.055, pitch: 67, amplitude: 0.8 });
+});
+
+test('connected short notes are repaired when the audio supports distinct pitches, but a steady glide is left alone', () => {
+  const target = [60, 62, 64, 65, 67, 64];
+  const legato = shortNoteAudio(target, 0.082, 0.082, { legato: true });
+  const model = [event(0.116, 60, 0.081), event(0.197, 62, 0.081), event(0.278, 64, 0.16),
+    event(0.441, 67, 0.081), event(0.522, 64, 0.081)];
+  assert.deepEqual(cleanHumNotes(model, 2, legato).map(note => note.pitch), target);
+
+  const glide = shortNoteAudio([60], 0.45, 0.5, { scoop: 6, scoopTime: 0.32 });
+  const glideModel = [event(0.186, 56, 0.093), event(0.29, 58, 0.093), event(0.406, 60, 0.165)];
+  assert.deepEqual(cleanHumNotes(glideModel, 2, glide), cleanHumNotes(glideModel, 2));
+});
+
 test('first empty column keeps existing selections and accompaniment publishes atomically', () => {
   const store = makeStore();
   const projectId = store.current().id;

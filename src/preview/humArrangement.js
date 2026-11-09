@@ -4,6 +4,7 @@ import { createMelodyCellFromNotes } from '../domain/melodyCells.js';
 import { authoredChordAnchors, planHumHarmony } from './humHarmony.js';
 import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
 import { correctHumPitch } from './humPitchCorrection.js';
+import { recoverShortHumNotes } from './humShortNotes.js';
 
 const pitches = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = midi => `${pitches[midi % 12]}${Math.floor(midi / 12) - 1}`;
@@ -88,16 +89,21 @@ export function cleanHumNotes(events, recordingSeconds, samples) {
     if (last && last.end > candidate.start) last.end = candidate.start;
     notes.push(candidate);
   }
-  const valid = notes.filter(note => note.end - note.start >= minNoteSeconds);
+  const valid = recoverShortHumNotes(notes.filter(note => note.end - note.start >= minNoteSeconds), samples);
   if (!valid.some(note => note.pitchCenter !== undefined)) return valid;
   const corrected = correctHumPitch(valid);
-  if (!envelope || corrected.every((note, index) => note.pitch === valid[index].pitch)) return corrected;
+  const pitchChanged = corrected.some((note, index) => note.pitch !== valid[index].pitch);
   const joined = [];
-  for (const note of corrected) {
+  let previousShortAttack = false;
+  for (const { shortAttack, ...note } of corrected) {
     const previous = joined.at(-1);
-    const end = previous?.pitch === note.pitch ? continuousHumEnd(envelope, previous, note) : null;
+    const end = pitchChanged && !shortAttack && !previousShortAttack && previous?.pitch === note.pitch
+      ? continuousHumEnd(envelope, previous, note) : null;
     if (end != null) previous.end = end;
-    else joined.push(note);
+    else {
+      joined.push(note);
+      previousShortAttack = shortAttack;
+    }
   }
   return joined;
 }
