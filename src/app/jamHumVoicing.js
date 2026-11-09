@@ -42,6 +42,12 @@ function revoice(cell, mapping) {
 export function humChordVoicingBars(phrase, bars, level) {
   if (level === 60) return bars;
   const editedHalves = new Set((phrase.humEditedSteps ?? []).map(step => Math.floor(step / 8)));
+  if (phrase.humSoundingRanges) {
+    return bars.map((bar, index) => bar.map((cell, step) => {
+      const mapping = !editedHalves.has(index * 2 + (step >> 3)) && voiceMap(cell?.notes, level);
+      return mapping ? revoice(cell, mapping) : cell;
+    }));
+  }
   return bars.map((bar, index) => {
     // Read the source chord even when the rhythm knob spreads its notes across steps.
     const mappings = [0, 8].map((start, half) => editedHalves.has(index * 2 + half) ? null

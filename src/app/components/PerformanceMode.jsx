@@ -10,7 +10,7 @@ import DrumStepGrid from './DrumStepGrid.jsx';
 import JamLauncher from './JamLauncher.jsx';
 import JamChordEditor from './JamChordEditor.jsx';
 import { createJamAudition } from '../jamAudition.js';
-import { canFollowJamMelody, canRefreshHumHarmony, editJamSequencerStep, HUM_SOURCE, humPlaybackBars, isHumBacking } from '../jamHumExpression.js';
+import { canFollowJamMelody, editJamSequencerStep, HUM_SOURCE, humPlaybackBars, isHumBacking } from '../jamHumExpression.js';
 import { createJamHeldEdits } from '../jamHeldEdits.js';
 import { createJamPhraseHistory } from '../jamPhraseHistory.js';
 import { toggleJamTemplate, launchJamColumn, deleteJamTemplate, jamColumnPhrases } from '../jamTemplateSelection.js';
@@ -300,7 +300,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     const column = jamColumnPhrases(workspace.templates, slot), { melody, chord, bass } = column;
     if (!melody || (!followMelody && !hasJamNotes(melody))) return;
     cancelBackingTimer(melody.id);
-    const canRefresh = followMelody ? phrase => canFollowJamMelody(phrase, melody.id) : canRefreshHumHarmony;
+    const canRefresh = phrase => canFollowJamMelody(phrase, melody.id);
     const fixedBars = phrase => hasJamNotes(phrase) && !canRefresh(phrase) ? humPlaybackBars(phrase) : undefined;
     try {
       const phrases = hasJamNotes(melody) ? arrangeMelody(melody.bars, workspace.timbres?.melody ?? melody.timbreId, {
@@ -469,7 +469,9 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
   const hasBacking = columnPhrases && BACKING_TRACKS.some(track => hasJamNotes(columnPhrases[track]));
   const canArrange = columnPhrases && hasJamNotes(columnPhrases.melody) && BACKING_TRACKS.some(track => {
     const phrase = columnPhrases[track];
-    return !phrase?.humEditedSteps?.length && (!hasJamNotes(phrase) || canRefreshHumHarmony(phrase));
+    const melodyId = columnPhrases.melody.id;
+    return canFollowJamMelody(phrase, melodyId) || (!hasJamNotes(phrase) && !phrase?.humEditedSteps?.length
+      && (!phrase?.humBackingMelodyId || phrase.humBackingMelodyId === melodyId));
   });
   const renderLauncher = (humButton, humFeedback) => <JamLauncher key={project.id} humButton={humButton} humFeedback={humFeedback} active={active} playback={playback} templates={w.templates} columnCount={columnCount} bank={effectivePage} onBankChange={setPage} navigationRef={launcherNav}
           editingTrack={editingTrack} editingTemplateId={draft?.editingTemplateId} auditioning={solo} selection={w.selection} status={status} mutedTracks={w.mutedTracks} volumes={w.volumes}

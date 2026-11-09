@@ -8,10 +8,10 @@ export const JAM_CHORD_NOTES = createPianoRollNotes({ lowestOctave: Math.min(...
 const durationSteps = duration => ({ '1n': 16, '2n': 8, '4n': 4, '8n': 2, '16n': 1 }[duration] ?? 1);
 
 // Resolve exactly the pitches the playback adapter uses, including legacy chord tones.
-export function jamChordNotes(cell, step) {
+export function jamChordNotes(cell, step, maxLength = 16 - step) {
   const event = extractChordEvent(cell, 0, step);
   return [...new Set(event?.notes ?? [])].map(note => ({ note,
-    durationSteps: Math.min(16 - step, cell?.notePerformances?.[note]?.reduce((length, p) => Math.max(length, p.offsetSteps + p.durationSteps), 0)
+    durationSteps: Math.min(maxLength, cell?.notePerformances?.[note]?.reduce((length, p) => Math.max(length, p.offsetSteps + p.durationSteps), 0)
       || cell?.noteDurationSteps?.[note] || event.durationSteps || durationSteps(event.duration)),
   }));
 }
@@ -27,10 +27,10 @@ export function jamChordRenderState(bar, step, note) {
 }
 
 // Only the changed start cell is converted. Other cells (and other notes' lengths) survive.
-export function setJamChordNote(bar, step, note, length = 1, remove = false) {
+export function setJamChordNote(bar, step, note, length = 1, remove = false, maxLength = 16 - step) {
   if (!Array.isArray(bar) || !Number.isInteger(step) || step < 0 || step >= 16 || !isChordGridPitch(note)) return bar;
-  const hits = jamChordNotes(bar[step], step).filter(hit => hit.note !== note);
-  if (!remove) hits.push({ note, durationSteps: Math.max(1, Math.min(16 - step, Math.round(Number(length) || 1))) });
+  const hits = jamChordNotes(bar[step], step, maxLength).filter(hit => hit.note !== note);
+  if (!remove) hits.push({ note, durationSteps: Math.max(1, Math.min(maxLength, Math.round(Number(length) || 1))) });
   const next = [...bar];
   next[step] = hits.length ? { ...bar[step], type: 'notes', notes: hits.map(hit => hit.note),
     label: hits.map(hit => hit.note).join('/'), duration: '16n', durationSteps: 1,

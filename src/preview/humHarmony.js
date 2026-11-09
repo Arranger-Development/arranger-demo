@@ -203,23 +203,6 @@ function colorHarmony(path, windows, key, bassHints) {
   });
 }
 
-function chordTiming(window, index) {
-  const base = index * 8;
-  if (!window.length) return { offset: 0, duration: 6.8 };
-  const first = window[0].from;
-  let end = window[0].to;
-  let accent = null, best = 0;
-  for (const note of window.slice(1)) {
-    if (note.from - end >= 2.5) break;
-    end = Math.max(end, note.to);
-    if (note.start - first < 2 || note.from !== note.start || note.to - note.start < 0.4
-      || (note.duration < 1.25 && note.velocity < 0.72)) continue;
-    const score = Math.min(note.duration, 4) + note.velocity + (isBeat(note) ? 0.3 : 0);
-    if (score > best) { accent = note.start - base; best = score; }
-  }
-  return { offset: first - base, duration: Math.min(6.8, end - first), accent };
-}
-
 function voicingOptions(chord) {
   const rootPosition = chord.tones.map(pitch => 48 + chord.root + (pitch - chord.root + 12) % 12).sort((a, b) => a - b);
   const inversions = rootPosition.map((_, i) => [...rootPosition.slice(i), ...rootPosition.slice(0, i).map(pitch => pitch + 12)]);
@@ -358,11 +341,7 @@ export function planHumHarmony(bars, timbreId, { bassBars, chordBarCount = bars.
   const voicings = fitVoicings(colored, windows);
   return {
     key: { tonic: key.tonic, mode: key.mode === 0 ? 'major' : 'minor' },
-    events,
-    windows: colored.map((chord, index) => ({
-      ...chord, voicing: voicings[index], ...chordTiming(windows[index], index),
-      // In a long rest leave room. Bass supplied by the player can also cue an entrance.
-      active: Boolean(windows[index].length || bassHints[index] != null),
-    })),
+    events, lead,
+    windows: colored.map((chord, index) => ({ ...chord, voicing: voicings[index] })),
   };
 }

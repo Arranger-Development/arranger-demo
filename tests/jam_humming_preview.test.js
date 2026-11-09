@@ -470,8 +470,8 @@ test('editing a visible bass or chord variant keeps that half bar and its edited
   const backing = store.insertHumPhrases(backingPhrases(bars), { projectId, melodyId: lead.id });
   for (const track of backing.filter(phrase => phrase.trackId !== 'drums')) {
     const high = applyJamTrackParameter(track, 'strength', 100);
-    const step = track.trackId === 'bass' ? 3 : 2;
     const highBar = humPlaybackBars(high)[0];
+    const step = highBar.findIndex((cell, index) => index < 8 && cell && !track.bars[0][index]);
     const visible = highBar[step];
     const note = visible.note ?? visible.notes[0];
     const edited = editJamSequencerStep(high, 0, step, bar => setJamPitchedNote(bar, step, note, 2, false, track.trackId));
@@ -530,20 +530,27 @@ test('harmony avoids crowding an accented melody note and uses the selected timb
   assert.ok(arrangeHumMelody(scored(['F4', 'E4', 'C4', 'E4'])).chord[0][0].notes.some(note => note.startsWith('F')));
 });
 
-test('refreshing harmony updates the generated bass in place and preserves a hand-edited chord', () => {
+test('refreshing legacy accompaniment updates bass and drums in place and preserves a hand-edited chord', () => {
   const store = makeStore();
   const projectId = store.current().id;
   const [lead] = store.insertHumPhrases([{ trackId: 'melody', bars: melody([60, 64, 67, 60]) }], { projectId });
-  const original = store.insertHumPhrases(backingPhrases(lead.bars), { projectId, melodyId: lead.id });
+  const legacy = backingPhrases(lead.bars).map(({ trackId, bars }) => ({ trackId, bars }));
+  const original = store.insertHumPhrases(legacy, { projectId, melodyId: lead.id });
   const chord = original.find(phrase => phrase.trackId === 'chord');
   const bass = original.find(phrase => phrase.trackId === 'bass');
+  const drums = original.find(phrase => phrase.trackId === 'drums');
+  const drumParams = store.commitPhraseEdit(applyJamTrackParameter(drums, 'groove', 75)).params;
   const editedChord = store.commitPhraseEdit(editJamSequencerStep(chord, 0, 3, bar => setJamPitchedNote(bar, 3, 'D4', 1)));
-  const updatedLead = store.commitPhraseEdit({ ...lead, bars: melody([62, 66, 69, 62]) });
+  const updatedLead = store.commitPhraseEdit({ ...lead, bars: melody([62, 66, 69, 62], 0.65) });
   const updated = store.insertHumPhrases(backingPhrases(updatedLead.bars), {
     projectId, melodyId: lead.id, fillEmpty: true, refreshHarmony: true,
   });
-  assert.deepEqual(updated.map(phrase => phrase.id), [bass.id]);
+  assert.deepEqual(updated.map(phrase => phrase.id), [bass.id, drums.id]);
   assert.equal(updated[0].bars[0][0].note, 'D2');
+  assert.ok(updated[0].humSoundingRanges.length);
+  assert.ok(updated[1].humDrumQuietSteps.length);
+  assert.notDeepEqual(updated[1].bars, drums.bars);
+  assert.deepEqual(updated[1].params, drumParams);
   assert.deepEqual(store.current().workspace.templates.chord[0], editedChord);
 });
 
@@ -615,9 +622,10 @@ test('a written chord controls the generated bass at the actual change, even wit
   written[0] = { type: 'notes', notes: ['A3', 'C4', 'F4'], durationSteps: 6 };
   written[6] = { type: 'notes', notes: ['A3', 'D4', 'F#4'], durationSteps: 10 };
   const chordsBefore = structuredClone(written);
-  const { bass } = arrangeHumMelody(quarterNotes('C4 E4 G4 C4'), 'airy-synth-lead', { chordBars: [written] });
-  assert.deepEqual(bass[0].flatMap((cell, step) => cell ? [[step, cell.note]] : []), [[0, 'F2'], [6, 'D2'], [8, 'D2']]);
-  const playing = humPlaybackBars({ trackId: 'bass', sourcePresetId: 'hum-generated', bars: bass, params: { strength: 100, groove: 50 } });
+  const backing = arrangeHumBacking(quarterNotes('C4 E4 G4 C4'), 'airy-synth-lead', { chordBars: [written] });
+  const bass = backing.find(phrase => phrase.trackId === 'bass');
+  assert.deepEqual(bass.bars[0].flatMap((cell, step) => cell ? [[step, cell.note]] : []), [[0, 'F2'], [4, 'F2'], [6, 'D2'], [8, 'D2']]);
+  const playing = humPlaybackBars({ ...bass, sourcePresetId: 'hum-generated', params: { strength: 100, groove: 50 } });
   assert.equal(playing[0][6].note, 'D2');
   assert.ok(playing[0][0].durationSteps < 6);
   assert.deepEqual(written, chordsBefore);
@@ -637,6 +645,7 @@ test('new chords honor a manual bass even with chromatic roots and different loo
 
 test('strong melody evidence colors a dominant before resolution and bass connects across roots', () => {
   const lead = quarterNotes('C4 E4 G4 E4 F4 A4 C5 A4 G4 B4 F4 B4 C5 G4 E4 C4');
+  lead[0][8].durationSteps = 3;
   const { chord, bass } = arrangeHumMelody(lead);
   const classes = cell => cell.notes.map(note => note.slice(0, -1)).sort();
   assert.deepEqual(classes(chord[2][0]), ['B', 'D', 'G']);
@@ -645,7 +654,8 @@ test('strong melody evidence colors a dominant before resolution and bass connec
   assert.equal(bass[0][12].note, 'E2');
   assert.equal(bass[0][14], null);
   assert.equal(bass[1][0].note, 'F2');
-  const high = humPlaybackBars({ trackId: 'bass', sourcePresetId: 'hum-generated', bars: bass, params: { strength: 100, groove: 50 } });
+  const high = humPlaybackBars({ ...backingPhrases(lead).find(phrase => phrase.trackId === 'bass'),
+    sourcePresetId: 'hum-generated', params: { strength: 100, groove: 50 } });
   assert.equal(high[0][12].note, 'E2');
 });
 
@@ -678,13 +688,60 @@ test('chord attacks follow delayed melody entries and rhythm knobs preserve the 
   const lead = [Array(16).fill(null)];
   lead[0][4] = { type: 'melody', note: 'C4', durationSteps: 2 };
   lead[0][15] = { type: 'melody', note: 'E4', durationSteps: 1 };
-  const { chord } = arrangeHumMelody(lead);
-  const phrase = { trackId: 'chord', sourcePresetId: 'hum-generated', bars: chord, params: { strength: 50, groove: 60 } };
+  const chord = backingPhrases(lead).find(phrase => phrase.trackId === 'chord');
+  const phrase = { ...chord, sourcePresetId: 'hum-generated', params: { strength: 50, groove: 60 } };
   const onsets = bar => bar.flatMap((cell, step) => cell ? [step] : []);
-  assert.deepEqual(onsets(chord[0]), [4, 15]);
-  assert.ok(chord[0][4].durationSteps < 3);
+  assert.deepEqual(onsets(chord.bars[0]), [4, 15]);
+  assert.ok(chord.bars[0][4].durationSteps < 3);
   const high = humPlaybackBars(applyJamTrackParameter(phrase, 'strength', 100))[0];
   assert.deepEqual(onsets(high), [4, 5, 15]);
-  assert.deepEqual(high[15].notes, chord[0][15].notes);
+  assert.deepEqual(high[15].notes, chord.bars[0][15].notes);
   assert.ok(15 + high[15].durationSteps <= 16);
+});
+
+test('shared rhythm answers a second entrance in the same half-bar and holds through the next bar', () => {
+  const store = makeStore(), projectId = store.current().id;
+  const notes = [[2.25, 0.75, 60, 0.45], [6.2, 3.2, 64, 0.85], [10.5, 9.8, 67, 0.9],
+    [25, 2, 65, 0.8], [28.6, 1.6, 64, 0.8]];
+  const origin = notes[0][0];
+  const bars = makeHumMelody(notes.map(([step, length, pitch, amplitude]) => ({
+    start: (step - origin) / 8, end: (step + length - origin) / 8, pitch, amplitude,
+  })), 120, { pickupSteps: origin, quantize: false }).bars;
+  const [lead] = store.insertHumPhrases([{ trackId: 'melody', bars }], { projectId });
+  const backing = store.insertHumPhrases(backingPhrases(bars), { projectId, melodyId: lead.id });
+  const workspace = store.current().workspace;
+  const chord = backing.find(phrase => phrase.trackId === 'chord');
+  const chordNote = chord.bars[0][10].notes[0];
+  assert.deepEqual(jamMelodyRenderState(chord.bars, 1, 0, chordNote, 'chord'),
+    { active: true, start: false, startBar: 0, startStep: 10, durationSteps: chord.bars[0][10].durationSteps + 0.5 });
+  const selection = Object.fromEntries([lead, ...backing].map(track => [track.trackId, track.id]));
+  for (const level of [0, 25, 50, 75, 100]) {
+    const templates = { ...workspace.templates };
+    for (const phrase of backing) {
+      templates[phrase.trackId] = [applyJamTrackParameter(phrase, phrase.trackId === 'drums' ? 'groove' : 'strength', level)];
+    }
+    const snapshot = jamCombinationSnapshot({ ...workspace, templates, selection });
+    assert.equal(snapshot.totalBars, 2);
+    const adapter = createMatrixPlaybackAdapter(snapshot, { totalBars: snapshot.totalBars });
+    const events = Array.from({ length: 64 }, (_, step) => adapter.getEventsForFlatStep(step).map(hit => ({
+      ...hit, at: step + (hit.timingOffset ?? 0),
+    }))).flat();
+    const closeTo = (hit, time) => Math.abs(hit.at - time) < 1e-6;
+    for (const step of [2.25, 6.2, 10.5, 25, 28.6, 34.25, 38.2]) {
+      const hits = events.filter(hit => closeTo(hit, step));
+      assert.ok(hits.some(hit => hit.type === 'melody'));
+      assert.ok(hits.some(hit => hit.type === 'chord'));
+      assert.ok(hits.some(hit => hit.type === 'bass'));
+      assert.ok(hits.some(hit => hit.instrument === 'kick'));
+    }
+    const pitchedOrKick = hit => ['chord', 'bass'].includes(hit.type) || hit.instrument === 'kick';
+    assert.ok(events.filter(pitchedOrKick).every(hit => ![8, 16, 24, 32].includes(hit.at)));
+    assert.ok(events.every(hit => hit.at % 32 <= 20.3 || hit.at % 32 >= 25));
+    assert.ok(events.filter(hit => ['snare', 'hihat'].includes(hit.instrument)).every(hit =>
+      !events.some(kick => kick.instrument === 'kick' && Math.abs(kick.at - hit.at) < 0.5 - 1e-6)));
+    assert.ok(events.filter(pitchedOrKick).every(hit => notes.some(([start, length]) => {
+      const at = hit.at % 32;
+      return at >= start - 1e-6 && at < start + length;
+    })));
+  }
 });

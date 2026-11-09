@@ -8,7 +8,7 @@ import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
 import { normalizeJamSlots, firstEmptyJamSlot, removeJamSlot, moveJamSlots, relocateJamDraft, jamLauncherColumnCount } from './jamTemplateSlots.js';
 import { canAdoptHumTempo, hasJamPhraseNotes, isEmptyJamPhrase } from './jamPhraseContent.js';
 import { jamTrackParameters } from './jamPerformanceState.js';
-import { canFollowJamMelody, canRefreshHumHarmony, HUM_SOURCE, humPlaybackBars } from './jamHumExpression.js';
+import { canFollowJamMelody, HUM_SOURCE, humPlaybackBars } from './jamHumExpression.js';
 
 const copy = value => structuredClone(value);
 const uid = () => globalThis.crypto.randomUUID();
@@ -255,11 +255,12 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
         if (!replaceEmptyRecording && occupiedByTrack[phrase.trackId].has(slotIndex)) {
           if (!fillEmpty) return null;
           if (!existing || ((refreshHarmony || followMelody) && existing.humEditedSteps?.length)) continue;
-          const canRefresh = followMelody ? canFollowJamMelody(existing, melodyId) : refreshHarmony && canRefreshHumHarmony(existing);
-          if (hasJamPhraseNotes(existing) && !canRefresh) continue;
+          const canRefresh = (followMelody || refreshHarmony) && canFollowJamMelody(existing, melodyId);
+          if ((hasJamPhraseNotes(existing) || existing.humBackingMelodyId && existing.humBackingMelodyId !== melodyId) && !canRefresh) continue;
           if (followMelody && canRefresh && existing.humBackingMelodyId === melodyId
             && JSON.stringify(existing.bars) === JSON.stringify(phrase.bars)
-            && JSON.stringify(existing.humDrumRestSteps) === JSON.stringify(phrase.humDrumRestSteps)) continue;
+            && JSON.stringify(existing.humDrumQuietSteps) === JSON.stringify(phrase.humDrumQuietSteps)
+            && JSON.stringify(existing.humSoundingRanges) === JSON.stringify(phrase.humSoundingRanges)) continue;
         }
         const draft = { ...phrase, ...(existing ? { id: existing.id, name: replaceEmptyRecording ? phrase.name : existing.name, timbreId: existing.timbreId, params: existing.params } : {}),
           ...(melody && { humBackingMelodyId: melody.id }),

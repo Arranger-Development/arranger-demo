@@ -8,17 +8,15 @@ export const HUM_SOURCE = 'hum-generated';
 const velocity = (value = 1, gain) => Math.max(0.2, Math.min(1, value * gain));
 
 function humSequencerBars(phrase, strength, groove) {
+  if (phrase.trackId === 'chord' && phrase.humSoundingRanges) {
+    return humRhythmBars({ ...phrase, bars: humChordVoicingBars(phrase, phrase.bars, groove) }, strength);
+  }
   const bars = humRhythmBars(phrase, phrase.trackId === 'drums' ? groove : strength);
   return phrase.trackId === 'chord' ? humChordVoicingBars(phrase, bars, groove) : bars;
 }
 
 export function isHumBacking(phrase) {
   return phrase?.sourcePresetId === HUM_SOURCE && phrase.trackId !== 'melody';
-}
-
-export function canRefreshHumHarmony(phrase) {
-  return phrase?.sourcePresetId === HUM_SOURCE && ['chord', 'bass'].includes(phrase.trackId)
-    && !phrase.humEditedSteps?.length;
 }
 
 export function canFollowJamMelody(phrase, melodyId) {
@@ -70,7 +68,8 @@ export function humPlaybackBars(phrase) {
         : position % 8 === 0 ? 0.24 : position % 4 === 0 ? 0.08 : -0.28;
       return 1 + right * (trackId === 'bass' ? -accent : accent) + (trackId === 'melody' ? left * 0.4 : 0);
     };
-    const length = trackId === 'bass' && !fixedSteps.has(barIndex * 16 + step) ? 0.77 + 0.23 * left : 1;
+    const bassLength = phrase.humSoundingRanges ? 0.94 + left * (left < 0 ? 0.32 : 0.06) : 0.77 + 0.23 * left;
+    const length = trackId === 'bass' && !fixedSteps.has(barIndex * 16 + step) ? bassLength : 1;
     const notes = Object.entries(cell.notePerformances ?? {});
     return {
       ...cell,

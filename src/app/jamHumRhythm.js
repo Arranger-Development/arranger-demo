@@ -92,10 +92,53 @@ function pitchedRhythm(bar, track, level, edited) {
   return next;
 }
 
+function melodyFollowingBars(phrase, level) {
+  const base = phrase.bars.flat(), next = [...base];
+  const editedHalves = new Set((phrase.humEditedSteps ?? []).map(step => Math.floor(step / 8)));
+  const editable = step => !editedHalves.has(Math.floor(step / 8));
+  const chord = phrase.trackId === 'chord';
+  if (level === 0) return phrase.bars;
+
+  for (const [step, cell] of base.entries()) {
+    if (!cell || !editable(step)) continue;
+    const offset = onsetOffset(cell), end = step + offset + cell.durationSteps;
+    const notes = cell.notes ?? [cell.note];
+    if (level === 25) {
+      next[step] = pitchedCell(cell, Math.min(cell.durationSteps, chord ? 3.1 : 2.2), notes, 1, offset);
+      continue;
+    }
+    const fills = [];
+    const firstFill = step + (level === 100 ? 1 : 2);
+    const halfEnd = (Math.floor(step / 8) + 1) * 8;
+    for (let at = firstFill; at < Math.min(end - 0.15, halfEnd); at++) {
+      if (base[at]) continue;
+      const range = phrase.humSoundingRanges.find(([start, stop]) => at >= start && at < stop - 0.15);
+      if (!range) continue;
+      fills.push({ at, end: Math.min(end, range[1]) });
+      if (!chord || level === 75 || fills.length >= notes.length - 1) break;
+    }
+    if (!fills.length) continue;
+    const firstLength = fills[0].at - step - offset;
+    if (chord && level === 100) {
+      next[step] = pitchedCell(cell, firstLength, notes.slice(0, 1), 1, offset);
+      fills.forEach(({ at, end }, index) => {
+        const voices = index === fills.length - 1 ? notes.slice(index + 1) : notes.slice(index + 1, index + 2);
+        next[at] = pitchedCell(cell, Math.min(2.6, end - at), voices, 0.8);
+      });
+    } else {
+      next[step] = pitchedCell(cell, firstLength, notes, 1, offset);
+      const [fill] = fills;
+      next[fill.at] = pitchedCell(cell, Math.min(1.6, fill.end - fill.at), notes, 0.7);
+    }
+  }
+  return phrase.bars.map((bar, index) => next.slice(index * 16, index * 16 + bar.length));
+}
+
 export function humRhythmBars(phrase, level) {
   if (level === 50 || phrase.trackId === 'melody') return phrase.bars;
+  if (phrase.humSoundingRanges) return melodyFollowingBars(phrase, level);
   const touched = new Set(phrase.humEditedSteps);
-  const rests = new Set(phrase.humDrumRestSteps);
+  const rests = new Set(phrase.humDrumQuietSteps ?? phrase.humDrumRestSteps);
   return phrase.bars.map((bar, index) => {
     const edited = step => touched.has(index * 16 + step);
     return phrase.trackId === 'drums' ? drumRhythm(bar, level, edited, step => rests.has(index * 16 + step)) : pitchedRhythm(bar, phrase.trackId, level, edited);

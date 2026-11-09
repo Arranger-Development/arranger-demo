@@ -7,7 +7,7 @@ import { JAM_CHORD_NOTES, jamChordNotes, setJamChordNote } from './jamChordEditi
 export const jamEditorNotes = track => track === 'chord' ? JAM_CHORD_NOTES : track === 'bass' ? BASS_NOTES : MELODY_NOTES;
 
 export function jamPitchedNotes(cell, step, track, maxLength = 16 - step) {
-  if (track === 'chord') return jamChordNotes(cell, step);
+  if (track === 'chord') return jamChordNotes(cell, step, maxLength);
   const notes = track === 'bass' ? [cell?.note].filter(note => BASS_NOTE_IDS.includes(note)) : getMelodyCellNotes(cell);
   return notes.map(note => ({ note, durationSteps: Math.min(maxLength,
     cell?.notePerformances?.[note]?.reduce((length, p) => Math.max(length, p.offsetSteps + p.durationSteps), 0)
@@ -22,11 +22,11 @@ export function jamPitchedRenderState(bar, step, note, track) {
   return { active: false, start: false, startStep: null, durationSteps: 0 };
 }
 
-export function jamMelodyRenderState(bars, bar, step, note) {
+export function jamMelodyRenderState(bars, bar, step, note, track = 'melody') {
   const absolute = bar * 16 + step;
   for (let start = absolute; start >= 0; start--) {
     const startBar = Math.floor(start / 16), startStep = start % 16;
-    const hit = jamPitchedNotes(bars[startBar]?.[startStep], startStep, 'melody', Infinity).find(item => item.note === note);
+    const hit = jamPitchedNotes(bars[startBar]?.[startStep], startStep, track, Infinity).find(item => item.note === note);
     if (hit && start + hit.durationSteps > absolute) {
       return { active: true, start: start === absolute, startBar, startStep, durationSteps: hit.durationSteps };
     }
@@ -35,7 +35,7 @@ export function jamMelodyRenderState(bars, bar, step, note) {
 }
 
 export function setJamPitchedNote(bar, step, note, length = 1, remove = false, track = 'chord', maxLength = 16 - step) {
-  if (track === 'chord') return setJamChordNote(bar, step, note, length, remove);
+  if (track === 'chord') return setJamChordNote(bar, step, note, length, remove, maxLength);
   const valid = track === 'bass' ? BASS_NOTE_IDS : MELODY_NOTE_IDS;
   if (!Array.isArray(bar) || !Number.isInteger(step) || step < 0 || step >= 16 || !valid.includes(note)) return bar;
   const duration = Math.max(1, Math.min(maxLength, Math.round(Number(length) || 1)));

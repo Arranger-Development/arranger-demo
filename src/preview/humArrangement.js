@@ -2,6 +2,7 @@ import { getDialDrumPreset } from '../data/dialDrumPresets.js';
 import { createDrumsCell } from '../domain/drumsCells.js';
 import { createMelodyCellFromNotes } from '../domain/melodyCells.js';
 import { authoredChordAnchors, planHumHarmony } from './humHarmony.js';
+import { planHumPhraseRhythm } from './humPhraseRhythm.js';
 import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
 import { correctHumPitch } from './humPitchCorrection.js';
 import { recoverShortHumNotes } from './humShortNotes.js';
@@ -204,7 +205,7 @@ export function makeHumMelody(notes, bpm, { sourceBpm = bpm, pickupSteps = 0, qu
 }
 
 function bassConnection(current, next, lead, step) {
-  if (!current.active || !next.active || current.root === next.root || current.offset + current.duration < 4) return null;
+  if (!next || current.root === next.root) return null;
   const from = 36 + current.root, to = 36 + next.root;
   if (Math.abs(from - to) <= 2) return null;
   const sounding = lead.filter(note => note.start < step + 1.8 && note.start + note.duration > step);
@@ -214,67 +215,79 @@ function bassConnection(current, next, lead, step) {
   return [to - 1, to + 1, to - 2, to + 2].find(note => options.includes(note % 12) && Math.abs(note - from) <= 5) ?? null;
 }
 
-function arrangeHumDrums(events, windows, length) {
+function arrangeHumDrums(events, { anchors, sounding }, length) {
   const preset = getDialDrumPreset(50, 50).bars;
   const onsetCounts = Array(length / stepsPerBar).fill(0);
   for (const event of events) onsetCounts[Math.floor(event.start / stepsPerBar)]++;
-  const rests = [];
-  let end = events[0].start;
-  if (end > 0) rests.push([0, end]);
-  for (const event of events) {
-    if (event.start - end >= 4) rests.push([end, event.start]);
-    end = Math.max(end, event.start + event.duration);
+
+  const rests = [[0, sounding[0][0]]];
+  for (let index = 0; index < sounding.length; index++) {
+    const end = sounding[index][1], next = sounding[index + 1]?.[0] ?? length;
+    if (next - end >= 4 - 1e-6) rests.push([end, next]);
   }
-  if (length - end >= 4) rests.push([end, length]);
-  const isRest = step => rests.some(([from, to]) => step >= from && step < to);
-  const kicks = new Map();
-  const addKick = (start, velocity) => {
-    if (isRest(start)) return;
+  const kicks = new Map(anchors.map(({ start, required, entrance }) => {
     const step = Math.floor(start);
-    kicks.set(step, { instrument: 'kick', offsetSteps: start - step, durationSteps: 1, velocity });
+    return [step, { instrument: 'kick', offsetSteps: start - step, durationSteps: 1,
+      velocity: required ? (entrance ? 0.76 : 0.66) : 0.48 }];
+  }));
+  const isQuiet = time => {
+    if (rests.some(([from, to]) => time >= from && time < to)) return true;
+    for (let step = Math.floor(time - 0.5); step <= Math.floor(time + 0.5); step++) {
+      const kick = kicks.get((step + length) % length);
+      if (kick && Math.abs(time - step - kick.offsetSteps) < 0.5) return true;
+    }
+    return false;
   };
-  for (const [index, window] of windows.slice(0, length / 8).entries()) {
-    if (!window.active) continue;
-    addKick(index * 8 + window.offset, index % 2 ? 0.63 : 0.76);
-    if (window.accent != null) addKick(index * 8 + window.accent, 0.51);
-  }
+  const humDrumQuietSteps = [];
   const drums = Array.from({ length }, (_, step) => {
     const bar = Math.floor(step / stepsPerBar), position = step % stepsPerBar;
     const cell = preset[bar % preset.length][position];
+    const quiet = isQuiet(step);
+    if (quiet) humDrumQuietSteps.push(step);
     const hits = (cell?.drumHits ?? []).filter(hit => hit.instrument === 'hihat'
-      && !isRest(step + hit.offsetSteps) && (onsetCounts[bar] < 6 || position % 4 === 0 && hit.offsetSteps === 0));
-    if ((position === 4 || position === 12) && !isRest(step)) {
+      && !isQuiet(step + hit.offsetSteps) && (onsetCounts[bar] < 6 || position % 4 === 0 && hit.offsetSteps === 0));
+    if ((position === 4 || position === 12) && !quiet) {
       const snare = cell?.drumHits?.find(hit => hit.instrument === 'snare');
       hits.push(snare ? { ...snare, offsetSteps: 0 } : { instrument: 'snare', offsetSteps: 0, durationSteps: 1, velocity: 0.74 });
     }
     if (kicks.has(step)) hits.push(kicks.get(step));
     return createDrumsCell(hits.map(hit => hit.instrument), { drumHits: hits });
   });
-  const humDrumRestSteps = drums.flatMap((_, step) => isRest(step) ? [step] : []);
-  return { drums: toBars(drums), humDrumRestSteps };
+  return { drums: toBars(drums), humDrumQuietSteps };
 }
 
 const gcd = (a, b) => b ? gcd(b, a % b) : a;
+function repeatHumRhythm({ anchors, sounding }, steps, length) {
+  const repeated = { anchors: [], sounding: [] };
+  for (let offset = 0; offset < length; offset += steps) {
+    repeated.anchors.push(...anchors.map(hit => ({ ...hit, start: hit.start + offset, end: hit.end + offset })));
+    repeated.sounding.push(...sounding.map(([start, end]) => [start + offset, end + offset]));
+  }
+  return repeated;
+}
+
 export function arrangeHumMelody(bars, timbreId, anchors = {}) {
   const bassBarCount = anchors.bassBars?.length;
   const commonCycle = bassBarCount ? (bars.length * bassBarCount) / gcd(bars.length, bassBarCount) : bars.length;
   // When the full common cycle is too long for a Jam phrase, stay in phase with the fixed bass.
   const chordBarCount = commonCycle <= MAX_PROJECT_BARS ? commonCycle : bassBarCount;
-  const { events, windows } = planHumHarmony(bars, timbreId, { ...anchors, chordBarCount });
+  const { events, lead, windows } = planHumHarmony(bars, timbreId, { ...anchors, chordBarCount });
   const length = bars.length * stepsPerBar;
-  const bassLength = anchors.chordBars?.length ? anchors.chordBars.length * stepsPerBar : length;
+  const fixedChordBars = anchors.chordBars?.length || bars.length;
+  const bassCycle = bars.length * fixedChordBars / gcd(bars.length, fixedChordBars);
+  const bassLength = (bassCycle <= MAX_PROJECT_BARS ? bassCycle : bars.length) * stepsPerBar;
   const chord = emptySteps(chordBarCount * stepsPerBar), bass = emptySteps(bassLength);
-  for (const [index, window] of windows.entries()) {
-    if (!window.active) continue;
-    const notes = window.voicing.map(noteName);
-    const durationSteps = window.duration;
-    const unchanged = window.root === windows[index - 1]?.root && windows[index - 1]?.active;
-    const velocity = unchanged && index % 2 ? 0.38 : 0.48;
-    const step = Math.floor(window.offset);
-    chord[index * 8 + step] = { type: 'notes', notes, label: notes.join('/'), durationSteps, humRhythmEntry: true,
-      notePerformances: Object.fromEntries(notes.map(note => [note, [{ offsetSteps: window.offset - step, durationSteps, velocity }]])) };
+  const chordRhythm = planHumPhraseRhythm(lead, windows);
+  const rhythm = lead === events ? chordRhythm : planHumPhraseRhythm(events, windows);
+  for (const { start, end, harmony, entrance, required } of chordRhythm.anchors) {
+    const notes = harmony.voicing.map(noteName);
+    const durationSteps = end - start, step = Math.floor(start);
+    const velocity = required ? (entrance ? 0.48 : 0.42) : 0.31;
+    chord[step] = { type: 'notes', notes, label: notes.join('/'), durationSteps,
+      notePerformances: Object.fromEntries(notes.map(note => [note, [{ offsetSteps: start - step, durationSteps, velocity }]])) };
   }
   const authored = authoredChordAnchors(anchors.chordBars, bassLength);
+  const bassRhythm = bassLength === length ? rhythm : repeatHumRhythm(rhythm, length, bassLength);
   function addBass(start, end, pitch, velocity, markers) {
     if (end <= start) return;
     const step = Math.floor(start);
@@ -283,31 +296,31 @@ export function arrangeHumMelody(bars, timbreId, anchors = {}) {
     bass[step] = { type: 'bass', note, durationSteps, velocity,
       ...markers, notePerformances: { [note]: [{ offsetSteps: start - step, durationSteps, velocity }] } };
   }
-  if (authored) {
-    const steps = [...authored.keys()];
-    for (const [index, step] of steps.entries()) {
-      const end = Math.min(steps[index + 1] ?? bassLength, (Math.floor(step / 8) + 1) * 8, step + 7.8);
-      addBass(step, end, 36 + authored.get(step), 0.68, { harmonyAnchor: true });
-    }
-  } else {
-    for (const [index, window] of windows.slice(0, bassLength / 8).entries()) {
-      if (!window.active) continue;
-      const start = index * 8 + window.offset, end = start + window.duration;
-      const accent = window.accent != null && index * 8 + window.accent < end - 0.25
-        ? index * 8 + window.accent : null;
-      addBass(start, accent ?? end, 36 + window.root, 0.68, { humRhythmEntry: true });
-      if (accent != null) {
-        const next = windows[(index + 1) % windows.length];
-        const link = window.accent >= 4 ? bassConnection(window, next, events, accent) : null;
-        addBass(accent, end, link ?? 36 + window.root, 0.48, link != null ? { harmonyLink: true } : {});
-      }
-    }
+  const bassHits = [...bassRhythm.anchors];
+  const authoredChanges = [...(authored ?? [])].filter(([, root], index, changes) => changes[index - 1]?.[1] !== root);
+  for (const [start] of authoredChanges) {
+    if (bassHits.some(hit => Math.floor(hit.start) === start)) continue;
+    const range = bassRhythm.sounding.find(([from, to]) => start >= from && start < to);
+    if (range) bassHits.push({ start, end: range[1], required: true });
   }
-  return { chord: toBars(chord), bass: toBars(bass), ...arrangeHumDrums(events, windows, length) };
+  bassHits.sort((a, b) => a.start - b.start);
+  let rootChange = -1;
+  for (const [index, hit] of bassHits.entries()) {
+    while (authoredChanges[rootChange + 1]?.[0] <= hit.start) rootChange++;
+    const root = authoredChanges[rootChange]?.[1] ?? hit.harmony.root;
+    const next = bassHits[index + 1];
+    const link = !authored && !hit.required && next && next.start - hit.start <= 4.5
+      ? bassConnection(hit.harmony, next.harmony, events, hit.start) : null;
+    addBass(hit.start, Math.min(hit.end, next?.start ?? Infinity), link ?? 36 + root, hit.required ? 0.68 : 0.48,
+      link != null ? { harmonyLink: true } : {});
+  }
+  return { chord: toBars(chord), bass: toBars(bass), ...arrangeHumDrums(events, rhythm, length),
+    chordSounding: chordRhythm.sounding, bassSounding: bassRhythm.sounding };
 }
 
 export function arrangeHumBacking(bars, timbreId, anchors) {
-  const { chord, bass, drums, humDrumRestSteps } = arrangeHumMelody(bars, timbreId, anchors);
-  return [{ trackId: 'chord', bars: chord }, { trackId: 'bass', bars: bass },
-    { trackId: 'drums', bars: drums, humDrumRestSteps }];
+  const { chord, bass, drums, humDrumQuietSteps, chordSounding, bassSounding } = arrangeHumMelody(bars, timbreId, anchors);
+  return [{ trackId: 'chord', bars: chord, humSoundingRanges: chordSounding },
+    { trackId: 'bass', bars: bass, humSoundingRanges: bassSounding },
+    { trackId: 'drums', bars: drums, humDrumQuietSteps }];
 }
