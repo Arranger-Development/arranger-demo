@@ -33,6 +33,22 @@ export function humPitchCenter(contours, { startFrame, durationFrames, pitchMidi
   return consistent >= peaks.length * 0.6 ? center : undefined;
 }
 
+function repeatsNearbyPitch(notes, index, target) {
+  const note = notes[index];
+  if (note.end - note.start > 0.22 || Math.abs(note.pitchCenter - target) > 0.76) return false;
+  const previous = notes[index - 1], next = notes[index + 1];
+  const close = (left, right) => left && right && right.start - left.end <= 0.18;
+  const agrees = other => other?.pitch === target
+    && Math.abs(other.pitchCenter - target) <= 0.49
+    && Math.abs(other.pitchCenter - note.pitchCenter) <= 0.76;
+  const before = close(previous, note), after = close(note, next);
+  const agreesBefore = before && agrees(previous), agreesAfter = after && agrees(next);
+  if (agreesBefore && agreesAfter) return true;
+  // An edge hit still has enough context if the two following or preceding hits agree.
+  return (agreesBefore && !after && close(notes[index - 2], previous) && agrees(notes[index - 2]))
+    || (agreesAfter && !before && close(next, notes[index + 2]) && agrees(notes[index + 2]));
+}
+
 export function correctHumPitch(notes) {
   const stable = notes.map(note => note.end - note.start >= 0.10
     && Math.abs(note.pitchCenter - note.pitch) <= stablePitchRadius);
@@ -41,9 +57,10 @@ export function correctHumPitch(notes) {
     ? scales.filter(scale => [...anchors].every(tone => scale.includes(tone))) : [];
   return notes.map(({ pitchCenter, ...note }, index) => {
     const drift = pitchCenter - note.pitch;
-    if (!Number.isFinite(drift) || Math.abs(drift) < 0.30 || Math.abs(drift) > 0.82
-      || anchors.has(pitchClass(note.pitch))) return note;
+    if (!Number.isFinite(drift) || Math.abs(drift) < 0.24 || Math.abs(drift) > 0.82) return note;
     const target = note.pitch + Math.sign(drift);
+    if (repeatsNearbyPitch(notes, index, target)) return { ...note, pitch: target, shortAttack: true };
+    if (Math.abs(drift) < 0.30 || anchors.has(pitchClass(note.pitch))) return note;
     const previous = notes[index - 1], next = notes[index + 1];
     const localRepeat = (stable[index - 1] && previous.pitch === target && note.start - previous.end <= 0.24)
       || (stable[index + 1] && next.pitch === target && next.start - note.end <= 0.24);

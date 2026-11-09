@@ -114,6 +114,20 @@ test('short syllables recover a missed reattack and correct the pitch after a sc
   assert.deepEqual(notes.at(-1), { start: 0.635, end: 1.055, pitch: 67, amplitude: 0.8 });
 });
 
+test('pitch wobbles on repeated short syllables keep each attack without flattening an intentional half step', () => {
+  const takes = [
+    { pitches: [60, 60.62, 60, 60], expected: [60, 60, 60, 60] },
+    { pitches: [60, 60, 60, 59.37], expected: [60, 60, 60, 60] },
+    { pitches: [60.43, 60.57, 60.42, 60.4], expected: [60, 60, 60, 60] },
+    { pitches: [60, 60.96, 60, 60], expected: [60, 61, 60, 60] },
+  ];
+  for (const { pitches, expected } of takes) {
+    const notes = cleanHumNotes([], 2, shortNoteAudio(pitches, 0.075, 0.105));
+    assert.deepEqual(notes.map(note => note.pitch), expected);
+    assert.ok(notes.slice(1).every((note, i) => note.start - notes[i].end > 0.02));
+  }
+});
+
 test('connected short notes are repaired when the audio supports distinct pitches, but a steady glide is left alone', () => {
   const target = [60, 62, 64, 65, 67, 64];
   const legato = shortNoteAudio(target, 0.082, 0.082, { legato: true });
