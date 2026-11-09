@@ -127,7 +127,7 @@ export default function HumControls({ projectStore, projectId, pauseJam, showRec
       setStatus({ phase: 'idle', text: '旋律未能加入当前项目，请重试。' });
       return;
     }
-    const currentTake = { ...original, notes, melodyId: phrase.id, shift: melody.shift };
+    const currentTake = { ...original, notes, melodyId: phrase.id };
     setTake(currentTake);
     showRecording(phrase);
     setStatus({ phase: 'arranging', text: '旋律已就绪，正在自动配三轨…' });
@@ -200,13 +200,8 @@ export default function HumControls({ projectStore, projectId, pauseJam, showRec
     onClick={() => recording ? stopRecording() : void startRecording()}>
     {createElement(recording ? Square : Mic, { size: 12 })}{recording ? '停止' : '哼唱'}
   </button>;
-  const octaveNotice = take?.shift ? `Jam 旋律${take.shift > 0 ? '升高' : '降低'} ${Math.abs(take.shift / 12)} 个八度` : '';
-  const { workspace } = projectStore.current();
-  const recordedPhrase = take?.melodyId && workspace.templates.melody.find(phrase => phrase.id === take.melodyId);
-  const loopNotice = recordedPhrase ? `${workspace.bpm} BPM · ${recordedPhrase.bars.length} 小节` : '';
-  const feedbackText = [status.text, loopNotice, octaveNotice].filter(Boolean).join(' · ');
   const feedback = (status.text || take) && <div className="jam-hum-feedback" role="group" aria-label="哼唱结果">
-    {feedbackText && <span role="status">{feedbackText}</span>}
+    {status.text && <span role="status">{status.text}</span>}
     {take?.url && <button type="button" disabled={recording} onClick={() => {
       stopAudition(); pauseJam();
       const audio = new Audio(take.url);

@@ -1,8 +1,8 @@
 const clamp = (value, max) => Math.max(0, Math.min(max, value));
 export const JAM_STRIP_GAP = 16;
-export function jamStripLayout(width, identity, minPad = 48) {
-  const pitch = Math.max(minPad + JAM_STRIP_GAP, (width - identity - 6) / 12);
-  const pad = Math.min(96, pitch - JAM_STRIP_GAP);
+export function jamStripLayout(width, identity, minPad = 48, minGap = JAM_STRIP_GAP) {
+  const pitch = Math.max(minPad + minGap, (width - identity - 6) / 12);
+  const pad = Math.min(96, pitch - minGap);
   // Once gems reach their readable maximum, wide screens add space instead of columns.
   return { pad, gap: pitch - pad };
 }

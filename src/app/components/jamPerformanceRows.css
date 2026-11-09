@@ -26,7 +26,7 @@
 .jam-studio .studio-column-launch:disabled { opacity:.3; }
 .jam-studio .studio-column-launch[data-state=playing] { color:var(--hardware-gold,var(--tj-accent)); border-color:currentColor; }
 .jam-studio[data-editing] .studio-instrument { padding-block:2px; border-bottom:1px solid var(--studio-line); }
-.jam-studio[data-editing] .studio-instrument .studio-instrument-top { position:sticky; left:0; z-index:7; grid-column:1; display:grid; grid-template-columns:32px minmax(0,1fr) 18px; gap:4px; align-self:stretch; align-content:center; height:auto; min-height:56px; padding:0; background:var(--tj-panel); box-shadow:4px 0 0 var(--tj-panel); border:0; }
+.jam-studio[data-editing] .studio-instrument .studio-instrument-top { position:sticky; left:0; z-index:7; grid-column:1; display:grid; grid-template-columns:32px minmax(0,1fr) 18px; gap:4px; align-self:stretch; align-content:center; height:auto; min-height:56px; padding:0; background:var(--tj-panel); box-shadow:4px 0 0 var(--tj-panel); border:0; border-radius:0; }
 .jam-studio[data-editing] .studio-instrument-art { width:32px; height:32px; }
 .jam-studio[data-editing] .studio-instrument-label { display:flex; flex-wrap:wrap; gap:3px 5px; min-width:0; text-align:left; }
 .jam-studio[data-editing] .studio-instrument-label strong { font-size:14px; }

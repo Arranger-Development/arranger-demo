@@ -38,7 +38,7 @@ const performanceOnsets = bars => bars.flatMap((bar, index) => bar.flatMap((cell
 test('fits a reliable 120 BPM pickup into the existing 88 BPM clock and falls back for an irregular rhythm', () => {
   const notes = cleanHumNotes([event(0.15, 60, 0.08, 0.32), event(0.40, 62, 0.30), event(0.90, 64, 0.28), event(1.40, 67, 0.32)], 2);
   const fit = fitHumTiming(notes, 88);
-  assert.deepEqual(fit, { bpm: 88, sourceBpm: 120, pickupSteps: 2, quantize: true });
+  assert.deepEqual(fit, { bpm: 88, sourceBpm: 120, pickupSteps: 2, quantize: true, trimLastBeat: true });
   assert.equal(fitHumTiming(notes, 88, { emptyProject: true }).bpm, 120);
   const { bars } = makeHumMelody(notes, fit.bpm, fit);
   const hits = performanceOnsets(bars);
@@ -65,6 +65,81 @@ test('light quantization caps onset movement and trims only a small tail across 
   assert.equal(performanceOnsets(bars).at(-1).at + performanceOnsets(bars).at(-1).length, 16);
   const continued = cleanHumNotes([...notes.map(note => event(note.start, note.pitch, note.end - note.start)), event(2.75, 65, 0.18)], 3);
   assert.equal(makeHumMelody(continued, 88).bars.length, 2);
+});
+
+function starTake(gaps, lastDuration, extraStart) {
+  const pitches = [60, 60, 67, 67, 69, 69, 67];
+  let start = 0.15;
+  const events = pitches.map((pitch, index) => {
+    const gap = gaps[index];
+    const note = event(start, pitch, gap ? gap * 0.8 : lastDuration);
+    start += gap ?? 0;
+    return note;
+  });
+  if (extraStart !== undefined) events.push(event(extraStart, 65, 0.16));
+  return cleanHumNotes(events, 10);
+}
+
+test('a one-bar melody lands on seven grid onsets and all four tracks repeat after sixteen steps', () => {
+  const even = Array(6).fill(0.25);
+  const loose = [0.39, 0.40, 0.43, 0.41, 0.39, 0.40];
+  const slightlyLoose = [0.32, 0.33, 0.30, 0.33, 0.31, 0.33];
+  const expectedOnsets = [0, 2, 4, 6, 8, 10, 12];
+  for (const [gaps, lastDuration, sourceBpm] of [
+    [even, 0.50, 120], [loose, 0.80, 75], [slightlyLoose, 0.24, 94], [slightlyLoose, 0.85, 94],
+  ]) {
+    const notes = starTake(gaps, lastDuration);
+    const fit = fitHumTiming(notes, 88);
+    const { bars } = makeHumMelody(notes, fit.bpm, fit);
+    const hits = performanceOnsets(bars);
+    assert.equal(fit.bpm, 88);
+    assert.equal(fit.sourceBpm, sourceBpm);
+    assert.equal(fitHumTiming(notes, 88, { emptyProject: true }).bpm, sourceBpm);
+    assert.deepEqual(hits.map(hit => hit.at), expectedOnsets);
+    assert.equal(bars.length, 1);
+    const expectedLength = lastDuration === 0.24 ? 1.504 : 4;
+    assert.ok(Math.abs(hits.at(-1).length - expectedLength) < 1e-6);
+
+    const store = makeStore();
+    const projectId = store.current().id;
+    const [lead] = store.insertHumPhrases([{ trackId: 'melody', bars }], { projectId, bpm: fit.bpm });
+    const backing = store.insertHumPhrases(backingPhrases(lead.bars), { projectId, melodyId: lead.id });
+    const tracks = [lead, ...backing];
+    assert.equal(tracks.length, 4);
+    assert.ok(tracks.every(phrase => phrase.bars.length === 1));
+    const selection = Object.fromEntries(tracks.map(phrase => [phrase.trackId, phrase.id]));
+    const snapshot = jamCombinationSnapshot({ ...store.current().workspace, selection });
+    const adapter = createMatrixPlaybackAdapter(snapshot, { totalBars: snapshot.totalBars });
+    assert.equal(adapter.totalSteps, 16);
+    const opening = adapter.getEventsForFlatStep(0);
+    assert.deepEqual(new Set(opening.map(hit => hit.type)), new Set(['melody', 'chord', 'bass', 'drums']));
+    assert.ok(opening.every(hit => !hit.timingOffset));
+    for (let step = 0; step < 16; step++) {
+      assert.deepEqual(adapter.getEventsForFlatStep(step + 16), adapter.getEventsForFlatStep(step));
+    }
+    assert.ok(adapter.getEventsForFlatStep(12).find(hit => hit.type === 'melody')?.humMelodyTail);
+  }
+
+  const ambiguous = starTake(loose, 0.80);
+  assert.equal(estimateHumBpm(ambiguous), null);
+  assert.equal(fitHumTiming(ambiguous, 145).sourceBpm, 150);
+});
+
+test('a two-bar rhythm, a real next-bar attack and a long sustained note keep the second bar', () => {
+  const even = Array(6).fill(0.25);
+  for (const [notes, expectedOnsets, lastDuration] of [
+    [starTake([0.49, 0.51, 0.48, 0.50, 0.53, 0.49], 1), [0, 4, 8, 12, 16, 20, 24], 8],
+    [starTake(even, 0.40, 2.16), [0, 2, 4, 6, 8, 10, 12, 16.04], 1.28],
+    [starTake(even, 0.76), [0, 2, 4, 6, 8, 10, 12], 6.08],
+  ]) {
+    const fit = fitHumTiming(notes, 88);
+    const { bars } = makeHumMelody(notes, fit.bpm, fit);
+    const hits = performanceOnsets(bars);
+    assert.equal(bars.length, 2);
+    assert.deepEqual(hits.map(hit => hit.at), expectedOnsets);
+    assert.ok(Math.abs(hits.at(-1).length - lastDuration) < 1e-6);
+    assert.ok(backingPhrases(bars).every(phrase => phrase.bars.length === 2));
+  }
 });
 
 test('a breath cannot drag the tempo down, and a supported reentry keeps its local timing', () => {

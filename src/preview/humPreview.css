@@ -21,15 +21,6 @@
   }
 }
 
-.jam-studio .jam-hum-label {
-  grid-column: 1 / -1;
-  grid-row: 1;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
-}
-
 .jam-studio[data-editing=true][data-hum-preview] .studio-instrument[data-track=melody] .studio-editing-state { display: none; }
 
 .jam-hum-record, .jam-hum-feedback button {
@@ -119,6 +110,25 @@
 }
 .jam-studio[data-hum-preview][data-editing=true] .studio-template-index {
   font-size: 8px;
+}
+
+@media (hover: hover) {
+  .jam-studio[data-hum-preview] .studio-launcher { --jam-action-size: 26px; }
+
+  .jam-studio[data-hum-preview][data-editing] .studio-gallery {
+    padding-inline-end: var(--jam-action-size);
+  }
+
+  .jam-studio[data-hum-preview] .studio-template-tools > button {
+    width: var(--jam-action-size);
+    height: var(--jam-action-size);
+    cursor: pointer;
+  }
+
+  .jam-studio[data-hum-preview] .studio-template-tools > button svg {
+    width: 16px;
+    height: 16px;
+  }
 }
 
 @media (hover: none) {

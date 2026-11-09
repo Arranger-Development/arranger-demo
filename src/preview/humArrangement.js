@@ -109,6 +109,9 @@ export function cleanHumNotes(events, recordingSeconds, samples) {
   return joined;
 }
 
+const minHumBpm = 65;
+const maxHumBpm = 155;
+const onsetSnapTolerance = 0.35;
 const subdivisions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
 const onsetGaps = notes => notes.slice(1).map((note, i) => note.start - notes[i].start);
 const beatDistance = (gap, bpm) => Math.min(...subdivisions.map(beats => Math.abs(gap * bpm / 60 - beats)));
@@ -137,7 +140,7 @@ function estimateSectionBpm(sections) {
   const typicalGap = median(gaps);
   const pacedSections = sections.filter(section => section.gaps.length);
   const noteCount = pacedSections.reduce((count, section) => count + section.notes.length, 0);
-  for (let bpm = 65; bpm <= 155; bpm++) {
+  for (let bpm = minHumBpm; bpm <= maxHumBpm; bpm++) {
     const beat = 60 / bpm;
     const bySection = pacedSections.map(section => section.gaps.map(gap => beatDistance(gap, bpm)));
     if (bySection.some(distances => distances.length >= 2 && distances.filter(supportsGap).length < 0.75 * distances.length)) continue;
@@ -157,6 +160,22 @@ function estimateSectionBpm(sections) {
   if (best.coverage < 0.75 || best.phaseCoverage < 0.75 || best.meanError > 0.05
     || best.score < 0.62 || alternative && best.score - alternative.score < 0.045) return null;
   return best.bpm;
+}
+
+function regularHumGrid(sections, projectBpm, estimate) {
+  if (sections.length !== 1) return null;
+  const [{ notes, gaps }] = sections;
+  if (notes.length < 6 || gaps.length !== notes.length - 1) return null;
+  const typicalGap = median(gaps);
+  if (gaps.filter(gap => Math.abs(gap - typicalGap) <= 0.1 * typicalGap).length < 0.75 * gaps.length) return null;
+
+  const fitsGrid = ({ bpm, onsetSteps }) => notes.every(({ start }, index) =>
+    Math.abs((start - notes[0].start) * bpm / 15 - index * onsetSteps) <= onsetSnapTolerance);
+  const grids = [2, 4].map(onsetSteps => ({
+    bpm: estimate ?? Math.round(15 * onsetSteps / typicalGap),
+    onsetSteps,
+  })).filter(grid => grid.bpm >= minHumBpm && grid.bpm <= maxHumBpm && fitsGrid(grid));
+  return grids.sort((a, b) => Math.abs(a.bpm - projectBpm) - Math.abs(b.bpm - projectBpm))[0] ?? null;
 }
 
 function localPhaseHits(notes, bpm) {
@@ -195,7 +214,9 @@ function pickupStepsFor(notes, bpm) {
 
 export function fitHumTiming(notes, projectBpm, { emptyProject = false } = {}) {
   const sections = humSections(notes);
-  const estimate = estimateSectionBpm(sections);
+  const strictEstimate = estimateSectionBpm(sections);
+  const regularGrid = regularHumGrid(sections, projectBpm, strictEstimate);
+  const estimate = strictEstimate ?? regularGrid?.bpm ?? null;
   const bpm = emptyProject && estimate ? estimate : projectBpm;
   const pickupSteps = estimate ? pickupStepsFor(sections[0].notes, estimate) : 0;
   return {
@@ -203,6 +224,8 @@ export function fitHumTiming(notes, projectBpm, { emptyProject = false } = {}) {
     sourceBpm: estimate ?? bpm,
     pickupSteps,
     quantize: estimate !== null,
+    ...(estimate && { trimLastBeat: true }),
+    ...(regularGrid && { regularOnsetSteps: regularGrid.onsetSteps }),
     ...(estimate && sections.length > 1 && { reentries: humReentries(notes, sections, estimate, bpm, pickupSteps) }),
   };
 }
@@ -210,7 +233,7 @@ export function fitHumTiming(notes, projectBpm, { emptyProject = false } = {}) {
 function gridNudge(step, bpm) {
   const distance = Math.round(step) - step;
   const limit = 0.025 * bpm / 15;
-  return Math.abs(distance) <= 0.35 ? clamp(distance / 2, -limit, limit) : 0;
+  return Math.abs(distance) <= onsetSnapTolerance ? clamp(distance / 2, -limit, limit) : 0;
 }
 
 function humReentries(notes, sections, sourceBpm, projectBpm, pickupSteps) {
@@ -241,7 +264,9 @@ function humReentries(notes, sections, sourceBpm, projectBpm, pickupSteps) {
   });
 }
 
-export function makeHumMelody(notes, bpm, { sourceBpm = bpm, pickupSteps = 0, quantize = true, reentries = [] } = {}) {
+export function makeHumMelody(notes, bpm, {
+  sourceBpm = bpm, pickupSteps = 0, quantize = true, regularOnsetSteps, trimLastBeat = false, reentries = [],
+} = {}) {
   if (!notes.length) return null;
   // The existing Jam editor supports C3–B5. Move the whole phrase by an octave if needed.
   const shift = [0, 12, -12, 24, -24].find(offset => notes.every(note => note.pitch + offset >= 48 && note.pitch + offset <= 83));
@@ -259,15 +284,21 @@ export function makeHumMelody(notes, bpm, { sourceBpm = bpm, pickupSteps = 0, qu
     }
     const rawStart = (note.start - origin) * stepRate + pickupSteps;
     // Reentries move as a unit so the timing inside them stays intact.
-    const nudge = quantize && nextReentry === 0 ? gridNudge(rawStart, bpm) : 0;
-    const start = rawStart + nudge + sectionShift;
+    const nudge = quantize && !regularOnsetSteps && nextReentry === 0 ? gridNudge(rawStart, bpm) : 0;
+    const start = regularOnsetSteps
+      ? pickupSteps + index * regularOnsetSteps
+      : rawStart + nudge + sectionShift;
     const length = (note.end - note.start) * stepRate;
     return { start: preciseStep(start), end: preciseStep(start + length), pitch: note.pitch + shift, amplitude: note.amplitude };
   });
   for (let i = 1; i < events.length; i++) events[i - 1].end = Math.min(events[i - 1].end, events[i].start);
   const last = events.at(-1);
   const lastBarEnd = (Math.floor(last.start / stepsPerBar) + 1) * stepsPerBar;
-  if (last.end > lastBarEnd && last.end - lastBarEnd < 0.5) last.end = lastBarEnd;
+  const overhang = last.end - lastBarEnd;
+  const startsOnLastBeat = last.start >= lastBarEnd - 4;
+  // A slight overhang after a reliable last beat belongs to the ending note.
+  // A later attack is measured against its own bar, never the preceding one.
+  if (overhang > 0 && (overhang < 0.5 || trimLastBeat && startsOnLastBeat && overhang <= 2)) last.end = lastBarEnd;
   const steps = emptySteps(Math.max(1, Math.ceil(last.end / stepsPerBar)) * stepsPerBar);
   for (const event of events) {
     if (event.end <= event.start) continue;
