@@ -1,12 +1,12 @@
 import { PianoRoll } from './PianoRoll.jsx';
 import { jamEditorNotes, jamMelodyRenderState, jamPitchedNotes, jamPitchedRenderState, resizeJamPitchedNote, resizeJamPitchedStart, setJamPitchedNote } from '../jamNoteEditing.js';
-import { editJamSequencerStep, HUM_SOURCE } from '../jamHumExpression.js';
+import { editJamSequencerStep, HUM_SOURCE, isJamArrangementMelody } from '../jamHumExpression.js';
 
-export default function JamChordEditor({ draft, editorBars = draft.bars, bar, step, onChange }) {
+export default function JamChordEditor({ draft, editorBars = draft.bars, bar, step, onChange, readOnly = false }) {
   const track = draft.trackId;
   const label = { chord: '和弦', bass: '贝斯', melody: '旋律' }[track];
   const notes = jamEditorNotes(track);
-  const sustained = draft.sourcePresetId === HUM_SOURCE && (track === 'melody' || draft.humSoundingRanges);
+  const sustained = isJamArrangementMelody(draft) || draft.sourcePresetId === HUM_SOURCE && draft.humSoundingRanges;
   const maxLength = (index, step) => (sustained ? (draft.bars.length - index) * 16 : 16) - step;
   const cells = editorBars[bar];
   const renderState = (step, note) => {
@@ -14,25 +14,26 @@ export default function JamChordEditor({ draft, editorBars = draft.bars, bar, st
     if (!state.active) return state;
     const startBar = state.startBar ?? bar;
     const last = startBar * 16 + state.startStep + Math.ceil(state.durationSteps) - 1;
-    return { ...state, startBar, end: last === bar * 16 + step };
+    const attackCount = track === 'melody' && state.start ? cells[step]?.notePerformances?.[note]?.length : undefined;
+    return { ...state, startBar, attackCount, end: last === bar * 16 + step };
   };
   const pitches = new Set(cells.flatMap((cell, index) =>
     jamPitchedNotes(cell, index, track, maxLength(bar, index)).map(hit => hit.note)));
   const firstNote = notes.find(({ note }) => pitches.has(note) || (sustained && bar > 0 && renderState(0, note).active))?.note
     ?? (track === 'bass' ? 'B1' : 'B4');
   const playingNotes = new Set(step == null ? [] : notes.filter(({ note }) => renderState(step, note).active).map(({ note }) => note));
-  return <div className="studio-chord-editor">
+  return <div className="studio-chord-editor" role={readOnly ? "group" : undefined} aria-label={readOnly ? "变奏预览 · 回到单线和原节奏可编辑旋律" : undefined}>
     <div className="studio-piano-preview studio-chord-roll"><PianoRoll ariaLabel={`${label}音序器`} trackId={track} notes={notes}
       initialTopNote={firstNote} showStepNumbers activeNoteIds={playingNotes}
-      revealPitchOnChange={track === 'chord' && draft.sourcePresetId === HUM_SOURCE ? draft.params?.groove : undefined}
-      getCellRenderState={renderState} isCellActive={() => false}
+      revealPitchOnChange={isJamArrangementMelody(draft) || track === 'chord' && draft.sourcePresetId === HUM_SOURCE ? draft.params?.groove : undefined}
+      getCellRenderState={renderState} isCellActive={() => false} disabled={readOnly}
       onCellToggle={(step, note, event) => {
         const state = renderState(step, note);
         if (state.active && (!state.start || event.shiftKey)) return;
         onChange(editJamSequencerStep(draft, bar, step, cells =>
           setJamPitchedNote(cells, step, note, 1, state.start, track, maxLength(bar, step))));
       }}
-      onCellResize={(step, note, delta, edge) => {
+      onCellResize={readOnly ? undefined : (step, note, delta, edge) => {
         const state = renderState(step, note);
         if (!state.active) return;
         const { startBar, startStep, durationSteps } = state;

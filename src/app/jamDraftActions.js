@@ -2,7 +2,7 @@ import { getDialDrumPreset } from '../data/dialDrumPresets.js';
 import { getJamPitchedPreset } from './jamPitchedPresets.js';
 import { jamTrackParameters } from './jamPerformanceState.js';
 import { hasJamPhraseNotes } from './jamPhraseContent.js';
-import { HUM_SOURCE } from './jamHumExpression.js';
+import { HUM_SOURCE, isJamArrangementMelody } from './jamHumExpression.js';
 
 export const hasJamNotes = hasJamPhraseNotes;
 
@@ -16,7 +16,7 @@ export function applyJamTrackParameter(draft, parameter, value) {
   const before = jamTrackParameters(draft.params, draft.trackId);
   const params = jamTrackParameters({ ...before, [parameter]: value }, draft.trackId);
   if (before[parameter] === params[parameter]) return draft;
-  if (draft.sourcePresetId === HUM_SOURCE) return { ...draft, params };
+  if (draft.sourcePresetId === HUM_SOURCE || isJamArrangementMelody(draft)) return { ...draft, params };
   const preset = draft.trackId === 'drums' ? getDialDrumPreset(params.strength, params.groove)
     : getJamPitchedPreset(draft.trackId, params.strength, params.groove);
   return preset ? { ...draft, params, sourcePresetId: preset.id, bars: structuredClone(preset.bars) } : draft;

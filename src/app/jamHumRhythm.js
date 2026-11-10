@@ -1,12 +1,17 @@
 import { createDrumsCell, getDrumsCellInstruments, getDrumsCellVelocity, getDrumsCellTimingOffset } from '../domain/drumsCells.js';
 
+function drumHits(cell) {
+  return cell?.drumHits ?? getDrumsCellInstruments(cell).map(instrument => ({
+    instrument, offsetSteps: getDrumsCellTimingOffset(cell, instrument), durationSteps: 1,
+    velocity: getDrumsCellVelocity(cell, instrument),
+  }));
+}
+
 function drumRhythm(bar, level, edited, rest) {
   const keepBaseHats = level >= 75;
   return bar.map((cell, step) => {
     if (edited(step) || rest(step)) return cell;
-    const instruments = getDrumsCellInstruments(cell);
-    const hits = cell?.drumHits ?? instruments.map(instrument => ({ instrument, offsetSteps: getDrumsCellTimingOffset(cell, instrument),
-      durationSteps: 1, velocity: getDrumsCellVelocity(cell, instrument) }));
+    const hits = drumHits(cell);
     const hatStep = level === 0 ? step % 8 === 0
       : level === 25 ? step % 4 === 2
       : level === 75 ? step % 2 === 0 : true;
@@ -17,6 +22,48 @@ function drumRhythm(bar, level, edited, rest) {
       next.push({ instrument: 'hihat', offsetSteps: 0, durationSteps: 1, velocity });
     }
     return createDrumsCell(next.map(hit => hit.instrument), { drumHits: next });
+  });
+}
+
+export function humDrumPatternBars(phrase, bars, level) {
+  if (level === 50) return bars;
+  const edited = new Set(phrase.humEditedSteps);
+  const quiet = new Set(phrase.humDrumQuietSteps ?? phrase.humDrumRestSteps);
+  const sounding = phrase.humDrumSoundingRanges;
+  const optional = hit => hit.humOptionalAccent || (phrase.humDrumQuietSteps && hit.velocity === 0.48);
+  const firstEntry = bars.flat().findIndex(cell => drumHits(cell)
+    .some(hit => hit.instrument === 'kick' && !optional(hit)));
+  return bars.map((bar, index) => {
+    const start = index * 16;
+    const hits = bar.map(drumHits);
+    const available = step => !edited.has(start + step) && !quiet.has(start + step);
+    const isSounding = step => sounding?.some(([from, to]) => start + step >= from && start + step < to);
+    const add = (step, instrument, velocity) => {
+      if (available(step) && !hits[step].some(hit => hit.instrument === instrument)) {
+        hits[step] = [...hits[step], { instrument, offsetSteps: 0, durationSteps: 1, velocity }];
+      }
+    };
+    if (level <= 25) {
+      for (let step = 0; step < 16; step++) {
+        if (edited.has(start + step)) continue;
+        hits[step] = hits[step].filter(hit => hit.instrument !== 'snare'
+          && (hit.instrument !== 'kick' || !optional(hit)));
+      }
+      if (level === 25) add(8, 'snare', 0.74);
+    } else if (level === 75) {
+      for (const half of [0, 8]) {
+        const step = [half + 2, half + 6].find(at => available(at) && isSounding(at)
+          && !hits[at].some(hit => hit.instrument === 'kick')
+          && firstEntry >= 0 && start + at > firstEntry);
+        if (step !== undefined) add(step, 'kick', 0.49);
+      }
+    } else {
+      for (const step of [4, 12]) {
+        if (hits[step].some(hit => hit.instrument === 'snare')) add(step - 1, 'snare', 0.34);
+      }
+    }
+    return bar.map((cell, step) => edited.has(start + step) ? cell
+      : createDrumsCell(hits[step].map(hit => hit.instrument), { drumHits: hits[step] }));
   });
 }
 
@@ -97,7 +144,12 @@ function melodyFollowingBars(phrase, level) {
   const editedHalves = new Set((phrase.humEditedSteps ?? []).map(step => Math.floor(step / 8)));
   const editable = step => !editedHalves.has(Math.floor(step / 8));
   const chord = phrase.trackId === 'chord';
-  if (level === 0) return phrase.bars;
+  if (level === 0) return phrase.bars.map((bar, index) => bar.map((cell, step) => {
+    const optionalVelocity = chord ? 0.31 : 0.48;
+    const firstHit = Object.values(cell?.notePerformances ?? {})[0]?.[0];
+    return editable(index * 16 + step)
+      && (cell?.humOptionalAccent || cell?.harmonyLink || firstHit?.velocity === optionalVelocity) ? null : cell;
+  }));
 
   for (const [step, cell] of base.entries()) {
     if (!cell || !editable(step)) continue;
@@ -111,7 +163,9 @@ function melodyFollowingBars(phrase, level) {
     const firstFill = step + (level === 100 ? 1 : 2);
     const halfEnd = (Math.floor(step / 8) + 1) * 8;
     for (let at = firstFill; at < Math.min(end - 0.15, halfEnd); at++) {
-      if (base[at]) continue;
+      if (base[at] || !editable(at)) continue;
+      if (level === 75 && at % 4 !== 2) continue;
+      if (!chord && level === 100 && at % 2 !== 1) continue;
       const range = phrase.humSoundingRanges.find(([start, stop]) => at >= start && at < stop - 0.15);
       if (!range) continue;
       fills.push({ at, end: Math.min(end, range[1]) });

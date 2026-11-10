@@ -10,7 +10,7 @@ import DrumStepGrid from './DrumStepGrid.jsx';
 import JamLauncher from './JamLauncher.jsx';
 import JamChordEditor from './JamChordEditor.jsx';
 import { createJamAudition } from '../jamAudition.js';
-import { canFollowJamMelody, editJamSequencerStep, HUM_SOURCE, humPlaybackBars, isHumBacking } from '../jamHumExpression.js';
+import { canFollowJamMelody, editJamSequencerStep, HUM_SOURCE, humPlaybackBars, isJamArrangementMelody, isJamMelodyVariation } from '../jamHumExpression.js';
 import { createJamHeldEdits } from '../jamHeldEdits.js';
 import { createJamPhraseHistory } from '../jamPhraseHistory.js';
 import { toggleJamTemplate, launchJamColumn, deleteJamTemplate, jamColumnPhrases } from '../jamTemplateSelection.js';
@@ -19,7 +19,7 @@ import { PERFORMANCE_TRACKS as TRACKS, PERFORMANCE_LABELS as LABELS, performance
 import { blankJamDraft, hasJamNotes, applyJamTrackParameter } from '../jamDraftActions.js';
 import { jamTemplatePage, jamLauncherColumnCount } from '../jamTemplateSlots.js';
 import { JAM_PITCHED_PRESETS as DIAL_PITCHED_PRESETS } from '../jamPitchedPresets.js';
-import { getJamTemplateProjects, jamCombinationSnapshot, upgradeJamSlotLayout, defaultJamTimbres, jamInstrumentTimbre } from '../jamTemplateProjects.js';
+import { getJamTemplateProjects, jamCombinationSnapshot, jamPhrasePlaybackBars, upgradeJamSlotLayout, defaultJamTimbres, jamInstrumentTimbre } from '../jamTemplateProjects.js';
 import { snapshotSection } from '../performanceSession.js';
 import { getDialDrumPreset } from '../../data/dialDrumPresets.js';
 import { PERFORMANCE_SAMPLE_BANKS } from '../../data/performanceTimbres.js';
@@ -182,6 +182,13 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     playback.updatePhrase?.(snapshot,phrase.trackId,phrase.id,{preserveEffects:knob});
     audition.update({...phrase,editingTemplateId:phrase.id},{restart,preserveEffects:knob});
   }
+  function refreshVoicedMelody(slot) {
+    const workspace = projectStore.current().workspace;
+    const melody = workspace.templates.melody.find(phrase => phrase.slotIndex === slot);
+    if (!isJamMelodyVariation(melody)) return;
+    const snapshot = jamCombinationSnapshot(workspace, melody, true);
+    if (snapshot) playback.updatePhrase?.(snapshot, 'melody', melody.id, { preserveEffects: true });
+  }
   function replaceDraft(next, { record = true, updateAudio = true, restart = false, gesture = false, knob = false } = {}) {
     if (record && !gesture) { clearTimeout(midiGesture.current); endGesture(); }
     const current=projectStore.current().workspace;
@@ -192,12 +199,14 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     if (!phrase) { setMessage('乐句未能更新，请重新打开该格子。'); return; }
     if (record) phraseHistory.record(project.id,before,phrase);
     const barsChanged = JSON.stringify(before.bars) !== JSON.stringify(phrase.bars);
-    const humExpressionChanged = (before.sourcePresetId === HUM_SOURCE || phrase.sourcePresetId === HUM_SOURCE)
+    const humExpressionChanged = (before.sourcePresetId === HUM_SOURCE || phrase.sourcePresetId === HUM_SOURCE
+      || isJamArrangementMelody(before) || isJamArrangementMelody(phrase))
       && (before.sourcePresetId !== phrase.sourcePresetId || before.params?.strength !== phrase.params.strength || before.params?.groove !== phrase.params.groove
         || JSON.stringify(before.humEditedSteps) !== JSON.stringify(phrase.humEditedSteps));
     if (updateAudio && (restart || before.timbreId !== phrase.timbreId || barsChanged || humExpressionChanged)) {
       void audio.startAudio();
       syncPhraseAudio(phrase, restart, knob || (humExpressionChanged && !barsChanged));
+      if (phrase.trackId === 'chord' && barsChanged) refreshVoicedMelody(phrase.slotIndex);
     }
     if (humControl && arrangeMelody && !knob && barsChanged && phrase.trackId === 'melody' && phrase.sourcePresetId !== HUM_SOURCE) {
       cancelBackingTimer(phrase.id);
@@ -248,6 +257,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     deleteJamTemplate({projectStore,playback,audition,trackId:phrase.trackId,templateId:phrase.id});
     if (projectStore.current().workspace.templates[phrase.trackId].some(p=>p.id===phrase.id)) return;
     phraseHistory.forget(project.id,phrase.id);
+    if (phrase.trackId === 'chord') refreshVoicedMelody(phrase.slotIndex);
     if (draft?.editingTemplateId===phrase.id) {
       midiInput.reset();midiEditorVersion.current++;captureArt();setEditingTrack(null);setSolo(false);setEditBar(0);
     }
@@ -331,6 +341,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           } else playback.updatePhrase(snapshot, track, phrase.id, { preserveEffects: true });
         }
         if (selectionChanged) projectStore.patch({ selection: playback.getDesiredPhraseIds() });
+        if (inserted.some(phrase => phrase.trackId === 'chord')) refreshVoicedMelody(slot);
       }
       if (inserted?.length || !followMelody) setMessage(inserted?.length ? '' : '当前列没有可配轨的位置');
     } catch {
@@ -343,6 +354,10 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
     }
     if (!projectStore.moveSlots(move, { ...expected, projectId: project.id })) {
       setMessage('位置未保存，请重新拖动或检查浏览器存储。'); return false;
+    }
+    if (move.trackId === 'chord' || move.trackId === 'melody') {
+      refreshVoicedMelody(move.from);
+      refreshVoicedMelody(move.to);
     }
     setMessage(`已移动到第 ${move.to+1} ${move.trackId ? '格' : '列'}。`);
     return true;
@@ -462,10 +477,10 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
       if (controlsRef?.current === controls) controlsRef.current = null;
     };
   });
-  const editorBars = useMemo(() => isHumBacking(draft) ? humPlaybackBars(draft) : draft?.bars, [draft]);
+  const editorBars = useMemo(() => draft ? jamPhrasePlaybackBars(w, draft) : undefined, [draft, w]);
   const previewBar = Math.min(editBar,(draft?.bars.length ?? 1)-1);
   const editorParams = draft ? jamTrackParameters(draft.params, draft.trackId) : null;
-  const usesGeneratedKnobs = draft?.sourcePresetId === HUM_SOURCE;
+  const usesGeneratedKnobs = draft?.sourcePresetId === HUM_SOURCE || isJamArrangementMelody(draft);
   const harmonySlot = humControl && arrangeMelody && draft?.trackId === 'melody' ? draft.slotIndex : null;
   const columnPhrases = harmonySlot == null ? null : jamColumnPhrases(w.templates, harmonySlot);
   const hasBacking = columnPhrases && BACKING_TRACKS.some(track => hasJamNotes(columnPhrases[track]));
@@ -502,7 +517,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
             const value = editorParams[parameter];
             const valueLabel = valueLabels?.[value];
             const currentValue = valueLabel ?? `${value}%`;
-            return <RotaryKnob key={parameter} label={label} value={value} displayValue={position?.display ? position.percent : value}
+            return <RotaryKnob key={parameter} label={label} value={value} displayValue={!usesGeneratedKnobs && position?.display ? position.percent : value}
               valueDescription={position?.display ? `硬件位置 ${position.percent}%；当前乐句${label} ${currentValue}` : `${label} ${currentValue}`}
               showValue={usesGeneratedKnobs} format={() => valueLabel ?? ''} step={levels[1] - levels[0]}
               lowLabel={usesGeneratedKnobs ? undefined : lowLabel} highLabel={usesGeneratedKnobs ? undefined : highLabel}
@@ -526,7 +541,7 @@ export default function PerformanceMode({ active, genreId, profileId = null, ini
           }))}>
           {hits.length > 1 && <span className="studio-hit-count" aria-label={`${hits.length}次击打`}>{hits.length}</span>}
         </button>;
-      }}/></div> : <JamChordEditor key={draft.editingTemplateId ?? draft.targetSlot ?? 'draft'} draft={draft} editorBars={editorBars} bar={previewBar} step={editorPlaying && editorPosition?.bar === previewBar ? editorPosition?.step : null} onChange={replaceDraft}/>}
+      }}/></div> : <JamChordEditor key={draft.editingTemplateId ?? draft.targetSlot ?? 'draft'} draft={draft} editorBars={editorBars} readOnly={isJamMelodyVariation(draft)} bar={previewBar} step={editorPlaying && editorPosition?.bar === previewBar ? editorPosition?.step : null} onChange={replaceDraft}/>}
     </section>}
   </>;
   return <section className="performance-mode jam-workspace template-jam jam-studio" hidden={!active} aria-label="Jam 演奏" data-editing={Boolean(draft)} data-hum-preview={humControl ? true : undefined}>

@@ -8,7 +8,8 @@ import { MAX_PROJECT_BARS } from '../domain/projectLength.js';
 import { normalizeJamSlots, firstEmptyJamSlot, removeJamSlot, moveJamSlots, relocateJamDraft, jamLauncherColumnCount } from './jamTemplateSlots.js';
 import { canAdoptHumTempo, hasJamPhraseNotes, isEmptyJamPhrase } from './jamPhraseContent.js';
 import { jamTrackParameters } from './jamPerformanceState.js';
-import { canFollowJamMelody, HUM_SOURCE, humPlaybackBars } from './jamHumExpression.js';
+import { melodyEvents } from '../preview/humHarmony.js';
+import { canFollowJamMelody, HUM_SOURCE, humPlaybackBars, isJamArrangementMelody, isJamMelodyVariation } from './jamHumExpression.js';
 
 const copy = value => structuredClone(value);
 const uid = () => globalThis.crypto.randomUUID();
@@ -78,6 +79,29 @@ export function validTemplate(template) {
 const workspace = bpm => ({ bpm: normalizeBpm(bpm), slotLayoutVersion: 1, templates: byTrack(() => []), selection: byTrack(() => null),
   volumes: byTrack(() => 0), mutedTracks: byTrack(() => false), timbres: byTrack(() => null), draft: null, draftsByTrack: {} });
 
+function withArrangementDefaults(phrase) {
+  const melody = isJamArrangementMelody(phrase);
+  const drums = phrase?.trackId === 'drums' && phrase.sourcePresetId === HUM_SOURCE;
+  if ((!melody && !drums) || phrase.arrangementKnobVersion === 1) return phrase;
+  const params = { ...jamTrackParameters(phrase.params, phrase.trackId), strength: 50 };
+  if (melody) params.groove = 50;
+  return { ...phrase, params, arrangementKnobVersion: 1 };
+}
+
+function migrateArrangementKnobs(w) {
+  const migrate = phrase => {
+    const next = withArrangementDefaults(phrase);
+    if (next?.trackId !== 'drums' || next.sourcePresetId !== HUM_SOURCE || next.humDrumSoundingRanges) return next;
+    const melody = w.templates.melody.find(item => item.slotIndex === next.slotIndex
+      && (!next.humBackingMelodyId || next.humBackingMelodyId === item.id));
+    if (!melody) return next;
+    const ranges = melodyEvents(melody.bars).map(event => [event.start, event.start + event.duration]);
+    return { ...next, humDrumSoundingRanges: ranges };
+  };
+  return { ...w, templates: byTrack(track => w.templates[track].map(migrate)),
+    draft: migrate(w.draft), draftsByTrack: Object.fromEntries(Object.entries(w.draftsByTrack).map(([track, phrase]) => [track, migrate(phrase)])) };
+}
+
 function phraseEdit(w, draft, { create = false, slotIndex, migrate = false } = {}) {
   const t = draft?.trackId;
   if (!TRACKS.includes(t)) return null;
@@ -93,6 +117,7 @@ function phraseEdit(w, draft, { create = false, slotIndex, migrate = false } = {
     if (!migrate) return null;
     destination=firstEmptyJamSlot(row);
   }
+  draft = withArrangementDefaults(draft);
   const phrase={...copy(draft),id:existing?.id??uid(),slotIndex:destination,
     params:jamTrackParameters(draft.params,t),
     name:existing ? String(draft.name??existing.name??'').slice(0,80) : draft.name?.trim()||`${label}${number}`,
@@ -135,7 +160,7 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
         if (p.workspace.draft?.trackId === 'melody') p.workspace.draft = replaceLegacyTimbre(p.workspace.draft);
         if (p.workspace.draftsByTrack.melody) p.workspace.draftsByTrack.melody = replaceLegacyTimbre(p.workspace.draftsByTrack.melody);
         for (const t of TRACKS) if (!p.workspace.templates[t].some(x => x.id === p.workspace.selection[t])) p.workspace.selection[t] = null;
-        p.workspace = upgradeJamSlotLayout(p.workspace);
+        p.workspace = migrateArrangementKnobs(upgradeJamSlotLayout(p.workspace));
       }
       state = { ...value, activeId: ids.has(value.activeId) ? value.activeId : value.projects[0].id };
     }
@@ -260,9 +285,11 @@ export function createJamTemplateProjects(storage, genre, profile, bpm = 100) {
           if (followMelody && canRefresh && existing.humBackingMelodyId === melodyId
             && JSON.stringify(existing.bars) === JSON.stringify(phrase.bars)
             && JSON.stringify(existing.humDrumQuietSteps) === JSON.stringify(phrase.humDrumQuietSteps)
+            && JSON.stringify(existing.humDrumSoundingRanges) === JSON.stringify(phrase.humDrumSoundingRanges)
             && JSON.stringify(existing.humSoundingRanges) === JSON.stringify(phrase.humSoundingRanges)) continue;
         }
-        const draft = { ...phrase, ...(existing ? { id: existing.id, name: replaceEmptyRecording ? phrase.name : existing.name, timbreId: existing.timbreId, params: existing.params } : {}),
+        const draft = { ...phrase, ...(existing ? { id: existing.id, name: replaceEmptyRecording ? phrase.name : existing.name, timbreId: existing.timbreId, params: replaceEmptyRecording ? undefined : existing.params,
+          arrangementKnobVersion: existing.arrangementKnobVersion } : {}),
           ...(melody && { humBackingMelodyId: melody.id }),
           ...(phrase.trackId === 'melody' ? { timbreId: jamInstrumentTimbre(w, 'melody') } : {}), sourcePresetId: HUM_SOURCE };
         const entry = phraseEdit(next, draft, { create: !existing, slotIndex });
@@ -388,6 +415,13 @@ function setTemplateTimbre(cell, track, id, gated = false) {
   else { cell.timbreId = 'piano'; cell.playbackMode = gated ? 'gated' : 'natural'; }
   if (resolved.playbackMode) cell.playbackMode = resolved.playbackMode;
 }
+export function jamPhrasePlaybackBars(workspace, phrase) {
+  if (!isJamMelodyVariation(phrase)) return humPlaybackBars(phrase);
+  const chord = workspace.templates.chord.find(item => item.slotIndex === phrase.slotIndex);
+  const timbre = workspace.timbres?.melody ?? phrase.timbreId;
+  return humPlaybackBars(phrase, chord?.bars, timbre);
+}
+
 export function jamCombinationSnapshot(w, override = null, solo = false) {
   const selected = selectedJamTemplates(w, override);
   for (const t of TRACKS) if (isEmptyJamPhrase(selected[t]) && !(solo && override?.trackId===t)) selected[t]=null;
@@ -398,11 +432,12 @@ export function jamCombinationSnapshot(w, override = null, solo = false) {
   // Long, uneven legacy phrases can have an enormous common cycle. Keep their
   // individual loops compact rather than allocating that entire cycle.
   const phraseBars = totalBars > MAX_PROJECT_BARS ? byTrack(t => selected[t]?.bars.length ?? 1) : null;
-  const bars = byTrack(t => selected[t] ? humPlaybackBars(selected[t]) : [Array(16).fill(null)]);
+  const bars = byTrack(t => selected[t] ? jamPhrasePlaybackBars(w, selected[t]) : [Array(16).fill(null)]);
   const matrix = byTrack(t => Array.from({ length: phraseBars?.[t] ?? totalBars }, (_, b) => copy(bars[t][b % bars[t].length])));
   const timbres = byTrack(t => w.timbres?.[t] ?? selected[t]?.timbreId ?? defaultJamTimbres()[t]);
   for (const t of TRACKS) for (const bar of matrix[t]) for (const cell of bar) if (cell) {
-    const gated = (t === 'melody' || t === 'chord') && selected[t]?.sourcePresetId === HUM_SOURCE;
+    const gated = (t === 'melody' || t === 'chord') && (selected[t]?.sourcePresetId === HUM_SOURCE
+      || isJamMelodyVariation(selected[t]));
     setTemplateTimbre(cell, t, timbres[t], gated);
     if (t === 'melody' && gated) cell.humMelodyTail = true;
   }

@@ -17,25 +17,37 @@ export function jamParameterLevels(trackId, parameter) {
   return trackId === 'chord' && parameter === 'groove' ? [0, 20, 40, 60, 80, 100] : [0, 25, 50, 75, 100];
 }
 
-const chordVoicingLabels = { 0: '低位密集', 20: '紧凑转位', 40: '高位密集', 80: '宽排', 100: '叠八度' };
-const drumGrooveLabels = { 0: '隔拍', 25: '反拍', 75: '八分加花', 100: '十六分' };
+const arrangementKnobs = {
+  melody: [
+    ['旋律声部', ['低八度叠奏', '低声部呼应', '单线', '高声部呼应', '高八度叠奏']],
+    ['节奏变奏', ['骨架', '靠拍', '原节奏', '反拍', '复奏']],
+  ],
+  chord: [
+    ['声部排布', ['低位密集', '紧凑转位', '高位密集', '默认排布', '宽排', '叠八度']],
+    ['律动', ['齐奏', '短奏', '默认律动', '反拍重奏', '分解']],
+  ],
+  bass: [
+    ['长短', ['极短', '短促', '标准', '连贯', '长音']],
+    ['律动', ['平稳根音', '短奏', '默认律动', '反拍加花', '切分加花']],
+  ],
+  drums: [
+    ['底鼓／军鼓打法', ['极简', '半速回拍', '标准', '底鼓切分', '军鼓加花']],
+    ['踩镲律动', ['隔拍', '反拍', '默认鼓型', '八分加花', '十六分']],
+  ],
+};
 
-// Keep stored parameter keys stable: groove is Ableton's Level axis, strength
-// is its Int axis. Hardware keys describe the physical left/right CC5/CC6 knobs.
-export function jamTrackKnobs(trackId, humGenerated = false) {
-  if (humGenerated && trackId === 'drums') return [
-    { parameter: 'strength', hardwareParameter: 'strength', label: '强度', lowLabel: '温和', highLabel: '强烈' },
-    { parameter: 'groove', hardwareParameter: 'groove', label: '律动', lowLabel: drumGrooveLabels[0], highLabel: drumGrooveLabels[100], valueLabels: drumGrooveLabels },
-  ];
-  if (humGenerated) return [
-    { parameter: 'groove', hardwareParameter: 'strength', ...{
-      melody: { label: '力度', lowLabel: '轻柔', highLabel: '饱满' },
-      chord: { label: '声部排布', lowLabel: chordVoicingLabels[0], highLabel: chordVoicingLabels[100], valueLabels: chordVoicingLabels },
-      bass: { label: '长短', lowLabel: '短促', highLabel: '连贯' },
-    }[trackId] },
-    { parameter: 'strength', hardwareParameter: 'groove', label: '律动', lowLabel: trackId === 'chord' ? '齐奏' : trackId === 'bass' ? '根音' : '平稳',
-      highLabel: trackId === 'chord' ? '分解' : trackId === 'bass' ? '切分' : '重音' },
-  ];
+// Stored keys retain the Ableton axes. The hardware keys describe CC5/CC6.
+export function jamTrackKnobs(trackId, arranged = false) {
+  if (arranged) {
+    const parameters = trackId === 'drums' ? ['strength', 'groove'] : ['groove', 'strength'];
+    return arrangementKnobs[trackId].map(([label, labels], index) => {
+      const parameter = parameters[index];
+      return {
+        parameter, label, hardwareParameter: index === 0 ? 'strength' : 'groove',
+        valueLabels: Object.fromEntries(jamParameterLevels(trackId, parameter).map((value, i) => [value, labels[i]])),
+      };
+    });
+  }
   if (['chord','bass','melody'].includes(trackId)) return [
     { parameter: 'groove', hardwareParameter: 'strength', label: trackId === 'chord' ? '色彩' : '旋律',
       lowLabel: trackId === 'chord' ? '清晰' : '纯净', highLabel: trackId === 'chord' ? '朦胧' : '丰富' },

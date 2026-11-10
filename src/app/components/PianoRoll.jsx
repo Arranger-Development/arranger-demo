@@ -322,6 +322,7 @@ function PianoRoll({
                           data-duration-steps={noteStart && renderState?.durationSteps > 1
                             ? renderState.durationSteps
                             : undefined}
+                          data-attack-count={renderState?.attackCount > 1 ? renderState.attackCount : undefined}
                           data-row={rowIndex}
                           data-col={colIndex}
                           data-note={note.note}
@@ -329,7 +330,7 @@ function PianoRoll({
                           data-resize-target={resizeTarget?.note === note.note && resizeTarget.step === step || undefined}
                           key={`${note.note}-${step}`}
                           type="button"
-                          aria-label={`${formatNoteLabel(note.note)} beat ${beatNumber}.${stepNumber}`}
+                          aria-label={`${formatNoteLabel(note.note)} beat ${beatNumber}.${stepNumber}${renderState?.attackCount > 1 ? `，${renderState.attackCount}次起音` : ''}`}
                           aria-pressed={active}
                           aria-keyshortcuts={active && onCellResize ? 'Shift+ArrowLeft Shift+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight' : undefined}
                           disabled={disabled}
