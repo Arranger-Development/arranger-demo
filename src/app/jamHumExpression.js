@@ -1,7 +1,9 @@
 import { getDrumsCellInstruments, getDrumsCellVelocity } from '../domain/drumsCells.js';
-import { humRhythmBars } from './jamHumRhythm.js';
+import { humDrumPatternBars, humRhythmBars } from './jamHumRhythm.js';
 import { humChordVoicingBars } from './jamHumVoicing.js';
 import { jamTrackParameters } from './jamPerformanceState.js';
+import { jamMelodyVariation } from './jamMelodyVariation.js';
+import { hasJamPhraseNotes } from './jamPhraseContent.js';
 
 export const HUM_SOURCE = 'hum-generated';
 
@@ -12,7 +14,19 @@ function humSequencerBars(phrase, strength, groove) {
     return humRhythmBars({ ...phrase, bars: humChordVoicingBars(phrase, phrase.bars, groove) }, strength);
   }
   const bars = humRhythmBars(phrase, phrase.trackId === 'drums' ? groove : strength);
+  if (phrase.trackId === 'drums') return humDrumPatternBars(phrase, bars, strength);
   return phrase.trackId === 'chord' ? humChordVoicingBars(phrase, bars, groove) : bars;
+}
+
+export function isJamArrangementMelody(phrase) {
+  return phrase?.trackId === 'melody' && (phrase.sourcePresetId === HUM_SOURCE
+    || phrase.sourcePresetId === 'blank' && hasJamPhraseNotes(phrase));
+}
+
+export function isJamMelodyVariation(phrase) {
+  if (!isJamArrangementMelody(phrase)) return false;
+  const { strength, groove } = jamTrackParameters(phrase.params, 'melody');
+  return strength !== 50 || groove !== 50;
 }
 
 export function isHumBacking(phrase) {
@@ -47,9 +61,12 @@ export function editJamSequencerStep(phrase, barIndex, step, editBar) {
   return { ...phrase, bars, humEditedSteps };
 }
 
-export function humPlaybackBars(phrase) {
+export function humPlaybackBars(phrase, chordBars, timbreId = phrase.timbreId) {
   const { trackId } = phrase;
-  if (phrase.sourcePresetId !== HUM_SOURCE) return phrase.bars;
+  if (isJamArrangementMelody(phrase)) {
+    return jamMelodyVariation(phrase.bars, timbreId, jamTrackParameters(phrase.params, trackId), chordBars);
+  }
+  if (!isHumBacking(phrase)) return phrase.bars;
   const { strength, groove } = jamTrackParameters(phrase.params, trackId);
   const left = (groove - 50) / 50;
   const right = (strength - 50) / 50;
@@ -58,7 +75,7 @@ export function humPlaybackBars(phrase) {
   return bars.map((bar, barIndex) => bar.map((cell, step) => {
     if (!cell) return cell;
     if (trackId === 'drums') {
-      const gain = instrument => 1 + right * 0.38 + left * (instrument === 'hihat' || step % 4 !== 0 ? 0.36 : 0);
+      const gain = instrument => 1 + left * (instrument === 'hihat' || step % 4 !== 0 ? 0.36 : 0);
       if (cell.drumHits) return { ...cell, drumHits: cell.drumHits.map(hit => ({ ...hit, velocity: velocity(hit.velocity, gain(hit.instrument)) })) };
       return { ...cell, velocities: Object.fromEntries(getDrumsCellInstruments(cell).map(instrument => [instrument, velocity(getDrumsCellVelocity(cell, instrument), gain(instrument))])) };
     }
@@ -66,7 +83,7 @@ export function humPlaybackBars(phrase) {
       const position = Math.round(step + offset) % 16;
       const accent = trackId === 'chord' ? (position === 0 ? 0.26 : -0.23)
         : position % 8 === 0 ? 0.24 : position % 4 === 0 ? 0.08 : -0.28;
-      return 1 + right * (trackId === 'bass' ? -accent : accent) + (trackId === 'melody' ? left * 0.4 : 0);
+      return 1 + right * (trackId === 'bass' ? -accent : accent);
     };
     const bassLength = phrase.humSoundingRanges ? 0.94 + left * (left < 0 ? 0.32 : 0.06) : 0.77 + 0.23 * left;
     const length = trackId === 'bass' && !fixedSteps.has(barIndex * 16 + step) ? bassLength : 1;

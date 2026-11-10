@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { arrangeHumBacking, arrangeHumMelody, cleanHumNotes, estimateHumBpm, fitHumTiming, makeHumMelody } from '../src/preview/humArrangement.js';
 import { planHumHarmony } from '../src/preview/humHarmony.js';
 import { humPitchCenter } from '../src/preview/humPitchCorrection.js';
-import { createJamTemplateProjects, jamCombinationSnapshot } from '../src/app/jamTemplateProjects.js';
+import { createJamTemplateProjects, jamCombinationSnapshot, jamPhrasePlaybackBars, jamTemplateProjectsKey } from '../src/app/jamTemplateProjects.js';
 import { applyJamTrackParameter, blankJamDraft } from '../src/app/jamDraftActions.js';
 import { createMatrixPlaybackAdapter } from '../src/audio/matrixPlaybackAdapter.js';
 import { jamMelodyRenderState, resizeJamPitchedNote, resizeJamPitchedStart, setJamPitchedNote } from '../src/app/jamNoteEditing.js';
 import { editJamSequencerStep, humPlaybackBars } from '../src/app/jamHumExpression.js';
 import { toggleDrumsCellInstrument } from '../src/domain/drumsCells.js';
+import { jamParameterLevels, jamTrackKnobs } from '../src/app/jamPerformanceState.js';
 import { eventDuration, usesNaturalSampleTail } from '../src/domain/notePerformances.js';
 
 function makeStore() {
@@ -396,7 +397,8 @@ test('Jam snapshots play all four tracks, and rotating generated expression pres
   assert.equal(turned.bars, edited.bars);
   const after = playbackAtStart(turned).find(item => item.note === 'D4');
   const original = before.find(item => item.note === 'D4');
-  assert.ok(after.velocity < original.velocity);
+  assert.equal(after.velocity, original.velocity);
+  assert.ok(playbackAtStart(turned).some(item => item.note === 'D3'));
   assert.equal(after.timingOffset, original.timingOffset);
   assert.deepEqual(playbackAtStart(applyJamTrackParameter(turned, 'groove', 50)), before);
 });
@@ -542,11 +544,11 @@ test('accompaniment knobs change playback onsets, respect manual edits and resto
       assert.ok(!dense.some(hit => hit.step === 1 && hit.instrument === 'hihat'));
       assert.ok(dense.some(hit => hit.step === 3 && hit.instrument === 'hihat'));
     } else if (track.trackId === 'chord') {
-      const notesInWindow = phrase => events(phrase).filter(hit => hit.step < 8).flatMap(hit => hit.notes).sort();
+      const notesInWindow = phrase => [...new Set(events(phrase).filter(hit => hit.step < 8).flatMap(hit => hit.notes))].sort();
       assert.deepEqual(notesInWindow(low), notesInWindow(high));
     } else {
       const pitches = phrase => new Set(events(phrase).filter(hit => hit.step < 8).map(hit => hit.note));
-      assert.deepEqual(pitches(low), pitches(high));
+      assert.ok([...pitches(low)].every(note => pitches(high).has(note)));
     }
   }
 });
@@ -877,8 +879,10 @@ test('shared rhythm answers a second entrance in the same half-bar and holds thr
     for (const step of [2.25, 6.2, 10.5, 25, 28.6, 34.25, 38.2]) {
       const hits = events.filter(hit => closeTo(hit, step));
       assert.ok(hits.some(hit => hit.type === 'melody'));
-      assert.ok(hits.some(hit => hit.type === 'chord'));
-      assert.ok(hits.some(hit => hit.type === 'bass'));
+      const position = step % 32;
+      const optional = chord.bars[Math.floor(position / 16)][Math.floor(position) % 16]?.humOptionalAccent;
+      assert.equal(hits.some(hit => hit.type === 'chord'), level !== 0 || !optional);
+      assert.equal(hits.some(hit => hit.type === 'bass'), level !== 0 || !optional);
       assert.ok(hits.some(hit => hit.instrument === 'kick'));
     }
     const pitchedOrKick = hit => ['chord', 'bass'].includes(hit.type) || hit.instrument === 'kick';
@@ -891,4 +895,118 @@ test('shared rhythm answers a second entrance in the same half-bar and holds thr
       return at >= start - 1e-6 && at < start + length;
     })));
   }
+});
+
+
+test('all eight arrangement knobs label each physical detent and keep their original CC axes', () => {
+  let count = 0;
+  for (const track of ['melody', 'chord', 'bass', 'drums']) {
+    const [left, right] = jamTrackKnobs(track, true);
+    assert.deepEqual([left.hardwareParameter, right.hardwareParameter], ['strength', 'groove']);
+    for (const knob of [left, right]) {
+      const levels = jamParameterLevels(track, knob.parameter);
+      assert.equal(new Set(levels.map(level => knob.valueLabels[level])).size, levels.length);
+      assert.ok(levels.every(level => knob.valueLabels[level]));
+      count += levels.length;
+    }
+  }
+  assert.equal(count, 41);
+});
+
+test('handwritten melody varies short notes while preserving source notes, anchors, and the final note', () => {
+  const store = makeStore();
+  const draft = blankJamDraft('melody', 'default', 0);
+  const notes = [[0, 'C4', 2], [3, 'D4', 1], [5, 'E4', 3], [8, 'G4', 4], [14, 'E4', 2]];
+  for (const [step, note, duration] of notes) {
+    draft.bars[0] = setJamPitchedNote(draft.bars[0], step, note, duration, false, 'melody');
+  }
+  const lead = store.commitPhraseEdit(draft, { create: true });
+  const raw = structuredClone(lead.bars);
+  const workspace = store.current().workspace;
+  const attacks = bars => bars[0].flatMap((cell, step) => Object.entries(cell?.notePerformances ?? {})
+    .flatMap(([note, hits]) => hits.map(hit => [step + hit.offsetSteps, note, hit.durationSteps])));
+  for (const [level, passingNote] of [
+    [0, []], [25, [[4, 'D4', 1]]], [50, [[3, 'D4', 1]]],
+    [75, [[2, 'D4', 1]]], [100, [[3, 'D4', 0.5], [3.5, 'D4', 0.5]]],
+  ]) {
+    const varied = applyJamTrackParameter(lead, 'strength', level);
+    assert.equal(varied.sourcePresetId, 'blank');
+    const bars = jamPhrasePlaybackBars(workspace, varied);
+    assert.deepEqual(attacks(bars).filter(hit => hit[1] === 'D4'), passingNote);
+    assert.deepEqual(attacks(bars).filter(hit => hit[1] !== 'D4'), notes.filter(hit => hit[1] !== 'D4'));
+    const snapshot = jamCombinationSnapshot(workspace, varied, true);
+    const playback = createMatrixPlaybackAdapter(snapshot);
+    const scheduled = Array.from({ length: 16 }, (_, step) => playback.getEventsForStep(0, step)
+      .map(hit => [step + (hit.timingOffset ?? 0), hit.note, hit.durationSteps])).flat();
+    assert.deepEqual(scheduled, attacks(bars));
+  }
+  assert.deepEqual(lead.bars, raw);
+});
+
+test('melody layers follow varied onsets and read the actual same-column chord even in solo', () => {
+  const store = makeStore();
+  const draft = blankJamDraft('melody', 'default', 0);
+  draft.bars[0] = setJamPitchedNote(draft.bars[0], 0, 'E4', 4, false, 'melody');
+  const lead = store.commitPhraseEdit(draft, { create: true });
+  const chord = blankJamDraft('chord', 'default', 0);
+  chord.bars[0][0] = { type: 'notes', notes: ['F3', 'A3', 'C4'], durationSteps: 4 };
+  store.commitPhraseEdit(chord, { create: true });
+  const workspace = store.current().workspace;
+  const render = level => jamCombinationSnapshot(workspace, applyJamTrackParameter(lead, 'groove', level), true).matrix.melody[0][0];
+  assert.deepEqual(render(25).notes.toSorted(), ['C4', 'E4']);
+  assert.deepEqual(render(0).notes.toSorted(), ['E3', 'E4']);
+  assert.deepEqual(render(100).notes.toSorted(), ['E4', 'E5']);
+  assert.equal(render(50).note, 'E4');
+});
+
+test('drum pattern changes kick and snare while hat settings and manual steps remain independent', () => {
+  const store = makeStore(), projectId = store.current().id;
+  const bars = melody([60, 60, 60, 60], 0.52);
+  const [lead] = store.insertHumPhrases([{ trackId: 'melody', bars }], { projectId });
+  const [drums] = store.insertHumPhrases(backingPhrases(bars).filter(part => part.trackId === 'drums'), { projectId, melodyId: lead.id });
+  const at = (phrase, instrument) => humPlaybackBars(phrase).flat().flatMap((cell, step) =>
+    cell?.drumHits?.filter(hit => hit.instrument === instrument).map(hit => step + hit.offsetSteps) ?? []);
+  const hits = (level, instrument) => at(applyJamTrackParameter(drums, 'strength', level), instrument);
+  assert.deepEqual(hits(0, 'snare'), []);
+  assert.deepEqual(hits(25, 'snare'), [8]);
+  assert.deepEqual(hits(50, 'snare'), [4, 12]);
+  assert.notDeepEqual(hits(75, 'kick'), hits(50, 'kick'));
+  assert.deepEqual(hits(100, 'snare'), [3, 4, 11, 12]);
+  for (const level of [0, 25, 75, 100]) {
+    assert.deepEqual(hits(level, 'hihat'), hits(50, 'hihat'));
+    assert.ok(hits(level, 'kick').includes(0));
+  }
+  const edited = editJamSequencerStep(drums, 0, 4, bar => bar.map((cell, step) => step === 4 ? toggleDrumsCellInstrument(cell, 'snare') : cell));
+  assert.ok(!at(applyJamTrackParameter(edited, 'strength', 100), 'snare').includes(4));
+  assert.deepEqual(at(applyJamTrackParameter(edited, 'strength', 100), 'snare').filter(step => step < 8), []);
+});
+
+test('old generated knobs default once and keep original notes, manual drum steps and hat choice', () => {
+  const data = new Map();
+  const storage = { getItem: key => data.get(key), setItem: (key, value) => data.set(key, value) };
+  const store = createJamTemplateProjects(storage, 'pop', null, 88);
+  const projectId = store.current().id;
+  const bars = melody([60, 60, 60, 60]);
+  const [lead] = store.insertHumPhrases([{ trackId: 'melody', bars }], { projectId });
+  store.insertHumPhrases(backingPhrases(bars), { projectId, melodyId: lead.id });
+  const key = jamTemplateProjectsKey('pop', null);
+  const saved = JSON.parse(data.get(key));
+  const original = saved.projects[0].workspace.templates;
+  for (const track of ['melody', 'drums']) {
+    delete original[track][0].arrangementKnobVersion;
+    original[track][0].params = { strength: 75, groove: 100 };
+  }
+  original.drums[0].humEditedSteps = [4];
+  delete original.drums[0].humDrumSoundingRanges;
+  data.set(key, JSON.stringify(saved));
+  const upgraded = createJamTemplateProjects(storage, 'pop', null, 88);
+  const templates = upgraded.current().workspace.templates;
+  assert.deepEqual(templates.melody[0].params, { strength: 50, groove: 50 });
+  assert.deepEqual(templates.drums[0].params, { strength: 50, groove: 100 });
+  assert.deepEqual(templates.drums[0].humEditedSteps, [4]);
+  assert.deepEqual(templates.melody[0].bars, original.melody[0].bars);
+  assert.ok(templates.drums[0].humDrumSoundingRanges.length);
+  upgraded.commitPhraseEdit(applyJamTrackParameter(templates.melody[0], 'groove', 75));
+  const reloaded = createJamTemplateProjects(storage, 'pop', null, 88);
+  assert.equal(reloaded.current().workspace.templates.melody[0].params.groove, 75);
 });

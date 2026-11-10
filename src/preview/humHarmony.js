@@ -40,7 +40,7 @@ function keyEvidence(key, events) {
     + (events.some(event => event.pitch === key.tones[2]) ? 0.65 : key.mode === 1 ? -0.35 : 0);
 }
 
-function melodyEvents(bars, timbreId) {
+export function melodyEvents(bars, timbreId) {
   // The original Deep Autumn melody roots intentionally bind an octave above
   // their sounding pitches. Note names in Jam stay as authored.
   const octaveOffset = timbreId === DEEP_AUTUMN_MELODY ? -12 : 0;
@@ -330,9 +330,12 @@ function matchCycle(events, sourceBars, chordBarCount) {
 }
 
 export function planHumHarmony(bars, timbreId, { bassBars, chordBarCount = bars.length } = {}) {
-  const events = melodyEvents(bars, timbreId);
+  return planHumHarmonyFromEvents(melodyEvents(bars, timbreId), bars.length, { bassBars, chordBarCount });
+}
+
+export function planHumHarmonyFromEvents(events, barCount, { bassBars, chordBarCount = barCount } = {}) {
   if (!events.length) throw new Error('旋律没有可配轨的音符');
-  const lead = matchCycle(events, bars.length, chordBarCount);
+  const lead = matchCycle(events, barCount, chordBarCount);
   const count = chordBarCount * 2;
   const windows = melodyWindows(lead, count);
   const bassHints = bassWindowHints(bassBars, count);

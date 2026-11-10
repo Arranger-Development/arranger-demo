@@ -335,7 +335,7 @@ function arrangeHumDrums(events, { anchors, sounding }, length) {
   const kicks = new Map(anchors.map(({ start, required, entrance }) => {
     const step = Math.floor(start);
     return [step, { instrument: 'kick', offsetSteps: start - step, durationSteps: 1,
-      velocity: required ? (entrance ? 0.76 : 0.66) : 0.48 }];
+      velocity: required ? (entrance ? 0.76 : 0.66) : 0.48, ...(!required && { humOptionalAccent: true }) }];
   }));
   const isQuiet = time => {
     if (rests.some(([from, to]) => time >= from && time < to)) return true;
@@ -360,7 +360,7 @@ function arrangeHumDrums(events, { anchors, sounding }, length) {
     if (kicks.has(step)) hits.push(kicks.get(step));
     return createDrumsCell(hits.map(hit => hit.instrument), { drumHits: hits });
   });
-  return { drums: toBars(drums), humDrumQuietSteps };
+  return { drums: toBars(drums), humDrumQuietSteps, humDrumSoundingRanges: sounding };
 }
 
 const gcd = (a, b) => b ? gcd(b, a % b) : a;
@@ -390,7 +390,7 @@ export function arrangeHumMelody(bars, timbreId, anchors = {}) {
     const notes = harmony.voicing.map(noteName);
     const durationSteps = end - start, step = Math.floor(start);
     const velocity = required ? (entrance ? 0.48 : 0.42) : 0.31;
-    chord[step] = { type: 'notes', notes, label: notes.join('/'), durationSteps,
+    chord[step] = { type: 'notes', notes, label: notes.join('/'), durationSteps, ...(!required && { humOptionalAccent: true }),
       notePerformances: Object.fromEntries(notes.map(note => [note, [{ offsetSteps: start - step, durationSteps, velocity }]])) };
   }
   const authored = authoredChordAnchors(anchors.chordBars, bassLength);
@@ -406,7 +406,11 @@ export function arrangeHumMelody(bars, timbreId, anchors = {}) {
   const bassHits = [...bassRhythm.anchors];
   const authoredChanges = [...(authored ?? [])].filter(([, root], index, changes) => changes[index - 1]?.[1] !== root);
   for (const [start] of authoredChanges) {
-    if (bassHits.some(hit => Math.floor(hit.start) === start)) continue;
+    const shared = bassHits.findIndex(hit => Math.floor(hit.start) === start);
+    if (shared >= 0) {
+      bassHits[shared] = { ...bassHits[shared], required: true };
+      continue;
+    }
     const range = bassRhythm.sounding.find(([from, to]) => start >= from && start < to);
     if (range) bassHits.push({ start, end: range[1], required: true });
   }
@@ -419,15 +423,15 @@ export function arrangeHumMelody(bars, timbreId, anchors = {}) {
     const link = !authored && !hit.required && next && next.start - hit.start <= 4.5
       ? bassConnection(hit.harmony, next.harmony, events, hit.start) : null;
     addBass(hit.start, Math.min(hit.end, next?.start ?? Infinity), link ?? 36 + root, hit.required ? 0.68 : 0.48,
-      link != null ? { harmonyLink: true } : {});
+      { ...(!hit.required && { humOptionalAccent: true }), ...(link != null && { harmonyLink: true }) });
   }
   return { chord: toBars(chord), bass: toBars(bass), ...arrangeHumDrums(events, rhythm, length),
     chordSounding: chordRhythm.sounding, bassSounding: bassRhythm.sounding };
 }
 
 export function arrangeHumBacking(bars, timbreId, anchors) {
-  const { chord, bass, drums, humDrumQuietSteps, chordSounding, bassSounding } = arrangeHumMelody(bars, timbreId, anchors);
+  const { chord, bass, drums, humDrumQuietSteps, humDrumSoundingRanges, chordSounding, bassSounding } = arrangeHumMelody(bars, timbreId, anchors);
   return [{ trackId: 'chord', bars: chord, humSoundingRanges: chordSounding },
     { trackId: 'bass', bars: bass, humSoundingRanges: bassSounding },
-    { trackId: 'drums', bars: drums, humDrumQuietSteps }];
+    { trackId: 'drums', bars: drums, humDrumQuietSteps, humDrumSoundingRanges }];
 }
